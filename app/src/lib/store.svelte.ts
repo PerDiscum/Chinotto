@@ -242,10 +242,15 @@ class Store {
     }
   }
 
-  async saveInfo(ids: string[], changes: TrackChanges) {
-    if (!Object.keys(changes).length) return true;
-    return (await this.write("Saving…", (p) => api.editTracks(p, ids, changes))) !== null;
+  async saveInfo(ids: string[], changes: TrackChanges, artwork: { set: string } | "remove" | null = null) {
+    if (Object.keys(changes).length && (await this.write("Saving…", (p) => api.editTracks(p, ids, changes))) === null) return false;
+    if (artwork === "remove") return (await this.write("Removing artwork…", (p) => api.removeArtwork(p, ids))) !== null;
+    if (artwork) return (await this.write("Adding artwork…", (p) => api.setArtwork(p, ids, artwork.set))) !== null;
+    return true;
   }
+
+  /** An image file dropped on the window while Get Info is open. */
+  infoImageDrop = $state<string | null>(null);
 
   /** Delete key / menu: in a playlist, take songs out of it; elsewhere, delete from the iPod (asks first). */
   removeSelected() {

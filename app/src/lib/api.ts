@@ -74,3 +74,18 @@ export const playerVolume = (volume: number) => invoke<void>("player_volume", { 
 export const onPlayerStatus = (f: (s: PlayerStatus) => void) => listen<PlayerStatus>("player-status", (e) => f(e.payload));
 export const onPlayerEnded = (f: () => void) => listen("player-ended", () => f());
 export const onPlayerError = (f: (msg: string) => void) => listen<string>("player-error", (e) => f(e.payload));
+
+// ---- Artwork ----
+export const setArtwork = (path: string, ids: string[], image: string) => invoke<WriteResult>("set_artwork", { path, ids, image });
+export const removeArtwork = (path: string, ids: string[]) => invoke<WriteResult>("remove_artwork", { path, ids });
+/** Data URL of a small preview, with "#<width>x<height>" of the original appended. */
+export const imagePreview = (image: string) => invoke<string>("image_preview", { image });
+export async function pickImage(): Promise<string | null> {
+  const r = await open({
+    multiple: false,
+    directory: false,
+    title: "Choose a cover",
+    filters: [{ name: "Images", extensions: ["jpg", "jpeg", "png", "gif", "bmp", "webp", "tif", "tiff"] }],
+  });
+  return typeof r === "string" ? r : null;
+}

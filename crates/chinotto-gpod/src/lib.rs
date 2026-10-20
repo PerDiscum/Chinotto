@@ -116,6 +116,9 @@ pub enum Field {
     Rating(u32),
     Compilation(bool),
     Bpm(i16),
+    /// Link to a cover in the ArtworkDB: `Some((image id, source width × height + 1))`,
+    /// or `None` for no cover. (The ArtworkDB itself is written by Chinotto.)
+    Artwork(Option<(u32, u32)>),
 }
 
 /// Everything about a track that Chinotto edits or needs when adding one.
@@ -519,6 +522,18 @@ unsafe fn apply(t: *mut Itdb_Track, f: &Field) {
         Field::Rating(v) => t.rating = (*v).min(100) / 20 * 20,
         Field::Compilation(v) => t.compilation = *v as u8,
         Field::Bpm(v) => t.BPM = *v,
+        Field::Artwork(Some((id, size))) => {
+            t.mhii_link = *id;
+            t.artwork_count = 1;
+            t.artwork_size = *size;
+            t.has_artwork = 1;
+        }
+        Field::Artwork(None) => {
+            t.mhii_link = 0;
+            t.artwork_count = 0;
+            t.artwork_size = 0;
+            t.has_artwork = 2;
+        }
     }
 }
 

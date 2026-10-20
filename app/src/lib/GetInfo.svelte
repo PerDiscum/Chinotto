@@ -2,7 +2,7 @@
   import { untrack } from "svelte";
   import { store } from "./store.svelte";
   import Modal from "./Modal.svelte";
-  import { artUrl } from "./api";
+  import { artUrl, imagePreview, pickImage } from "./api";
   import { bytes, count, date, duration } from "./format";
   import type { Track, TrackChanges } from "./types";
 
@@ -41,7 +41,35 @@
   let rating = $state(initialRating ?? 0);
   let compilation = $state(initialCompilation ?? false);
   let dirty = $state<Set<string>>(new Set());
-  let tab = $state<"info" | "sorting" | "details">("info");
+  let tab = $state<"info" | "sorting" | "artwork" | "details">("info");
+  /** Artwork change to apply on OK. */
+  let artwork = $state<{ set: string; preview: string; size: string } | "remove" | null>(null);
+  let artProblem = $state<string | null>(null);
+  const covers = untrack(() => (store.ipod ? tracks.map((t) => (t.art ? artUrl(store.ipod!.generation, t.art, 320) : null)) : []));
+  const sameCover = covers.every((c) => c === covers[0]);
+
+  async function useImage(path: string) {
+    artProblem = null;
+    try {
+      const [preview, size] = (await imagePreview(path)).split("#");
+      artwork = { set: path, preview, size: size.replace("x", " × ") };
+    } catch (e) {
+      artProblem = String(e);
+    }
+  }
+  async function chooseImage() {
+    const p = await pickImage();
+    if (p) await useImage(p);
+  }
+  // An image dropped on the window while this is open.
+  $effect(() => {
+    const dropped = store.infoImageDrop;
+    if (dropped && !readOnly) {
+      store.infoImageDrop = null;
+      tab = "artwork";
+      void useImage(dropped);
+    }
+  });
   let problem = $state<string | null>(null);
   let saving = $state(false);
 
@@ -79,7 +107,7 @@
     const c = changes();
     if (!c) return;
     saving = true;
-    const ok = await store.saveInfo(ids, c);
+    const ok = await store.saveInfo(ids, c, artwork && artwork !== "remove" ? { set: artwork.set } : artwork);
     saving = false;
     if (ok) close();
   }
@@ -153,7 +181,7 @@
     </header>
 
     <div class="tabs" role="tablist">
-      {#each [["info", "Info"], ["sorting", "Sorting"], ["details", "Details"]] as [id, label] (id)}
+      {#each [["info", "Info"], ["sorting", "Sorting"], ["artwork", "Artwork"], ["details", "Details"]] as [id, label] (id)}
         <button role="tab" aria-selected={tab === id} class:on={tab === id} onclick={() => (tab = id as typeof tab)}>{label}</button>
       {/each}
     </div>
@@ -225,6 +253,37 @@
             />
           {/if}
         {/each}
+      </div>
+    {:else if tab === "artwork"}
+      <div class="artwork">
+        <div class="big">
+          {#if artwork === "remove"}
+            <p>No artwork</p>
+          {:else if artwork}
+            <img src={artwork.preview} alt="New cover" />
+          {:else if sameCover && covers[0]}
+            <img src={covers[0]} alt="Current cover" />
+          {:else}
+            <p>{many && !sameCover ? "Mixed" : "No artwork"}</p>
+          {/if}
+        </div>
+        <div class="side">
+          {#if artwork && artwork !== "remove"}
+            <p class="hint">New cover, {artwork.size}. It's saved to the iPod when you press OK; images larger than 600 px on the shorter side are shrunk to that.</p>
+          {:else if artwork === "remove"}
+            <p class="hint">The cover is taken off when you press OK.</p>
+          {:else}
+            <p class="hint">Choose an image or drop one on this window{many ? ` to use it for all ${tracks.length} songs` : ""}.</p>
+          {/if}
+          {#if !readOnly}
+            <div class="artbuttons">
+              <button onclick={chooseImage}>Choose Image…</button>
+              <button onclick={() => (artwork = "remove")} disabled={artwork === "remove" || (!artwork && covers.every((c) => !c))}>Remove</button>
+              {#if artwork}<button onclick={() => (artwork = null)}>Undo</button>{/if}
+            </div>
+          {/if}
+          {#if artProblem}<p class="problem" role="alert">{artProblem}</p>{/if}
+        </div>
       </div>
     {:else}
       <dl class="details">
@@ -428,6 +487,45 @@
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
+  }
+  .artwork {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+  }
+  .big {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 200px;
+    height: 200px;
+    border-radius: 6px;
+    background: var(--zebra);
+    box-shadow: inset 0 0 0 1px var(--edge);
+    overflow: hidden;
+  }
+  .big img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .big p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .artbuttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .artbuttons button {
+    padding: 4px 12px;
+    border: 1px solid var(--field-edge);
+    border-radius: 6px;
+    background: var(--field);
+    color: var(--ink);
+    font: inherit;
   }
   .details {
     display: grid;

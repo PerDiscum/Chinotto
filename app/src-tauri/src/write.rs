@@ -17,6 +17,7 @@ use tauri::ipc::Response;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::commands::view;
+use crate::cover::{self, Assignment};
 use crate::state::AppState;
 use crate::tags;
 
@@ -174,6 +175,7 @@ pub async fn add_files(path: String, files: Vec<String>, playlist: Option<String
         let emitter = app.clone();
         with_writer(&app, Path::new(&path), move |db| {
             let mut res = AddResult { added: Vec::new(), skipped: Vec::new() };
+            let mut added_files: Vec<(u64, PathBuf)> = Vec::new();
             let total = files.len();
             for (i, f) in files.iter().enumerate() {
                 let name = f.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
@@ -186,11 +188,36 @@ pub async fn add_files(path: String, files: Vec<String>, playlist: Option<String
                     continue;
                 }
                 match tags::read(f).and_then(|info| db.add_track(f, &info).map_err(|e| e.to_string())) {
-                    Ok(id) => res.added.push(id.to_string()),
+                    Ok(id) => {
+                        res.added.push(id.to_string());
+                        added_files.push((id, f.clone()));
+                    }
                     Err(e) => res.skipped.push(e),
                 }
             }
             let _ = emitter.emit("add-progress", AddProgress { done: total, total, current: String::new() });
+            // Covers embedded in the added files; identical images are stored once.
+            let mut by_image: Vec<(Vec<u8>, Vec<u64>)> = Vec::new();
+            for (dbid, file) in &added_files {
+                if let Some(bytes) = tags::embedded_cover(file) {
+                    match by_image.iter_mut().find(|(b, _)| *b == bytes) {
+                        Some((_, ids)) => ids.push(*dbid),
+                        None => by_image.push((bytes, vec![*dbid])),
+                    }
+                }
+            }
+            let assignments: Vec<Assignment> =
+                by_image.into_iter().filter_map(|(b, dbids)| cover::decode(&b).ok().map(|image| Assignment { image, dbids })).collect();
+            if !assignments.is_empty() {
+                match cover::add_covers(db.root(), &assignments) {
+                    Ok(links) => {
+                        for (dbid, link) in links {
+                            db.edit(&[dbid], &[Field::Artwork(Some(link))]).map_err(|e| e.to_string())?;
+                        }
+                    }
+                    Err(e) => res.skipped.push(format!("Covers weren't added: {e}")),
+                }
+            }
             if let Some(pl) = playlist {
                 let mut ids = db.playlists().into_iter().find(|p| p.id == pl).map(|p| p.tracks).unwrap_or_default();
                 ids.extend(res.added.iter().filter_map(|s| s.parse::<u64>().ok()));
@@ -255,4 +282,47 @@ pub async fn set_playlist_tracks(path: String, id: String, ids: Vec<String>, app
     let id = parse_ids(&[id])?[0];
     let ids = parse_ids(&ids)?;
     blocking(app, move |app| with_writer(&app, Path::new(&path), |db| db.set_playlist_tracks(id, &ids).map_err(|e| e.to_string()))).await
+}
+
+/// Give songs a cover from an image file (shrunk by the 600 px rule).
+#[tauri::command]
+pub async fn set_artwork(path: String, ids: Vec<String>, image: String, app: AppHandle) -> Result<Response, String> {
+    let ids = parse_ids(&ids)?;
+    blocking(app, move |app| {
+        let bytes = std::fs::read(&image).map_err(|e| format!("Couldn't open the image: {e}"))?;
+        let img = cover::decode(&bytes)?;
+        with_writer(&app, Path::new(&path), |db| {
+            let links = cover::add_covers(db.root(), &[Assignment { image: img, dbids: ids.clone() }])?;
+            for (dbid, link) in links {
+                db.edit(&[dbid], &[Field::Artwork(Some(link))]).map_err(|e| e.to_string())?;
+            }
+            Ok(())
+        })
+    })
+    .await
+}
+
+/// Take songs' covers off (the thumbnails stay in the iPod's cover files, unused).
+#[tauri::command]
+pub async fn remove_artwork(path: String, ids: Vec<String>, app: AppHandle) -> Result<Response, String> {
+    let ids = parse_ids(&ids)?;
+    blocking(app, move |app| with_writer(&app, Path::new(&path), |db| db.edit(&ids, &[Field::Artwork(None)]).map_err(|e| e.to_string())))
+        .await
+}
+
+/// A small PNG preview (data URL) of an image file, for Get Info before saving.
+#[tauri::command]
+pub async fn image_preview(image: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let bytes = std::fs::read(&image).map_err(|e| format!("Couldn't open the image: {e}"))?;
+        let img = cover::decode(&bytes)?;
+        let (w, h) = image::GenericImageView::dimensions(&img);
+        let small = img.thumbnail(256, 256);
+        let mut png = Vec::new();
+        small.write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).map_err(|e| e.to_string())?;
+        use base64::Engine;
+        Ok(format!("data:image/png;base64,{}#{w}x{h}", base64::engine::general_purpose::STANDARD.encode(png)))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }

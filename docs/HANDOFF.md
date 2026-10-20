@@ -72,7 +72,7 @@ Everything decided and learned so far, so work can continue in a new session.
 - ⌘. (Ctrl+. on Linux) stops playback. Model detection from
   SysInfo/SysInfoExtended via libgpod's device table; generic icon fallback.
 
-Order chosen: confirm editing on the nano → **playback** (done, see below) → the rest.
+Order chosen: confirm editing on the nano → **playback** (done) → artwork (done) → icon chooser → shuffle/repeat → playlist reordering → media library.
 
 ## Status (2026-10-20)
 
@@ -221,8 +221,19 @@ In the app (2026-10-20, tested on a scratch copy laid out like the nano):
   are recognised by carrying paths.
 - Confirmed on the nano by the developer: adding via the file dialog, editing
   old and new songs, playlists (new and existing), eject.
-- Not yet: cover art for added songs (ArtworkDB appender exists, needs
-  wiring), BPM (not read by chinotto-ipod), playlist reordering by drag,
+- Artwork (2026-10-20): `app/src-tauri/src/cover.rs`. Image → 600 px rule
+  (shrink only) → each of the iPod's common formats by fill-and-crop →
+  RGB565 appended to `F<fmt>_<n>.ithmb` (new file at ≥64 MB) → ArtworkDB
+  entries cloned from an existing one (`ArtworkDb::append`), written via temp
+  + rename after backing it up to Chinotto Backups (`ArtworkDB <unix time>`,
+  newest 5 kept) → songs linked with `Field::Artwork` in the libgpod save.
+  Songs given the same image share thumbnails. Removing sets has_artwork=2 and
+  leaves the thumbnails unused. Covers embedded in added files are used
+  automatically. Get Info has an Artwork tab (choose, drop, remove; applied
+  on OK). Needs an existing ArtworkDB with at least one cover to clone (an
+  iPod with no covers at all can't get covers yet). Tested on a temp copy of
+  CAESAR's DB (`cover::tests`) and in the app on the scratch copy.
+- Not yet: BPM (not read by chinotto-ipod), playlist reordering by drag,
   smart playlist editing, conversion of FLAC etc. (FFmpeg helper).
 
 

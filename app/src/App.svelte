@@ -24,14 +24,18 @@
       const p = e.payload;
       // Only real files from Finder / the file manager (they carry paths);
       // drags inside the window are Chinotto's own song drags.
-      if (p.type === "enter") fileDrag = !!store.ipod && p.paths.length > 0 && !store.songDrag;
+      if (p.type === "enter") fileDrag = !!store.ipod && p.paths.length > 0 && !store.songDrag && store.dialog?.kind !== "info";
       else if (p.type === "over") {
         /* keep the current state */
       }
       else if (p.type === "leave") fileDrag = false;
       else if (p.type === "drop") {
         fileDrag = false;
-        if (store.ipod && store.writable && p.paths.length) void store.addFiles(p.paths);
+        if (store.dialog?.kind === "info") {
+          // Dropped on Get Info: an image becomes the cover.
+          const img = p.paths.find((x) => /\.(jpe?g|png|gif|bmp|webp|tiff?)$/i.test(x));
+          if (img) store.infoImageDrop = img;
+        } else if (store.ipod && store.writable && p.paths.length) void store.addFiles(p.paths);
       }
     });
     return () => void off.then((f) => f());

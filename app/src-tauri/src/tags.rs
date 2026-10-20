@@ -75,6 +75,15 @@ pub fn read(path: &Path) -> Result<TrackInfo, String> {
     Ok(t)
 }
 
+/// The file's embedded cover (front cover if marked, else the first picture).
+pub fn embedded_cover(path: &Path) -> Option<Vec<u8>> {
+    let tagged = lofty::read_from_path(path).ok()?;
+    let tag = tagged.primary_tag().or(tagged.first_tag())?;
+    let pics = tag.pictures();
+    let p = pics.iter().find(|p| p.pic_type() == lofty::picture::PictureType::CoverFront).or(pics.first())?;
+    Some(p.data().to_vec())
+}
+
 /// The iPod groups albums by album + album artist; without an album artist,
 /// tracks of one album can show up as separate albums. Fill it (falling back
 /// to the artist) and the sort fields the file doesn't have.

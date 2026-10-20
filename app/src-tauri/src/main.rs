@@ -3,6 +3,7 @@
 
 mod artwork;
 mod commands;
+mod cover;
 mod devices;
 mod playback;
 mod state;
@@ -45,6 +46,9 @@ fn main() {
             write::rename_playlist,
             write::delete_playlist,
             write::set_playlist_tracks,
+            write::set_artwork,
+            write::remove_artwork,
+            write::image_preview,
         ])
         .setup(|app| {
             app.state::<AppState>().set_player(playback::start(app.handle()));
