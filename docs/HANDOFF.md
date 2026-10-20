@@ -61,10 +61,15 @@ What works:
   falling back to `umount`).
 - Start-up folder: first argument or `CHINOTTO_OPEN`.
 
-Verified here on Linux (Ubuntu 24.04, WebKitGTK 2.52) with the private copy of
-CAESAR's databases. Not yet verified: the Mac build (needs the GitHub
-workflow to run), covers on the real iPod (the private copy has no `.ithmb`
-files), eject on real hardware.
+Verified on Linux (Ubuntu 24.04, WebKitGTK 2.52) with the private copy of
+CAESAR's databases, and **on the developer's Mac with CAESAR plugged in**
+(universal .dmg from the "Build apps" workflow): mount detection, browsing,
+real covers, toggling the browser/artwork panes all work. Not yet verified:
+eject on real hardware.
+
+Repository: github.com/PerDiscum/Chinotto (private). CI and "Build apps" pass on
+macOS and Linux. Workflows use actions/checkout@v5 and actions/setup-node@v5
+(the v4s run on the deprecated Node 20).
 
 ## App architecture
 
@@ -106,8 +111,9 @@ files), eject on real hardware.
 
 ## Open items
 
-- Push the repository to GitHub and run **Build apps** to get the first Mac
-  build (CI hasn't run yet).
+- Try Eject on CAESAR from the app.
+- Claude has no GitHub access from its sessions yet; fixes go to the developer
+  as `git am` patch files unless GitHub is connected under Connectors.
 
 ## The developer's iPod (test device)
 
