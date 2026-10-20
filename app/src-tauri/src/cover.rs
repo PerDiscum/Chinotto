@@ -43,6 +43,22 @@ fn fill(img: &DynamicImage, w: u32, h: u32) -> RgbaImage {
     img.resize_to_fill(w, h, FilterType::Lanczos3).to_rgba8()
 }
 
+/// The real pixel size of a thumbnail slot. Some formats claim more than their
+/// slot holds: 1061 on the iPod classic / nano 3G says 56×56 but stores 55
+/// columns × 56 rows (6,160 bytes). Writing 56-pixel rows into it shears the
+/// picture diagonally, so the width is taken from the slot size.
+pub fn slot_dims(w: usize, h: usize, size: usize) -> (usize, usize) {
+    if size == w * h * 2 || w < 2 || h < 2 {
+        (w, h)
+    } else if size == (w - 1) * h * 2 {
+        (w - 1, h)
+    } else if size == w * (h - 1) * 2 {
+        (w, h - 1)
+    } else {
+        (w, h)
+    }
+}
+
 /// One image and the songs (dbids) that get it.
 pub struct Assignment {
     pub image: DynamicImage,
@@ -74,8 +90,9 @@ pub fn add_covers(root: &Path, assignments: &[Assignment]) -> Result<HashMap<u64
         // Thumbnails once per image, shared by all its songs.
         let mut thumbs = Vec::new();
         for f in &formats {
-            let rgba = fill(&img, f.width as u32, f.height as u32);
-            let data = rgb565::encode(rgba.as_raw(), f.width as usize, f.height as usize, f.size as usize);
+            let (w, h) = slot_dims(f.width as usize, f.height as usize, f.size as usize);
+            let rgba = fill(&img, w as u32, h as u32);
+            let data = rgb565::encode(rgba.as_raw(), w, h, f.size as usize);
             let (file, offset) = append_ithmb(&layout, f.format, &mut file_index, &data)?;
             thumbs.push((f.format, file, offset));
         }
@@ -134,6 +151,13 @@ fn backup(root: &Path, db_path: &Path) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn small_thumbnail_is_55_wide() {
+        assert_eq!(slot_dims(56, 56, 6160), (55, 56));
+        assert_eq!(slot_dims(128, 128, 32768), (128, 128));
+        assert_eq!(slot_dims(320, 320, 204800), (320, 320));
+    }
 
     #[test]
     fn six_hundred_rule() {

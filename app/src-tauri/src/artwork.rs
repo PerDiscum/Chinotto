@@ -47,9 +47,8 @@ fn render(session: Option<&Session>, path: &str) -> Option<Vec<u8>> {
     let mut raw = vec![0u8; t.size as usize];
     f.read_exact(&mut raw).ok()?;
 
-    let w = t.width as usize;
-    // Some slots hold fewer rows than the nominal height (56×56 stored as 56×55).
-    let h = (t.height as usize).min(raw.len() / (w * 2));
+    // Some slots are smaller than their nominal size (1061: 55 wide, not 56).
+    let (w, h) = crate::cover::slot_dims(t.width as usize, t.height as usize, raw.len());
     if h == 0 {
         return None;
     }
