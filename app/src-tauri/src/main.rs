@@ -49,6 +49,8 @@ fn main() {
             write::set_artwork,
             write::remove_artwork,
             write::image_preview,
+            write::save_cover,
+            write::paste_image,
         ])
         .setup(|app| {
             app.state::<AppState>().set_player(playback::start(app.handle()));

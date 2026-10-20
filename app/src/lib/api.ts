@@ -1,6 +1,6 @@
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import type { AddProgress, AddResult, DeviceInfo, IpodView, TrackChanges, WriteResult } from "./types";
 
 export const listDevices = () => invoke<DeviceInfo[]>("list_devices");
@@ -89,3 +89,17 @@ export async function pickImage(): Promise<string | null> {
   });
   return typeof r === "string" ? r : null;
 }
+
+/** Save a cover (ArtworkDB image id) as a PNG; asks where. Returns false if cancelled. */
+export async function saveCover(imageId: number, name: string): Promise<boolean> {
+  const dest = await save({
+    title: "Save Cover",
+    defaultPath: `${name.replace(/[/\\:*?"<>|]/g, "-").trim() || "Cover"}.png`,
+    filters: [{ name: "PNG image", extensions: ["png"] }],
+  });
+  if (!dest) return false;
+  await invoke<void>("save_cover", { image: imageId, dest });
+  return true;
+}
+/** The clipboard's image, kept in a temporary file; returns its path. */
+export const pasteImage = () => invoke<string>("paste_image");

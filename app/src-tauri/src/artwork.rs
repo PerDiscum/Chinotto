@@ -34,6 +34,12 @@ fn render(session: Option<&Session>, path: &str) -> Option<Vec<u8>> {
     if generation != s.generation {
         return None;
     }
+    cover_png(s, image_id, want)
+}
+
+/// A cover as PNG: the smallest stored thumbnail at least `want` px wide, or
+/// the largest there is.
+pub fn cover_png(s: &Session, image_id: u32, want: u16) -> Option<Vec<u8>> {
     let art = s.art.as_ref()?;
     let image = &art.images[*s.art_index.get(&image_id)?];
 

@@ -40,7 +40,7 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
         {/if}
       </button>
-      <button aria-label="Next" title="Next" disabled={!store.nowPlaying || store.queuePos + 1 >= store.queue.length} onclick={() => store.next()}>
+      <button aria-label="Next" title="Next" disabled={!store.hasNext} onclick={() => store.next()}>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 5h2v14h-2zM4 5v14l11-7z" /></svg>
       </button>
     </div>

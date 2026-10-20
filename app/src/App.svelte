@@ -114,6 +114,18 @@
           disabled={!store.writable || !!store.busy}
           onclick={() => store.newPlaylist(false)}><Icon name="newlist" /></button
         >
+        <button
+          title={store.shuffle ? "Shuffle is on" : "Shuffle is off"}
+          aria-label="Shuffle"
+          aria-pressed={store.shuffle}
+          onclick={() => store.setShuffle(!store.shuffle)}><Icon name="shuffle" /></button
+        >
+        <button
+          title={store.repeat === "off" ? "Repeat is off" : store.repeat === "all" ? "Repeat all" : "Repeat one"}
+          aria-label="Repeat: {store.repeat === 'off' ? 'off' : store.repeat === 'all' ? 'all' : 'one'}"
+          aria-pressed={store.repeat !== "off"}
+          onclick={() => store.cycleRepeat()}><Icon name={store.repeat === "one" ? "repeat-one" : "repeat"} /></button
+        >
       {/if}
       <span class="spacer"></span>
       <button title={store.showBrowser ? "Hide column browser" : "Show column browser"} aria-pressed={store.showBrowser} onclick={() => (store.showBrowser = !store.showBrowser)}><Icon name="columns" /></button>

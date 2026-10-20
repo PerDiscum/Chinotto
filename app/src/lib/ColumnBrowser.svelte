@@ -11,6 +11,46 @@
     { title: "Album", plural: ["Album", "Albums"], items: columns.albums, value: store.album, pick: (v: string | null) => store.pickAlbum(v) },
   ]);
 
+  // Height of the browser, dragged with the bar under it (remembered).
+  let height = $state(loadHeight());
+  function loadHeight() {
+    try {
+      const v = Number(localStorage.getItem("chinotto.browserHeight"));
+      return v >= 80 ? v : 168;
+    } catch {
+      return 168;
+    }
+  }
+  function startResize(e: MouseEvent) {
+    e.preventDefault();
+    const y0 = e.clientY, h0 = height;
+    const move = (m: MouseEvent) => (height = Math.max(80, Math.min(window.innerHeight * 0.6, h0 + m.clientY - y0)));
+    const up = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+      try {
+        localStorage.setItem("chinotto.browserHeight", String(Math.round(height)));
+      } catch {
+        /* not essential */
+      }
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  }
+
+  // When a list changes length (other filters picked), keep its choice in view.
+  let lists: HTMLElement[] = $state([]);
+  $effect(() => {
+    void columns;
+    queueMicrotask(() => {
+      for (const l of lists) {
+        const sel = l?.querySelector<HTMLElement>(".sel");
+        if (sel && sel !== l.firstElementChild) sel.scrollIntoView({ block: "nearest" });
+        else l?.scrollTo({ top: 0 });
+      }
+    });
+  });
+
   function keydown(e: KeyboardEvent, items: string[], value: string | null, pick: (v: string | null) => void) {
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
     e.preventDefault();
@@ -22,11 +62,11 @@
   }
 </script>
 
-<div class="browser">
-  {#each cols as c (c.title)}
+<div class="browser" style:height="{height}px">
+  {#each cols as c, ci (c.title)}
     <section>
       <h3>{c.title}</h3>
-      <div class="list" role="listbox" tabindex="0" aria-label={c.title} onkeydown={(e) => keydown(e, c.items, c.value, c.pick)}>
+      <div class="list" bind:this={lists[ci]} role="listbox" tabindex="0" aria-label={c.title} onkeydown={(e) => keydown(e, c.items, c.value, c.pick)}>
         <button role="option" aria-selected={c.value === null} class:sel={c.value === null} onclick={() => c.pick(null)}>
           All ({count(c.items.length)} {c.items.length === 1 ? c.plural[0] : c.plural[1]})
         </button>
@@ -37,19 +77,28 @@
     </section>
   {/each}
 </div>
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<div class="resize" role="separator" aria-orientation="horizontal" aria-label="Resize the column browser" onmousedown={startResize}></div>
 
 <style>
   .browser {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    height: 168px;
+    grid-template-rows: minmax(0, 1fr);
     flex: none;
+  }
+  .resize {
+    flex: none;
+    height: 5px;
+    margin-top: -2px;
     border-bottom: 1px solid var(--edge);
+    cursor: row-resize;
   }
   section {
     display: flex;
     flex-direction: column;
     min-width: 0;
+    min-height: 0;
     border-right: 1px solid var(--edge);
   }
   section:last-child {
@@ -67,6 +116,7 @@
   }
   .list {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
     background: var(--bg);
   }

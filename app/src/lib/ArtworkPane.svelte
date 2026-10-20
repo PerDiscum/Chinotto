@@ -12,6 +12,24 @@
     void src;
     failed = false;
   });
+
+  function contextmenu(e: MouseEvent) {
+    e.preventDefault();
+    const targets = store.selectedTracks.map((t) => t.dbid);
+    const n = targets.length;
+    store.menu = {
+      x: e.clientX,
+      y: e.clientY,
+      items: [
+        { label: "Save Cover As…", disabled: !track?.art || failed, action: () => track && store.saveCover(track) },
+        {
+          label: n > 1 ? `Paste Cover to ${n} Selected Songs` : "Paste Cover to Selected Song",
+          disabled: !n || !store.writable || !!store.busy,
+          action: () => store.pasteCover(targets),
+        },
+      ],
+    };
+  }
 </script>
 
 <figure class="art" aria-label="Artwork of the selected song">
@@ -24,7 +42,7 @@
       {track ? "Selected song" : "Nothing selected"}
     {/if}
   </figcaption>
-  <div class="frame">
+  <div class="frame" role="img" aria-label="Cover" oncontextmenu={contextmenu}>
     {#if src && !failed}
       <img {src} alt="Cover of {track?.album ?? track?.title ?? 'the selected song'}" onerror={() => (failed = true)} />
     {:else}

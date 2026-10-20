@@ -326,3 +326,44 @@ pub async fn image_preview(image: String) -> Result<String, String> {
     .await
     .map_err(|e| e.to_string())?
 }
+
+/// Save the cover with this ArtworkDB image id as a PNG file (the largest size
+/// the iPod has).
+#[tauri::command]
+pub async fn save_cover(image: u32, dest: String, state: tauri::State<'_, crate::state::AppState>) -> Result<(), String> {
+    let session = state.session().ok_or("No iPod is open")?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let png = crate::artwork::cover_png(&session, image, u16::MAX).ok_or("This cover couldn't be read from the iPod")?;
+        std::fs::write(&dest, png).map_err(|e| format!("Couldn't save the cover: {e}"))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// The image on the clipboard, saved to a temporary PNG file; returns its path.
+/// A copied path to an image file (as text) works too.
+#[tauri::command]
+pub async fn paste_image() -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let mut cb = arboard::Clipboard::new().map_err(|e| format!("Couldn't read the clipboard: {e}"))?;
+        if let Ok(img) = cb.get_image() {
+            let rgba = image::RgbaImage::from_raw(img.width as u32, img.height as u32, img.bytes.into_owned())
+                .ok_or("The image on the clipboard couldn't be read")?;
+            static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+            let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!("chinotto-paste-{}-{n}.png", std::process::id()));
+            rgba.save_with_format(&path, image::ImageFormat::Png).map_err(|e| format!("Couldn't keep the pasted image: {e}"))?;
+            return Ok(path.to_string_lossy().into_owned());
+        }
+        if let Ok(text) = cb.get_text() {
+            let t = text.trim().trim_start_matches("file://");
+            let p = std::path::Path::new(t);
+            if p.is_file() && cover::decode(&std::fs::read(p).unwrap_or_default()).is_ok() {
+                return Ok(t.to_string());
+            }
+        }
+        Err("There's no image on the clipboard. Copy one (for example from a web page or Preview) and try again.".into())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}

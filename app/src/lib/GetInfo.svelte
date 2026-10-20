@@ -2,7 +2,7 @@
   import { untrack } from "svelte";
   import { store } from "./store.svelte";
   import Modal from "./Modal.svelte";
-  import { artUrl, imagePreview, pickImage } from "./api";
+  import { artUrl, imagePreview, pasteImage as pastedImagePath, pickImage } from "./api";
   import { bytes, count, date, duration } from "./format";
   import type { Track, TrackChanges } from "./types";
 
@@ -56,6 +56,21 @@
     } catch (e) {
       artProblem = String(e);
     }
+  }
+  async function pasteImage() {
+    artProblem = null;
+    try {
+      await useImage(await pastedImagePath());
+    } catch (e) {
+      artProblem = String(e);
+    }
+  }
+  // ⌘V / Ctrl+V on the Artwork tab pastes an image (unless typing in a field).
+  function pasteKey(e: KeyboardEvent) {
+    if (tab !== "artwork" || readOnly || !(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "v") return;
+    if ((e.target as HTMLElement).closest("input, textarea, [contenteditable]")) return;
+    e.preventDefault();
+    void pasteImage();
   }
   async function chooseImage() {
     const p = await pickImage();
@@ -139,6 +154,8 @@
   const cover = untrack(() => (store.ipod && first?.art ? artUrl(store.ipod.generation, first.art, 128) : null));
   const heading = many ? `${count(tracks.length)} songs` : first?.title || "Untitled";
 </script>
+
+<svelte:window onkeydown={pasteKey} />
 
 {#snippet field(k: TextKey, wide = true)}
   <label class="f" class:wide>
@@ -256,7 +273,12 @@
       </div>
     {:else if tab === "artwork"}
       <div class="artwork">
-        <div class="big">
+        <div class="big" role="img" aria-label="Cover" oncontextmenu={(e) => {
+          e.preventDefault();
+          const t = tracks[0];
+          if (!t?.art || artwork) return;
+          store.menu = { x: e.clientX, y: e.clientY, items: [{ label: "Save Cover As…", action: () => store.saveCover(t) }] };
+        }}>
           {#if artwork === "remove"}
             <p>No artwork</p>
           {:else if artwork}
@@ -273,11 +295,12 @@
           {:else if artwork === "remove"}
             <p class="hint">The cover is taken off when you press OK.</p>
           {:else}
-            <p class="hint">Choose an image or drop one on this window{many ? ` to use it for all ${tracks.length} songs` : ""}.</p>
+            <p class="hint">Choose an image, paste one, or drop one on this window{many ? ` to use it for all ${tracks.length} songs` : ""}.</p>
           {/if}
           {#if !readOnly}
             <div class="artbuttons">
               <button onclick={chooseImage}>Choose Image…</button>
+              <button onclick={pasteImage} title="Use the image on the clipboard (⌘V)">Paste</button>
               <button onclick={() => (artwork = "remove")} disabled={artwork === "remove" || (!artwork && covers.every((c) => !c))}>Remove</button>
               {#if artwork}<button onclick={() => (artwork = null)}>Undo</button>{/if}
             </div>

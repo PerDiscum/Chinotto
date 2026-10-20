@@ -1,6 +1,6 @@
 <script lang="ts">
   // Small line icons drawn for Chinotto (16×16 grid).
-  let { name, size = 16 }: { name: "ipod" | "music" | "playlist" | "smart" | "eject" | "folder" | "columns" | "artwork" | "add" | "newlist"; size?: number } = $props();
+  let { name, size = 16 }: { name: "ipod" | "music" | "playlist" | "smart" | "eject" | "folder" | "columns" | "artwork" | "add" | "newlist" | "shuffle" | "repeat" | "repeat-one"; size?: number } = $props();
 </script>
 
 <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -33,6 +33,13 @@
   {:else if name === "newlist"}
     <path d="M2.5 4h8M2.5 7.5h8M2.5 11h4" />
     <path d="M12 9.5v5M9.5 12h5" />
+  {:else if name === "shuffle"}
+    <path d="M1.8 4.5h2.4c2.2 0 3.4 7 6 7h3.6M1.8 11.5h2.4c1 0 1.7-1.3 2.4-2.9M9.2 7.4c.7-1.6 1.4-2.9 2.4-2.9h2.2" />
+    <path d="M12.4 2.8l1.7 1.7-1.7 1.7M12.4 9.8l1.7 1.7-1.7 1.7" />
+  {:else if name === "repeat" || name === "repeat-one"}
+    <path d="M3 9V7.2c0-1.2.9-2.1 2.1-2.1h8.2M13 7v1.8c0 1.2-.9 2.1-2.1 2.1H2.7" />
+    <path d="M11.6 3.4l1.7 1.7-1.7 1.7M4.4 12.6l-1.7-1.7 1.7-1.7" />
+    {#if name === "repeat-one"}<path d="M7.3 6.6l.9-.7v3.2" stroke-width="1.1" />{/if}
   {:else if name === "artwork"}
     <rect x="2" y="2" width="12" height="12" rx="1.2" />
     <circle cx="8" cy="8" r="3" /><circle cx="8" cy="8" r="0.6" fill="currentColor" />

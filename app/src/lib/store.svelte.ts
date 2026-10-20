@@ -28,6 +28,34 @@ function loadVolume(): number {
   }
 }
 
+export type Repeat = "off" | "all" | "one";
+
+function loadPref<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
+  try {
+    const v = localStorage.getItem(key) as T | null;
+    return v && allowed.includes(v) ? v : fallback;
+  } catch {
+    return fallback;
+  }
+}
+function savePref(key: string, v: string) {
+  try {
+    localStorage.setItem(key, v);
+  } catch {
+    /* not essential */
+  }
+}
+
+/** Fisher–Yates shuffle of a copy. */
+function shuffled<T>(a: T[]): T[] {
+  const r = a.slice();
+  for (let i = r.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [r[i], r[j]] = [r[j], r[i]];
+  }
+  return r;
+}
+
 /** On macOS Ctrl-click is a right-click; Cmd toggles selection. Elsewhere Ctrl toggles. */
 export const isMac = typeof navigator !== "undefined" && /Mac/.test(navigator.platform);
 
@@ -71,6 +99,10 @@ class Store {
   queue = $state.raw<string[]>([]);
   queuePos = $state(0);
   volume = $state(loadVolume());
+  shuffle = $state(loadPref("chinotto.shuffle", ["on", "off"] as const, "off") === "on");
+  repeat = $state<Repeat>(loadPref("chinotto.repeat", ["off", "all", "one"] as const, "off"));
+  /** The queue in the list's own order (the queue itself is shuffled when shuffle is on). */
+  private listOrder: string[] = [];
 
   get playingTrack(): Track | null {
     if (!this.nowPlaying || !this.ipod) return null;
@@ -252,6 +284,29 @@ class Store {
   /** An image file dropped on the window while Get Info is open. */
   infoImageDrop = $state<string | null>(null);
 
+  /** Save a song's cover to a PNG file. */
+  async saveCover(t: Track) {
+    if (!t.art) return;
+    try {
+      await api.saveCover(t.art, t.album || t.title || "Cover");
+    } catch (e) {
+      this.error = String(e);
+    }
+  }
+
+  /** Paste the clipboard's image as the cover of these songs. */
+  async pasteCover(ids: string[]) {
+    if (!ids.length || !this.writable) return;
+    let image: string;
+    try {
+      image = await api.pasteImage();
+    } catch (e) {
+      this.error = String(e);
+      return;
+    }
+    await this.write("Adding artwork…", (p) => api.setArtwork(p, ids, image));
+  }
+
   /** Delete key / menu: in a playlist, take songs out of it; elsewhere, delete from the iPod (asks first). */
   removeSelected() {
     if (!this.writable || !this.selected.size) return;
@@ -348,8 +403,43 @@ class Store {
   /** Play `list` (in its current order) starting at `startIndex`. */
   async playList(list: Track[], startIndex: number) {
     if (!list.length) return;
-    this.queue = list.map((t) => t.dbid);
-    await this.playAt(Math.max(0, Math.min(startIndex, list.length - 1)));
+    this.listOrder = list.map((t) => t.dbid);
+    const start = Math.max(0, Math.min(startIndex, list.length - 1));
+    if (this.shuffle) {
+      // The chosen song first, then the rest in random order.
+      const first = this.listOrder[start];
+      this.queue = [first, ...shuffled(this.listOrder.filter((_, i) => i !== start))];
+      await this.playAt(0);
+    } else {
+      this.queue = this.listOrder;
+      await this.playAt(start);
+    }
+  }
+
+  setShuffle(on: boolean) {
+    this.shuffle = on;
+    savePref("chinotto.shuffle", on ? "on" : "off");
+    if (!this.queue.length) return;
+    // Rearrange what's still to come; the playing song stays put.
+    const current = this.queue[this.queuePos];
+    if (on) {
+      this.queue = [current, ...shuffled(this.listOrder.filter((d) => d !== current))];
+      this.queuePos = 0;
+    } else {
+      this.queue = this.listOrder;
+      this.queuePos = Math.max(0, this.listOrder.indexOf(current));
+    }
+  }
+
+  /** Off → all → one → off, as iTunes' repeat button. */
+  cycleRepeat() {
+    this.repeat = this.repeat === "off" ? "all" : this.repeat === "all" ? "one" : "off";
+    savePref("chinotto.repeat", this.repeat);
+  }
+
+  /** Whether Next has somewhere to go. */
+  get hasNext(): boolean {
+    return !!this.nowPlaying && (this.queuePos + 1 < this.queue.length || this.repeat === "all");
   }
 
   private async playAt(pos: number, skipped = 0): Promise<void> {
@@ -382,16 +472,26 @@ class Store {
     await this.playList(visible, sel >= 0 ? sel : 0);
   }
 
+  /** `auto`: the song finished by itself (repeat one replays it then). */
   async next(auto = false) {
     if (!this.queue.length) return;
-    if (this.queuePos + 1 < this.queue.length) await this.playAt(this.queuePos + 1);
-    else if (auto) await this.stopPlayback();
+    if (auto && this.repeat === "one") await this.playAt(this.queuePos);
+    else if (this.queuePos + 1 < this.queue.length) await this.playAt(this.queuePos + 1);
+    else if (this.repeat === "all") {
+      // From the top again; a new random order each time round when shuffling.
+      if (this.shuffle) this.queue = shuffled(this.listOrder);
+      await this.playAt(0);
+    } else if (auto) await this.stopPlayback();
   }
 
   /** Like iTunes: back to the start of the song if more than 3 s in, else the previous song. */
   async previous() {
     if (!this.nowPlaying) return;
-    if (this.player.positionMs > 3000 || this.queuePos === 0) return api.playerSeek(0);
+    if (this.player.positionMs > 3000) return api.playerSeek(0);
+    if (this.queuePos === 0) {
+      if (this.repeat === "all" && this.queue.length > 1) return this.playAt(this.queue.length - 1);
+      return api.playerSeek(0);
+    }
     await this.playAt(this.queuePos - 1);
   }
 
@@ -413,6 +513,7 @@ class Store {
   async stopPlayback() {
     this.nowPlaying = null;
     this.queue = [];
+    this.listOrder = [];
     await api.playerStop();
   }
 
