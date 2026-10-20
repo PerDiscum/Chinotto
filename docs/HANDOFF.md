@@ -86,6 +86,9 @@ files), eject on real hardware.
   then delete the `android`, `ios` and `Square*`/`StoreLogo` outputs).
 - Mac builds are ad-hoc signed (`signingIdentity: "-"`), not notarised.
 - CI runs `cargo fmt --check` and `clippy -D warnings`; keep both clean.
+- Rust is pinned to 1.97.0 (`rust-toolchain.toml` and both workflows) because
+  newer releases add clippy lints that fail the build (1.99 did). Bump all
+  three together, deliberately.
 
 ## Next step: writing to the iPod
 

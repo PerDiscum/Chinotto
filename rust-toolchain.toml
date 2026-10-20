@@ -1,0 +1,5 @@
+# One Rust version everywhere (CI, release builds, local), so a new Rust
+# release can't break the build with new lints. Bump deliberately.
+[toolchain]
+channel = "1.97.0"
+components = ["clippy", "rustfmt"]

@@ -29,7 +29,7 @@ pub fn decode(raw: &[u8], width: usize, height: usize) -> Vec<u8> {
         out[4 * i + 2] = ((v & 31) * 255 / 31) as u8;
         out[4 * i + 3] = 255;
     }
-    for px in out[width * rows * 4..].chunks_exact_mut(4) {
+    for px in out[width * rows * 4..].as_chunks_mut::<4>().0 {
         px[3] = 255;
     }
     out
