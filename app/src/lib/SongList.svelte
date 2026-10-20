@@ -95,11 +95,28 @@
     };
   }
 
-  function dragstart(e: DragEvent, t: Track) {
-    if (!store.writable || !e.dataTransfer) return;
-    if (!store.selected.has(t.id)) store.clickTrack(t.id, tracks, { shiftKey: false, metaKey: false, ctrlKey: false });
-    e.dataTransfer.setData("application/x-chinotto-songs", JSON.stringify(store.selectedTracks.map((x) => x.dbid)));
-    e.dataTransfer.effectAllowed = "copy";
+  /** Press on a song and move: drag the selection onto a playlist in the source list. */
+  function pressForDrag(e: MouseEvent, t: Track) {
+    if (e.button !== 0 || !store.writable) return;
+    const x0 = e.clientX, y0 = e.clientY;
+    const move = (m: MouseEvent) => {
+      if (!store.songDrag) {
+        if (Math.hypot(m.clientX - x0, m.clientY - y0) < 6) return;
+        if (!store.selected.has(t.id)) store.clickTrack(t.id, tracks, { shiftKey: false, metaKey: false, ctrlKey: false });
+        store.songDrag = { dbids: store.selectedTracks.map((x) => x.dbid), x: m.clientX, y: m.clientY, target: null };
+      }
+      const over = document.elementFromPoint(m.clientX, m.clientY)?.closest<HTMLElement>("[data-drop-playlist]");
+      store.songDrag = { ...store.songDrag, x: m.clientX, y: m.clientY, target: over?.dataset.dropPlaylist ?? null };
+    };
+    const up = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+      const d = store.songDrag;
+      store.songDrag = null;
+      if (d?.target) void store.addToPlaylist(d.target, d.dbids);
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
   }
 </script>
 
@@ -144,10 +161,10 @@
         aria-rowindex={n + 1}
         aria-selected={store.selected.has(t.id)}
         style:transform="translateY({n * ROW}px)"
-        draggable={store.writable}
         onmousedown={(e) => {
           // Keep a multi-selection when starting a drag or right-clicking inside it.
           if (isMac && e.ctrlKey) return; // that's a right-click
+          pressForDrag(e, t);
           if (e.button === 0 && !(store.selected.has(t.id) && !e.shiftKey && !e.metaKey && !e.ctrlKey && store.selected.size > 1)) store.clickTrack(t.id, tracks, e);
         }}
         onclick={(e) => {
@@ -155,7 +172,7 @@
         }}
         ondblclick={() => (store.dialog = { kind: "info" })}
         oncontextmenu={(e) => contextmenu(e, t)}
-        ondragstart={(e) => dragstart(e, t)}
+
       >
         <span class="cell c-title">{dash(t.title)}</span>
         <span class="cell c-time num">{duration(t.lengthMs)}</span>

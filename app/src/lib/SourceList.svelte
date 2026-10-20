@@ -6,20 +6,6 @@
   const isOpen = (path: string) => store.ipod?.path === path;
   const isPlaylist = (id: string) => store.source.kind === "playlist" && store.source.id === id;
 
-  let dropTarget = $state<string | null>(null);
-  const SONGS = "application/x-chinotto-songs";
-
-  function canDrop(e: DragEvent, smart: boolean) {
-    return store.writable && !smart && !!e.dataTransfer?.types.includes(SONGS);
-  }
-
-  function drop(e: DragEvent, id: string) {
-    e.preventDefault();
-    dropTarget = null;
-    const raw = e.dataTransfer?.getData(SONGS);
-    if (raw) void store.addToPlaylist(id, JSON.parse(raw) as string[]);
-  }
-
   function playlistMenu(e: MouseEvent, id: string, name: string, smart: boolean) {
     e.preventDefault();
     const ro = !store.writable || smart;
@@ -105,19 +91,12 @@
                   <button
                     class="row"
                     class:active={isPlaylist(p.id)}
-                    class:drop={dropTarget === p.id}
+                    class:drop={store.songDrag?.target === p.id}
+                    data-drop-playlist={store.writable && !p.smart ? p.id : undefined}
                     onclick={() => store.select({ kind: "playlist", id: p.id })}
                     ondblclick={() => store.writable && !p.smart && (store.renaming = p.id)}
                     oncontextmenu={(e) => playlistMenu(e, p.id, p.name, p.smart)}
                     onkeydown={(e) => rowKey(e, p.id, p.name, p.smart)}
-                    ondragover={(e) => {
-                      if (canDrop(e, p.smart)) {
-                        e.preventDefault();
-                        dropTarget = p.id;
-                      }
-                    }}
-                    ondragleave={() => dropTarget === p.id && (dropTarget = null)}
-                    ondrop={(e) => drop(e, p.id)}
                   >
                     <Icon name={p.smart ? "smart" : "playlist"} /><span>{p.name}</span>
                   </button>

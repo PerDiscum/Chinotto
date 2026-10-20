@@ -22,7 +22,12 @@
     void store.init();
     const off = getCurrentWebview().onDragDropEvent((e) => {
       const p = e.payload;
-      if (p.type === "enter" || p.type === "over") fileDrag = !!store.ipod;
+      // Only real files from Finder / the file manager (they carry paths);
+      // drags inside the window are Chinotto's own song drags.
+      if (p.type === "enter") fileDrag = !!store.ipod && p.paths.length > 0 && !store.songDrag;
+      else if (p.type === "over") {
+        /* keep the current state */
+      }
       else if (p.type === "leave") fileDrag = false;
       else if (p.type === "drop") {
         fileDrag = false;
@@ -125,6 +130,12 @@
     </div>
   {/if}
 
+  {#if store.songDrag}
+    <div class="songdrag" style:left="{store.songDrag.x + 12}px" style:top="{store.songDrag.y + 8}px" aria-hidden="true">
+      {store.songDrag.dbids.length === 1 ? "1 song" : `${store.songDrag.dbids.length} songs`}
+    </div>
+  {/if}
+
   <Dialogs />
   <ContextMenu />
 
@@ -184,6 +195,18 @@
   .side-tools button:focus-visible {
     outline: 2px solid var(--accent-bright);
     outline-offset: -2px;
+  }
+  .songdrag {
+    position: fixed;
+    z-index: 70;
+    padding: 3px 9px;
+    border-radius: 10px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    pointer-events: none;
+    box-shadow: 0 4px 12px rgb(0 0 0 / 0.25);
   }
   .dropzone {
     position: fixed;

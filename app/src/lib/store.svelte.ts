@@ -51,6 +51,8 @@ class Store {
   menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
   /** Playlist whose name is being edited in the source list. */
   renaming = $state<string | null>(null);
+  /** Songs being dragged inside the window (Chinotto's own drag, not the OS's). */
+  songDrag = $state<{ dbids: string[]; x: number; y: number; target: string | null } | null>(null);
 
   get writable() {
     return !!this.ipod?.writable;

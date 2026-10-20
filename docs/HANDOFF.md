@@ -88,10 +88,17 @@ macOS and Linux. Workflows use actions/checkout@v5 and actions/setup-node@v5
   status display in the toolbar; chinotto-brown selection; light and dark
   mode.
 - Icon: the developer's own artwork (a smiling orange wearing earbuds),
-  `app/src-tauri/icons/icon-original.png`. `icon-source.png` is it fitted to the
-  macOS icon grid (824 px inside 1024, soft shadow); regenerate the set with
-  `npx tauri icon src-tauri/icons/icon-source.png -o src-tauri/icons`, then
-  delete the `android`, `ios` and `Square*`/`StoreLogo` outputs.
+  `app/src-tauri/icons/icon-original.png`.
+  - `icon-source.png`: the rounded artwork on a 1024 canvas, no shadow
+    (Linux/Windows icons).
+  - `icon-macos-fullbleed.png`: an opaque full-bleed square (8 px trimmed,
+    transparent corners filled with nearby background). macOS 26 puts icons
+    that aren't full squares on a grey plate and shrinks them; it rounds a
+    full-bleed square itself. `icon.icns` is built from this one.
+  - Regenerate: `npx tauri icon src-tauri/icons/icon-source.png -o src-tauri/icons`,
+    then `npx tauri icon src-tauri/icons/icon-macos-fullbleed.png -o /tmp/x` and
+    copy `/tmp/x/icon.icns` over; delete the `android`, `ios`, `Square*` and
+    `StoreLogo` outputs.
 - Mac builds are ad-hoc signed (`signingIdentity: "-"`), not notarised.
 - CI runs `cargo fmt --check` and `clippy -D warnings`; keep both clean.
 - Rust is pinned to 1.97.0 (`rust-toolchain.toml` and both workflows) because
@@ -145,6 +152,12 @@ In the app (2026-10-20, tested on a scratch copy laid out like the nano):
   elsewhere: delete from iPod after confirming), ⌘/Ctrl+I, ⌘/Ctrl+O, ⌘/Ctrl+N,
   drop files/folders on the window, drag songs onto playlists, double-click a
   playlist to rename. Selection is kept across saves by dbid.
+- Song dragging is Chinotto's own (mouse events + `store.songDrag`, drop
+  targets marked `data-drop-playlist`), not HTML5 drag-and-drop: Tauri's
+  native file-drop handler intercepts HTML5 drags on macOS. OS file drops
+  are recognised by carrying paths.
+- Confirmed on the nano by the developer: adding via the file dialog, editing
+  old and new songs, playlists (new and existing), eject.
 - Not yet: cover art for added songs (ArtworkDB appender exists, needs
   wiring), BPM (not read by chinotto-ipod), playlist reordering by drag,
   smart playlist editing, conversion of FLAC etc. (FFmpeg helper).
