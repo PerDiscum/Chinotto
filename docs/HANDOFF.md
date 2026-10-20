@@ -58,7 +58,18 @@ Everything decided and learned so far, so work can continue in a new session.
   (`ipod-7g-full.svg`, or PNG ≥600 px tall, shown up to ~280 px high beside
   the device details, aspect kept). Transparent backgrounds. Names: ipod-1g…
   ipod-7g (4g = 4G/Photo, 5g = Video), ipod-mini, ipod-nano-1g…5g,
-  ipod-shuffle-1g…4g, generic; a missing image falls back to generic. Model detection from
+  ipod-shuffle-1g…4g, generic; a missing image falls back to generic.
+  **Delivered 2026-10-20** as one picture per model (used for both, in
+  `app/src/assets/devices/`, trimmed and scaled to 512 px): ipod-3g, -4g,
+  -7g (also used for 6g), -mini, -nano-2g, -nano-3g, -shuffle (all shuffles),
+  generic, plus sansa-clip/-fuze/-e200, sony-nwz/-a10, fiio-x1,
+  cowon-iaudio-x5, iriver-h100/-ifp, xclef for later. `deviceImages.ts` maps
+  keys and aliases. Device page: picture top-right, 180 px high, no added
+  shadow; sidebar shows it at 18 px.
+- Model detection: `chinotto-ipod/src/models.rs`, generated from libgpod's
+  tables (model number → generation; serial's last 3 chars → model number,
+  for iPods like the nano 3G whose SysInfo has no model number).
+- ⌘. (Ctrl+. on Linux) stops playback. Model detection from
   SysInfo/SysInfoExtended via libgpod's device table; generic icon fallback.
 
 Order chosen: confirm editing on the nano → **playback** (done, see below) → the rest.

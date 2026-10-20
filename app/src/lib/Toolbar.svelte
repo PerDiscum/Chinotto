@@ -33,7 +33,7 @@
       <button aria-label="Previous" title="Previous" disabled={!store.nowPlaying} onclick={() => store.previous()}>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h2v14H6zM20 5v14L9 12z" /></svg>
       </button>
-      <button class="main" aria-label={playing ? "Pause" : "Play"} title={playing ? "Pause (Space)" : "Play (Space)"} disabled={!store.ipod} onclick={() => store.togglePlay(visible)}>
+      <button class="main" aria-label={playing ? "Pause" : "Play"} title={playing ? "Pause (Space) · Stop (⌘.)" : "Play (Space)"} disabled={!store.ipod} onclick={() => store.togglePlay(visible)}>
         {#if playing}
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z" /></svg>
         {:else}

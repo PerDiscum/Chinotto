@@ -5,6 +5,8 @@ export interface DeviceInfo {
   volume: string;
   model?: string | null;
   modelNumber?: string | null;
+  /** Picture key for the model, e.g. "ipod-nano-3g"; "generic" when unknown. */
+  icon: string;
   capacity: number;
   free: number;
   manual: boolean;

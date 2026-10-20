@@ -1,6 +1,7 @@
 <script lang="ts">
   import { store } from "./store.svelte";
   import { bytes, count, isVideo, longDuration } from "./format";
+  import { deviceImage } from "./deviceImages";
 
   const ipod = $derived(store.ipod!);
   const stats = $derived.by(() => {
@@ -25,6 +26,7 @@
 </script>
 
 <div class="page">
+  <div class="top">
   <section class="summary">
     <h1>{ipod.name}</h1>
     <dl>
@@ -40,6 +42,12 @@
         <button onclick={() => store.eject(ipod.path)} disabled={!!store.ejecting}>Eject</button>
       {/if}
     </div>
+  </section>
+  {#if deviceImage(ipod.device.icon)}
+    <img class="device" src={deviceImage(ipod.device.icon)} alt={ipod.device.model ?? "iPod"} />
+  {/if}
+  </div>
+  <section class="summary">
     <div class="changes">
       {#if !ipod.identity}
         <p class="note">This iPod doesn't report a FireWire ID or serial number, so Chinotto keeps it read-only.</p>
@@ -87,6 +95,29 @@
   }
   .summary {
     max-width: 640px;
+  }
+  .top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+    max-width: 820px;
+  }
+  .device {
+    flex: none;
+    width: auto;
+    height: 180px;
+    max-width: 40%;
+    object-fit: contain;
+  }
+  @media (max-width: 760px) {
+    .top {
+      flex-direction: column-reverse;
+    }
+    .device {
+      height: 140px;
+      max-width: 100%;
+    }
   }
   h1 {
     margin: 0 0 18px;

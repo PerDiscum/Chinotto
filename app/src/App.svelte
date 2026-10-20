@@ -48,6 +48,12 @@
     }
     if (!(e.metaKey || e.ctrlKey)) return;
     const k = e.key.toLowerCase();
+    // ⌘. (Ctrl+. on Linux): stop, as in iTunes.
+    if (k === "." && store.nowPlaying) {
+      e.preventDefault();
+      void store.stopPlayback();
+      return;
+    }
     if (k === "o" && store.writable) {
       e.preventDefault();
       void store.pickAndAddFiles();

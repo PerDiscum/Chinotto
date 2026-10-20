@@ -100,9 +100,20 @@ impl SysInfo {
         self.serial.clone()
     }
 
-    /// Human-readable model, when the model number is one we know.
+    /// The model, from the model number or else the serial number's last three
+    /// characters (some iPods, e.g. nano 3G, have no model number in SysInfo).
+    pub fn generation(&self) -> Option<crate::models::Generation> {
+        let from_number = self.model_number.as_deref().and_then(|m| crate::models::generation(m.get(1..)?));
+        from_number.or_else(|| {
+            let serial = self.serial.as_deref()?;
+            let suffix = serial.get(serial.len().checked_sub(3)?..)?;
+            crate::models::generation(crate::models::model_from_serial(suffix)?)
+        })
+    }
+
+    /// Human-readable model, when known.
     pub fn model_name(&self) -> Option<&'static str> {
-        model_name(self.model_number.as_deref()?)
+        self.generation().map(|g| g.name)
     }
 }
 
@@ -118,20 +129,9 @@ fn plist_string(xml: &str, key: &str) -> Option<String> {
     Some(rest[..rest.find("</string>")?].trim().to_string()).filter(|v| !v.is_empty())
 }
 
-/// Model names for the classic iPods, keyed by model number without the
-/// leading prefix letter. Capacities are left out on purpose: modded iPods
-/// often hold far more than the label says.
+/// Human-readable model for a model number such as "xC297".
 pub fn model_name(model_number: &str) -> Option<&'static str> {
-    let key = model_number.get(1..).unwrap_or("");
-    Some(match key {
-        "B029" | "B147" | "B145" | "B150" => "iPod classic (6th generation)",
-        "B562" | "B565" => "iPod classic (6th generation, late 2008)",
-        "C293" | "C297" => "iPod classic (7th generation)",
-        // Model numbers from libgpod's device table.
-        "A978" | "A980" | "B261" | "B249" | "B253" | "B257" => "iPod nano (3rd generation)",
-        "A002" | "A146" | "A003" | "A147" | "A444" | "A446" | "A448" | "A450" | "A664" => "iPod with video (5th generation)",
-        _ => return None,
-    })
+    crate::models::generation(model_number.get(1..)?).map(|g| g.name)
 }
 
 #[cfg(test)]
@@ -146,6 +146,9 @@ mod tests {
         assert_eq!(s.model_name(), Some("iPod classic (7th generation)"));
         assert_eq!(model_name("xA980"), Some("iPod nano (3rd generation)"));
         assert_eq!(s.identity().as_deref(), Some("000A27001B2C3D4E"));
+        // No model number: found from the serial (the developer's red nano 3G).
+        let n = SysInfo { serial: Some("XX000XXXYXV".into()), ..Default::default() };
+        assert_eq!(n.generation().map(|g| (g.icon, g.name)), Some(("ipod-nano-3g", "iPod nano (3rd generation)")));
     }
 
     #[test]

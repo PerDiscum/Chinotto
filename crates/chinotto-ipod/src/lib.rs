@@ -12,6 +12,7 @@ pub mod artworkdb;
 pub mod bytes;
 pub mod device;
 pub mod itunesdb;
+pub mod models;
 pub mod rgb565;
 
 use std::fmt;

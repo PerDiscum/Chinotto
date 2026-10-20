@@ -1,6 +1,7 @@
 <script lang="ts">
   import { store } from "./store.svelte";
   import Icon from "./Icon.svelte";
+  import { deviceImage } from "./deviceImages";
 
   const playlists = $derived(store.ipod?.playlists.filter((p) => !p.master) ?? []);
   const isOpen = (path: string) => store.ipod?.path === path;
@@ -55,7 +56,7 @@
             onclick={() => (isOpen(d.path) ? store.select({ kind: "device" }) : store.open(d.path))}
             title={d.path}
           >
-            <Icon name="ipod" />
+            {#if deviceImage(d.icon)}<img class="dev" src={deviceImage(d.icon)} alt="" />{:else}<Icon name="ipod" />{/if}
             <span>{isOpen(d.path) ? store.ipod!.name : d.volume}</span>
             {#if store.opening === d.path}<span class="spinner" aria-label="Reading"></span>{/if}
           </button>
@@ -207,6 +208,12 @@
     font-size: 13px;
     user-select: text;
     -webkit-user-select: text;
+  }
+  .dev {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    object-fit: contain;
   }
   .eject {
     flex: none;
