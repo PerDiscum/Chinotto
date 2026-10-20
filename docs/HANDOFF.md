@@ -72,7 +72,13 @@ Everything decided and learned so far, so work can continue in a new session.
 - ⌘. (Ctrl+. on Linux) stops playback. Model detection from
   SysInfo/SysInfoExtended via libgpod's device table; generic icon fallback.
 
-Order chosen: confirm editing on the nano → **playback** (done) → artwork (done) → icon chooser → shuffle/repeat → playlist reordering → media library.
+- **Column browser** (requested 2026-10-21): each browser column (Genre,
+  Artist, Album) must scroll on its own, its list length changing with the
+  filtering. The user chooses which columns show, from Artist, Album, Genre,
+  Composer, Year and Format.
+- **Song list**: add Format and Bitrate columns.
+
+Order chosen: confirm editing on the nano → **playback** (done) → artwork (done) → icon chooser → shuffle/repeat → playlist reordering → column browser fixes and Format/Bitrate columns → media library.
 
 ## Status (2026-10-20)
 
