@@ -124,5 +124,6 @@ fn link_static_glib(prefix: &std::path::Path) -> Vec<PathBuf> {
             println!("cargo:rustc-link-lib={lib}");
         }
     }
-    vec![prefix.join("include/glib-2.0"), libdir.join("glib-2.0/include")]
+    // include/ itself holds libintl.h on macOS (copied there by the glib script).
+    vec![prefix.join("include/glib-2.0"), libdir.join("glib-2.0/include"), prefix.join("include")]
 }

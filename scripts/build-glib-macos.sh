@@ -81,6 +81,14 @@ INI
   # glib's helper libraries (pcre2, libffi, libintl, zlib) are built as meson
   # subprojects; make sure their static libraries sit next to glib's.
   find "$build/subprojects" -name 'lib*.a' -exec cp -n {} "$prefix/lib/" \;
+  # proxy-libintl installs its library but not its header, which glib's
+  # gi18n-lib.h (used by libgpod) includes. It must be this header: it maps
+  # gettext() etc. onto the library's g_libintl_* names.
+  if [ ! -f "$prefix/include/libintl.h" ]; then
+    hdr="$(find "$src/subprojects" "$build/subprojects" -name libintl.h -print -quit)"
+    [ -n "$hdr" ] || { echo "libintl.h not found in glib's subprojects" >&2; exit 1; }
+    cp "$hdr" "$prefix/include/"
+  fi
   ls "$prefix/lib"/*.a
   echo "glib for $triple installed in $prefix"
 done
