@@ -115,6 +115,23 @@ impl AppState {
         Ok(())
     }
 
+    /// Cover URLs contain this number, and the window may cache them. It must
+    /// never repeat across launches (or two iPods' covers get mixed up), so it
+    /// starts from the clock and counts up.
+    fn next_generation(&self) -> u32 {
+        let _ = self.generation.compare_exchange(
+            0,
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| (d.as_secs() as u32) & 0x3fff_ffff)
+                .unwrap_or(1)
+                .max(1),
+            Ordering::Relaxed,
+            Ordering::Relaxed,
+        );
+        self.generation.fetch_add(1, Ordering::Relaxed) + 1
+    }
+
     pub fn open(&self, root: &Path) -> Result<Arc<Session>, String> {
         let layout = Layout::new(root);
         let bytes = std::fs::read(layout.itunesdb()).map_err(|e| format!("Couldn't read the iPod's database: {e}"))?;
@@ -124,7 +141,7 @@ impl AppState {
         let art_index = art.as_ref().map(|a| a.images.iter().enumerate().map(|(i, im)| (im.id, i)).collect()).unwrap_or_default();
         let session = Arc::new(Session {
             root: root.to_path_buf(),
-            generation: self.generation.fetch_add(1, Ordering::Relaxed) + 1,
+            generation: self.next_generation(),
             db,
             sysinfo: SysInfo::read(root).unwrap_or_default(),
             art,
