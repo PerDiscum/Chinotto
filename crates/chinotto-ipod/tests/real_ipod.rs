@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 
-use chinotto_ipod::artworkdb::{ArtworkDb, NewImage};
+use chinotto_ipod::artworkdb::{ArtworkDb, NewImage, NewThumb};
 use chinotto_ipod::itunesdb::ITunesDb;
 
 fn ipod() -> Option<PathBuf> {
@@ -50,8 +50,10 @@ fn artwork_append_matches_the_proven_javascript_writer() {
     let art = ArtworkDb::parse(&bytes).unwrap();
     assert_eq!(art.images.len(), 23093);
     assert_eq!(art.max_id(), 23192);
-    let formats: Vec<u32> = art.common_formats().iter().map(|f| f.format).collect();
-    assert_eq!(formats, vec![1055, 1060, 1061]);
+    // iTunes' own covers on this nano carry five formats, so those win.
+    let common: Vec<u32> = art.common_formats().iter().map(|f| f.format).collect();
+    assert_eq!(common, vec![1055, 1060, 1061, 1068, 1069]);
+    let formats = vec![1055, 1060, 1061];
 
     // Same two entries the JavaScript test appended; compare byte-for-byte when that output is present.
     let tpl = art.find_template(&formats).unwrap();
@@ -61,9 +63,9 @@ fn artwork_append_matches_the_proven_javascript_writer() {
             song_dbid: 10208284158074208777,
             source_pixels: 360 * 360 + 1,
             thumbs: vec![
-                (1055, "F1055_2.ithmb".into(), 0),
-                (1060, "F1060_2.ithmb".into(), 11059200),
-                (1061, "F1061_1.ithmb".into(), 16699760),
+                NewThumb { format: 1055, file: "F1055_2.ithmb".into(), offset: 0, width: 128, height: 128 },
+                NewThumb { format: 1060, file: "F1060_2.ithmb".into(), offset: 11059200, width: 320, height: 320 },
+                NewThumb { format: 1061, file: "F1061_1.ithmb".into(), offset: 16699760, width: 56, height: 56 },
             ],
         },
         NewImage {
@@ -71,9 +73,9 @@ fn artwork_append_matches_the_proven_javascript_writer() {
             song_dbid: 1,
             source_pixels: 1000 * 1000 + 1,
             thumbs: vec![
-                (1055, "F1055_2.ithmb".into(), 32768),
-                (1060, "F1060_2.ithmb".into(), 11264000),
-                (1061, "F1061_1.ithmb".into(), 16705920),
+                NewThumb { format: 1055, file: "F1055_2.ithmb".into(), offset: 32768, width: 128, height: 128 },
+                NewThumb { format: 1060, file: "F1060_2.ithmb".into(), offset: 11264000, width: 320, height: 320 },
+                NewThumb { format: 1061, file: "F1061_1.ithmb".into(), offset: 16705920, width: 56, height: 56 },
             ],
         },
     ];

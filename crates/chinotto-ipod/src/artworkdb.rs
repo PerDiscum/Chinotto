@@ -63,12 +63,21 @@ pub struct ArtworkDb {
     image_section: (usize, usize, usize, usize), // (mhsd at, mhsd len, mhli at, count)
 }
 
+#[derive(Debug, Clone)]
+pub struct NewThumb {
+    pub format: u32,
+    pub file: String,
+    pub offset: u32,
+    /// The picture's size inside the slot, written to the thumbnail's header.
+    pub width: u16,
+    pub height: u16,
+}
+
 pub struct NewImage {
     pub id: u32,
     pub song_dbid: u64,
     pub source_pixels: u32,
-    /// (format, file name, offset)
-    pub thumbs: Vec<(u32, String, u32)>,
+    pub thumbs: Vec<NewThumb>,
 }
 
 impl ArtworkDb {
@@ -125,7 +134,9 @@ impl ArtworkDb {
             key.sort_by_key(|f| f.format);
             *counts.entry(key).or_default() += 1;
         }
-        counts.into_iter().max_by_key(|(_, n)| *n).map(|(k, _)| k).unwrap_or_default()
+        // Prefer the fullest set (iTunes' own covers carry every format the
+        // iPod uses), then the most common one.
+        counts.into_iter().max_by_key(|(k, n)| (k.len(), *n)).map(|(k, _)| k).unwrap_or_default()
     }
 
     /// Most recent image using exactly these formats, each in an `F<fmt>_<n>.ithmb` file.
@@ -164,12 +175,18 @@ impl ArtworkDb {
             put_u64(&mut c, 0x14, e.song_dbid);
             put_u32(&mut c, 0x30, e.source_pixels);
             for t in &template.thumbs {
-                let (_, file, offset) = e
+                let n = e
                     .thumbs
                     .iter()
-                    .find(|(f, _, _)| *f == t.format)
+                    .find(|n| n.format == t.format)
                     .ok_or_else(|| Error::Invalid(format!("missing thumbnail for format {}", t.format)))?;
-                put_u32(&mut c, t.mhni_at + 0x14, *offset);
+                let file = &n.file;
+                put_u32(&mut c, t.mhni_at + 0x14, n.offset);
+                // No padding: the picture fills its stated size (the template's
+                // may have been a letterboxed cover).
+                c[t.mhni_at + 0x1C..t.mhni_at + 0x20].fill(0);
+                c[t.mhni_at + 0x20..t.mhni_at + 0x22].copy_from_slice(&n.height.to_le_bytes());
+                c[t.mhni_at + 0x22..t.mhni_at + 0x24].copy_from_slice(&n.width.to_le_bytes());
                 let name = encode_utf16le(&format!(":{file}"));
                 let at = t.name_at.ok_or_else(|| Error::Invalid("template thumbnail has no file name".into()))?;
                 if name.len() != t.name_bytes {

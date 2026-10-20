@@ -13,7 +13,7 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::Path;
 
-use chinotto_ipod::artworkdb::{ithmb_name, ArtworkDb, NewImage};
+use chinotto_ipod::artworkdb::{ithmb_name, ArtworkDb, NewImage, NewThumb};
 use chinotto_ipod::device::Layout;
 use chinotto_ipod::rgb565;
 use image::imageops::FilterType;
@@ -59,6 +59,18 @@ pub fn slot_dims(w: usize, h: usize, size: usize) -> (usize, usize) {
     }
 }
 
+/// The picture to draw in a slot. A square format whose slot is a pixel
+/// narrower (1061: 55 px rows in a 56 × 56 slot) gets a square picture of the
+/// narrower size, which is what iTunes writes (55 × 55).
+pub fn picture_dims(w: usize, h: usize, size: usize) -> (usize, usize) {
+    let (sw, sh) = slot_dims(w, h, size);
+    if w == h && sw < w {
+        (sw, sw.min(sh))
+    } else {
+        (sw, sh)
+    }
+}
+
 /// One image and the songs (dbids) that get it.
 pub struct Assignment {
     pub image: DynamicImage,
@@ -90,11 +102,11 @@ pub fn add_covers(root: &Path, assignments: &[Assignment]) -> Result<HashMap<u64
         // Thumbnails once per image, shared by all its songs.
         let mut thumbs = Vec::new();
         for f in &formats {
-            let (w, h) = slot_dims(f.width as usize, f.height as usize, f.size as usize);
+            let (w, h) = picture_dims(f.width as usize, f.height as usize, f.size as usize);
             let rgba = fill(&img, w as u32, h as u32);
             let data = rgb565::encode(rgba.as_raw(), w, h, f.size as usize);
             let (file, offset) = append_ithmb(&layout, f.format, &mut file_index, &data)?;
-            thumbs.push((f.format, file, offset));
+            thumbs.push(NewThumb { format: f.format, file, offset, width: w as u16, height: h as u16 });
         }
         for dbid in &a.dbids {
             entries.push(NewImage { id: next_id, song_dbid: *dbid, source_pixels, thumbs: thumbs.clone() });
@@ -155,6 +167,9 @@ mod tests {
     #[test]
     fn small_thumbnail_is_55_wide() {
         assert_eq!(slot_dims(56, 56, 6160), (55, 56));
+        assert_eq!(picture_dims(56, 56, 6160), (55, 55));
+        assert_eq!(picture_dims(55, 55, 6160), (55, 55));
+        assert_eq!(picture_dims(128, 128, 32768), (128, 128));
         assert_eq!(slot_dims(128, 128, 32768), (128, 128));
         assert_eq!(slot_dims(320, 320, 204800), (320, 320));
     }
@@ -214,6 +229,12 @@ mod tests {
             assert_eq!(t.artwork_size, 771 * 600 + 1);
             let im = art.images.iter().find(|i| i.id == t.mhii_link).expect("linked entry exists");
             assert_eq!(im.song_dbid, dbid);
+            // Same formats and small-thumbnail header as iTunes' own covers.
+            let fmts = art.common_formats();
+            assert_eq!(im.thumbs.len(), fmts.len());
+            if let Some(s) = im.thumbs.iter().find(|t| t.format == 1061 && t.size == 6160) {
+                assert_eq!((s.width, s.height), (55, 55));
+            }
             for th in &im.thumbs {
                 let data = std::fs::read(root.join("iPod_Control/Artwork").join(&th.file)).unwrap();
                 let px = &data[th.offset as usize..th.offset as usize + 2];
