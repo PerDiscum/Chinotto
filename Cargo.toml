@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
-members = ["crates/chinotto-ipod", "app/src-tauri"]
-default-members = ["crates/chinotto-ipod", "app/src-tauri"]
+members = ["crates/chinotto-ipod", "crates/chinotto-gpod", "app/src-tauri"]
+default-members = ["crates/chinotto-ipod", "crates/chinotto-gpod", "app/src-tauri"]
 
 [workspace.package]
 edition = "2021"

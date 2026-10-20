@@ -98,7 +98,30 @@ macOS and Linux. Workflows use actions/checkout@v5 and actions/setup-node@v5
   newer releases add clippy lints that fail the build (1.99 did). Bump all
   three together, deliberately.
 
-## Next step: writing to the iPod
+## Writing to the iPod (in progress)
+
+Decided 2026-10-20: libgpod, as planned. Done so far:
+- `crates/chinotto-gpod`: libgpod 0.8.3 vendored (Ubuntu's copy incl. Debian's
+  resolve_path speed-up), compiled by `build.rs` with a hand-written config.h:
+  no gdk-pixbuf (libgpod never touches ArtworkDB; `mhii_link` etc. survive),
+  no SQLite/libplist/libimobiledevice (`sqlite_stub.c`; only nano 5G+/iPhone
+  use them), libxml2 on (SysInfoExtended holds the FireWire GUID on newer
+  Classics). TunesReloaded's WASM libgpod was built the same lean way.
+- Safe API: `Database::open/edit/add_track/remove_tracks/create_playlist/
+  rename_playlist/delete_playlist/set_playlist_tracks/save`. Tracks by dbid.
+  `save` backs up iTunesDB to `iPod_Control/iTunes/Chinotto Backups/` (newest
+  10 kept); removed tracks' files are deleted only after a good save.
+- Tests on a temp copy of CAESAR's DB: unchanged save keeps all 23,516 tracks,
+  covers links and playlists identical; edits/playlist/add/remove round-trip.
+- macOS: `scripts/build-glib-macos.sh` builds static glib 2.82.5 for arm64 and
+  x86_64 (meson, forcefallback for pcre2/libffi/intl/zlib); workflows cache it
+  in `deps/` and set CHINOTTO_DEPS. **Not yet verified on GitHub.**
+
+Still to do: hook it into the app (Get Info editing, add songs with tags from
+`lofty`, delete, playlists, artwork via our ArtworkDB appender), and check
+CAESAR's FireWire GUID is found (SysInfo or SysInfoExtended) before a real save.
+
+## Original plan for this step
 
 1. Link libgpod (LGPL; dynamic linking). Linux: system package
    (`libgpod-dev`). macOS: build libgpod + glib + libplist + sqlite in the

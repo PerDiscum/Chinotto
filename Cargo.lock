@@ -331,6 +331,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "chinotto-gpod"
+version = "0.1.0"
+dependencies = [
+ "cc",
+ "chinotto-ipod",
+ "pkg-config",
+]
+
+[[package]]
 name = "chinotto-ipod"
 version = "0.1.0"
 

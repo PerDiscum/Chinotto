@@ -1,0 +1,17 @@
+[package]
+name = "chinotto-gpod"
+description = "Writes classic iPod databases through a bundled build of libgpod"
+edition.workspace = true
+# Our Rust code is MIT; the bundled libgpod in libgpod/ is LGPL-2.1-or-later.
+license = "MIT AND LGPL-2.1-or-later"
+version.workspace = true
+links = "gpod"
+
+[dependencies]
+
+[dev-dependencies]
+chinotto-ipod = { path = "../chinotto-ipod" }
+
+[build-dependencies]
+cc = "1"
+pkg-config = "0.3"

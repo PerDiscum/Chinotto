@@ -1,3 +1,5 @@
 /target
 # Never commit real iPod data; tests read it from CHINOTTO_TEST_IPOD
 /fixtures-private
+# Static glib built by scripts/build-glib-macos.sh
+/deps

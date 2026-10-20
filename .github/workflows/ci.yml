@@ -10,6 +10,10 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Oldest macOS Chinotto supports; glib and libgpod are built for it too.
+  MACOSX_DEPLOYMENT_TARGET: "11.0"
+
 jobs:
   check:
     strategy:
@@ -24,7 +28,24 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libssl-dev libxdo-dev
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libssl-dev libxdo-dev libxml2-dev zlib1g-dev
+
+      # libgpod needs glib. On macOS we build a static one (both architectures) and cache it.
+      - name: Cache static glib (macOS)
+        if: runner.os == 'macOS'
+        id: glib-cache
+        uses: actions/cache@v4
+        with:
+          path: deps
+          key: glib-macos-${{ hashFiles('scripts/build-glib-macos.sh') }}
+      - name: Build static glib (macOS)
+        if: runner.os == 'macOS' && steps.glib-cache.outputs.cache-hit != 'true'
+        run: |
+          brew install meson ninja
+          scripts/build-glib-macos.sh deps
+      - name: Use static glib (macOS)
+        if: runner.os == 'macOS'
+        run: echo "CHINOTTO_DEPS=$GITHUB_WORKSPACE/deps" >> "$GITHUB_ENV"
 
       - uses: dtolnay/rust-toolchain@1.97.0
         with:
