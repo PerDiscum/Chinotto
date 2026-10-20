@@ -77,6 +77,9 @@ Everything decided and learned so far, so work can continue in a new session.
   filtering. The user chooses which columns show, from Artist, Album, Genre,
   Composer, Year and Format.
 - **Song list**: add Format and Bitrate columns.
+- **Artwork fixes** (reported 2026-10-21): the artwork pane's download/save
+  option saves nothing; add a Paste option (image from the clipboard).
+  Covers now confirmed correct on the nano 3G and the classic 7G.
 
 Order chosen: confirm editing on the nano → **playback** (done) → artwork (done) → icon chooser → shuffle/repeat → playlist reordering → column browser fixes and Format/Bitrate columns → media library.
 
