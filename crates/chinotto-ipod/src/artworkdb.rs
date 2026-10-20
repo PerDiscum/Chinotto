@@ -120,11 +120,8 @@ impl ArtworkDb {
     pub fn common_formats(&self) -> Vec<Format> {
         let mut counts: HashMap<Vec<Format>, usize> = HashMap::new();
         for im in &self.images {
-            let mut key: Vec<Format> = im
-                .thumbs
-                .iter()
-                .map(|t| Format { format: t.format, width: t.width, height: t.height, size: t.size })
-                .collect();
+            let mut key: Vec<Format> =
+                im.thumbs.iter().map(|t| Format { format: t.format, width: t.width, height: t.height, size: t.size }).collect();
             key.sort_by_key(|f| f.format);
             *counts.entry(key).or_default() += 1;
         }
@@ -237,14 +234,7 @@ fn read_mhii(b: &Bytes, p: usize) -> Result<Image, Error> {
         }
         q += mtl;
     }
-    Ok(Image {
-        id: b.u32(p + 0x10)?,
-        song_dbid: b.u64(p + 0x14)?,
-        source_pixels: b.u32(p + 0x30)?,
-        thumbs,
-        at: p,
-        len: tl,
-    })
+    Ok(Image { id: b.u32(p + 0x10)?, song_dbid: b.u64(p + 0x14)?, source_pixels: b.u32(p + 0x30)?, thumbs, at: p, len: tl })
 }
 
 pub fn ithmb_name(format: u32, index: u32) -> String {

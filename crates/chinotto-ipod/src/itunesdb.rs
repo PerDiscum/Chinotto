@@ -20,19 +20,19 @@ use crate::Error;
 /// String fields of a track (mhod types). Only the ones present are filled.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct TrackStrings {
-    pub title: Option<String>,        // 1
-    pub location: Option<String>,     // 2  e.g. ":iPod_Control:Music:F40:abcd.m4a"
-    pub album: Option<String>,        // 3
-    pub artist: Option<String>,       // 4
-    pub genre: Option<String>,        // 5
-    pub filetype: Option<String>,     // 6  e.g. "AAC audio file"
-    pub comment: Option<String>,      // 8
-    pub composer: Option<String>,     // 12
-    pub grouping: Option<String>,     // 13
-    pub album_artist: Option<String>, // 22
-    pub sort_artist: Option<String>,  // 23
-    pub sort_title: Option<String>,   // 27
-    pub sort_album: Option<String>,   // 28
+    pub title: Option<String>,             // 1
+    pub location: Option<String>,          // 2  e.g. ":iPod_Control:Music:F40:abcd.m4a"
+    pub album: Option<String>,             // 3
+    pub artist: Option<String>,            // 4
+    pub genre: Option<String>,             // 5
+    pub filetype: Option<String>,          // 6  e.g. "AAC audio file"
+    pub comment: Option<String>,           // 8
+    pub composer: Option<String>,          // 12
+    pub grouping: Option<String>,          // 13
+    pub album_artist: Option<String>,      // 22
+    pub sort_artist: Option<String>,       // 23
+    pub sort_title: Option<String>,        // 27
+    pub sort_album: Option<String>,        // 28
     pub sort_album_artist: Option<String>, // 29
     pub sort_composer: Option<String>,     // 30
 }
@@ -44,28 +44,28 @@ pub struct Track {
     /// 64-bit database id (mhit +0x70); ArtworkDB links covers by this.
     pub dbid: u64,
     pub strings: TrackStrings,
-    pub compilation: bool,       // +0x1E
-    pub rating: u8,              // +0x1F, 0–100 in steps of 20
-    pub time_modified: u32,      // +0x20 (Mac epoch)
-    pub size: u32,               // +0x24 bytes
-    pub length_ms: u32,          // +0x28
-    pub track_nr: u32,           // +0x2C
-    pub track_count: u32,        // +0x30
-    pub year: u32,               // +0x34
-    pub bitrate_kbps: u32,       // +0x38
-    pub sample_rate: u32,        // +0x3C (stored as rate << 16)
-    pub play_count: u32,         // +0x50
-    pub time_played: u32,        // +0x58 (Mac epoch)
-    pub disc_nr: u32,            // +0x5C
-    pub disc_count: u32,         // +0x60
-    pub time_added: u32,         // +0x68 (Mac epoch)
-    pub artwork_count: u16,      // +0x7C
-    pub artwork_size: u32,       // +0x80
+    pub compilation: bool,  // +0x1E
+    pub rating: u8,         // +0x1F, 0–100 in steps of 20
+    pub time_modified: u32, // +0x20 (Mac epoch)
+    pub size: u32,          // +0x24 bytes
+    pub length_ms: u32,     // +0x28
+    pub track_nr: u32,      // +0x2C
+    pub track_count: u32,   // +0x30
+    pub year: u32,          // +0x34
+    pub bitrate_kbps: u32,  // +0x38
+    pub sample_rate: u32,   // +0x3C (stored as rate << 16)
+    pub play_count: u32,    // +0x50
+    pub time_played: u32,   // +0x58 (Mac epoch)
+    pub disc_nr: u32,       // +0x5C
+    pub disc_count: u32,    // +0x60
+    pub time_added: u32,    // +0x68 (Mac epoch)
+    pub artwork_count: u16, // +0x7C
+    pub artwork_size: u32,  // +0x80
     /// 1 = has artwork, 2 = none (as written by Swinsian/iTunes), 0 = unset.
-    pub has_artwork: u8,         // +0xA4
-    pub media_type: u32,         // +0xD0 (1 = audio)
+    pub has_artwork: u8, // +0xA4
+    pub media_type: u32,    // +0xD0 (1 = audio)
     /// ArtworkDB image id this track's cover uses (0 = none).
-    pub mhii_link: u32,          // +0x160
+    pub mhii_link: u32, // +0x160
     /// Offset of this mhit in the file (useful for patching).
     pub offset: usize,
 }
@@ -96,10 +96,7 @@ impl ITunesDb {
         let header_len = b.u32(4)? as usize;
         let total_len = b.u32(8)? as usize;
         if total_len != data.len() {
-            return Err(Error::Invalid(format!(
-                "iTunesDB says it is {total_len} bytes but the file is {}",
-                data.len()
-            )));
+            return Err(Error::Invalid(format!("iTunesDB says it is {total_len} bytes but the file is {}", data.len())));
         }
         let mut db = ITunesDb { version: b.u32(0x10)?, ..Default::default() };
         let section_count = b.u32(0x14)? as usize;
@@ -221,11 +218,7 @@ fn read_string_mhod(b: &Bytes, q: usize) -> Result<String, Error> {
     let encoding = b.u32(q + 0x18)?;
     let len = b.u32(q + 0x1C)? as usize;
     let raw = b.slice(q + 0x28, len)?;
-    Ok(if encoding == 2 {
-        String::from_utf8_lossy(raw).into_owned()
-    } else {
-        decode_utf16le(raw)
-    })
+    Ok(if encoding == 2 { String::from_utf8_lossy(raw).into_owned() } else { decode_utf16le(raw) })
 }
 
 fn parse_playlists(b: &Bytes, list: usize) -> Result<Vec<Playlist>, Error> {
@@ -239,11 +232,7 @@ fn parse_playlists(b: &Bytes, list: usize) -> Result<Vec<Playlist>, Error> {
         let tl = b.u32(p + 8)? as usize;
         let nmhod = b.u32(p + 0x0C)? as usize;
         let nitems = b.u32(p + 0x10)? as usize;
-        let mut pl = Playlist {
-            is_master: b.u8(p + 0x14)? != 0,
-            id: b.u64(p + 0x1C)?,
-            ..Default::default()
-        };
+        let mut pl = Playlist { is_master: b.u8(p + 0x14)? != 0, id: b.u64(p + 0x1C)?, ..Default::default() };
         let mut q = p + hl;
         for _ in 0..nmhod {
             b.expect(q, b"mhod")?;

@@ -16,10 +16,12 @@ impl<'a> Bytes<'a> {
         self.data.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
+    }
+
     pub fn slice(&self, at: usize, len: usize) -> Result<&'a [u8], Error> {
-        at.checked_add(len)
-            .and_then(|end| self.data.get(at..end))
-            .ok_or(Error::Truncated { at, len })
+        at.checked_add(len).and_then(|end| self.data.get(at..end)).ok_or(Error::Truncated { at, len })
     }
 
     pub fn u8(&self, at: usize) -> Result<u8, Error> {
