@@ -117,6 +117,17 @@ Decided 2026-10-20: libgpod, as planned. Done so far:
   x86_64 (meson, forcefallback for pcre2/libffi/intl/zlib); workflows cache it
   in `deps/` and set CHINOTTO_DEPS. **Not yet verified on GitHub.**
 
+- Checksum safety net in `save`: if the old iTunesDB declared a checksum
+  (header 0x30: 1 hash58, 2 hash72, 4 hashAB; hash58 at 0x58) and the new one
+  doesn't, the backup is restored and an error returned. Needed because with
+  a SysInfoExtended present libgpod takes the scheme from its `DBVersion` key
+  alone (missing → no checksum).
+
+Test device for writing: an 8 GB **iPod nano 3G named "CHINOTTO"** (mounts
+as /Volumes/iPod), so CAESAR is never written during development. Its
+FireWire GUID is only in SysInfoExtended (`FireWireGUID`), not in SysInfo, so
+libxml2 support is required.
+
 Still to do: hook it into the app (Get Info editing, add songs with tags from
 `lofty`, delete, playlists, artwork via our ArtworkDB appender), and check
 CAESAR's FireWire GUID is found (SysInfo or SysInfoExtended) before a real save.

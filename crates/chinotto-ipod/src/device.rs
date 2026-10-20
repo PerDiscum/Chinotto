@@ -83,6 +83,8 @@ pub fn model_name(model_number: &str) -> Option<&'static str> {
         "B029" | "B147" | "B145" | "B150" => "iPod classic (6th generation)",
         "B562" | "B565" => "iPod classic (6th generation, late 2008)",
         "C293" | "C297" => "iPod classic (7th generation)",
+        // Model numbers from libgpod's device table.
+        "A978" | "A980" | "B261" | "B249" | "B253" | "B257" => "iPod nano (3rd generation)",
         "A002" | "A146" | "A003" | "A147" | "A444" | "A446" | "A448" | "A450" | "A664" => "iPod with video (5th generation)",
         _ => return None,
     })
@@ -98,5 +100,6 @@ mod tests {
         assert_eq!(s.model_number.as_deref(), Some("xC297"));
         assert_eq!(s.firewire_guid.as_deref(), Some("0x000A27001B2C3D4E"));
         assert_eq!(s.model_name(), Some("iPod classic (7th generation)"));
+        assert_eq!(model_name("xA980"), Some("iPod nano (3rd generation)"));
     }
 }

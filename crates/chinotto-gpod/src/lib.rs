@@ -406,7 +406,13 @@ impl Database {
     }
 
     /// Back up the current iTunesDB, then write the new one.
+    ///
+    /// If the old database carried a checksum (iPod Classic, nano 3G and
+    /// later) and the new one doesn't, the iPod would show an empty library:
+    /// the backup is put back and an error returned.
     pub fn save(&mut self) -> Result<PathBuf> {
+        let path = self.root.join("iPod_Control/iTunes/iTunesDB");
+        let before = checksum_scheme(&path);
         let backup = backup_itunesdb(&self.root)?;
         let mut err: *mut GError = ptr::null_mut();
         if unsafe { itdb_write(self.itdb, &mut err) } == 0 {
@@ -415,12 +421,44 @@ impl Database {
         if !err.is_null() {
             unsafe { g_error_free(err) };
         }
+        let after = checksum_scheme(&path);
+        if before.is_some_and(|b| b != 0) && after != before {
+            std::fs::copy(&backup, &path).map_err(|e| {
+                Error(format!(
+                    "The new database lacks the iPod's checksum and the backup couldn't be restored ({e}). Restore it by hand from {}",
+                    backup.display()
+                ))
+            })?;
+            return Err(Error(format!(
+                "Not saved: the new database would have lacked the checksum this iPod needs (type {} before, {} after). The previous database is back in place.",
+                before.unwrap_or(0),
+                after.map(|a| a.to_string()).unwrap_or_else(|| "none".into())
+            )));
+        }
         for f in self.pending_deletes.drain(..) {
             // A file that's already gone is fine.
             let _ = std::fs::remove_file(f);
         }
         Ok(backup)
     }
+}
+
+/// The checksum scheme an iTunesDB header declares (0 none, 1 hash58,
+/// 2 hash72, 4 hashAB), and for hash58 whether the hash is actually filled in.
+/// `None` when the file can't be read or isn't an iTunesDB.
+fn checksum_scheme(path: &Path) -> Option<u16> {
+    use std::io::Read;
+    let mut head = [0u8; 0x6C];
+    std::fs::File::open(path).ok()?.read_exact(&mut head).ok()?;
+    if &head[..4] != b"mhbd" {
+        return None;
+    }
+    let scheme = u16::from_le_bytes([head[0x30], head[0x31]]);
+    // A hash58 header with an all-zero hash is as good as none.
+    if scheme == 1 && head[0x58..0x6C].iter().all(|b| *b == 0) {
+        return Some(0);
+    }
+    Some(scheme)
 }
 
 unsafe fn read_track(t: *mut Itdb_Track) -> TrackInfo {
