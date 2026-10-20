@@ -37,10 +37,74 @@ Everything decided and learned so far, so work can continue in a new session.
 5. Other players (MSC/MTP; per-device playlist format, path style, location presets incl. Rockbox).
 6. Windows.
 
+## Status (2026-10-20)
+
+Roadmap step 1 is half done: the **Tauri app and the Mac/Linux builds exist**;
+the app is **read-only**. TunesReloaded's *writing* features (add songs,
+delete, edit tags, playlists, artwork) are the next chunk.
+
+What works:
+- Auto-detects mounted iPods (polls `/Volumes` on macOS; `/media`,
+  `/media/<user>`, `/run/media/<user>`, `/mnt` on Linux, every 2 s) and opens
+  a newly plugged-in one. Unplugging closes it. "Open iPod folder…" adds any
+  folder with an `iPod_Control/iTunes/iTunesDB` (handy for copies on disk).
+- Source list (device, Music, playlists, smart playlists), Genre → Artist →
+  Album column browser (artist = album artist, falls back to artist;
+  compilations grouped under "Compilations"), virtualised song list (23k rows
+  are instant), sorting by column with iTunes-style tie-breaks, accent-
+  insensitive search, multi-select (Shift/Cmd/Ctrl, arrows, Cmd/Ctrl-A).
+- Covers: `art://localhost/<generation>-<mhii id>-<px>` serves the smallest
+  stored thumbnail ≥ px as PNG, read straight from the `.ithmb` files.
+- Device page: name (master playlist name), model from SysInfo, serial,
+  capacity bar (Audio / Video / Other / Free from statvfs), Eject
+  (`diskutil eject` on macOS; `udisksctl unmount` + `power-off` on Linux,
+  falling back to `umount`).
+- Start-up folder: first argument or `CHINOTTO_OPEN`.
+
+Verified here on Linux (Ubuntu 24.04, WebKitGTK 2.52) with the private copy of
+CAESAR's databases. Not yet verified: the Mac build (needs the GitHub
+workflow to run), covers on the real iPod (the private copy has no `.ithmb`
+files), eject on real hardware.
+
+## App architecture
+
+- `app/src-tauri/src/state.rs`: `AppState` holds hand-added folders and the
+  open `Session` (parsed iTunesDB + ArtworkDB + SysInfo, behind an `Arc`).
+- `commands.rs`: `list_devices`, `add_folder`, `open_ipod` (returns the whole
+  view as one JSON blob: device, playlists with track ids, tracks with
+  `skip_serializing_if` for absent strings; 64-bit ids as strings), `close_ipod`,
+  `eject`, `startup_folder`.
+- `devices.rs`: scanning, the watcher thread (emits `devices-changed`), eject.
+- `artwork.rs`: the `art:` scheme handler.
+- Front end: `lib/store.svelte.ts` (all state, runes), `lib/library.ts`
+  (`TrackIndex`: strings ranked once with `Intl.Collator`, so sorts compare
+  integers; `browse()` builds the three browser columns in one pass).
+- Look: system UI font; smoked-brown source list; an amber "bottle label"
+  status display in the toolbar; chinotto-brown selection; light and dark
+  mode. Icon: cut chinotto with a leaf (`app/src-tauri/icons/icon.svg`;
+  regenerate the set with `npx tauri icon src-tauri/icons/icon.svg -o src-tauri/icons`,
+  then delete the `android`, `ios` and `Square*`/`StoreLogo` outputs).
+- Mac builds are ad-hoc signed (`signingIdentity: "-"`), not notarised.
+- CI runs `cargo fmt --check` and `clippy -D warnings`; keep both clean.
+
+## Next step: writing to the iPod
+
+1. Link libgpod (LGPL; dynamic linking). Linux: system package
+   (`libgpod-dev`). macOS: build libgpod + glib + libplist + sqlite in the
+   workflow and bundle the dylibs into `Chinotto.app/Contents/Frameworks`
+   (Tauri `bundle.macOS.frameworks`), fixing install names. This is the
+   riskiest part; do it first and prove the CI .dmg still runs.
+2. Commands: add files (tags via `lofty`, copy to `iPod_Control/Music/Fxx`),
+   delete, edit metadata (album artist + sort fields per the Swinsian rules
+   below), playlists, artwork through our ArtworkDB appender.
+3. DB backup before every write; write to a temp file and rename.
+4. Then the rest of roadmap step 2 (model via USB, play counts back, live
+   smart playlists).
+
 ## Open items
 
-- Network access was enabled in claude.ai Settings → Capabilities; needs a new session.
-- Build route for Mac: GitHub repository + Actions (preferred) or local builds on the Mac.
+- Push the repository to GitHub and run **Build apps** to get the first Mac
+  build (CI hasn't run yet).
 
 ## The developer's iPod (test device)
 

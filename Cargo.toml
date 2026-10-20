@@ -1,8 +1,14 @@
 [workspace]
 resolver = "2"
-members = ["crates/chinotto-ipod"]
+members = ["crates/chinotto-ipod", "app/src-tauri"]
+default-members = ["crates/chinotto-ipod", "app/src-tauri"]
 
 [workspace.package]
 edition = "2021"
 license = "MIT"
 version = "0.1.0"
+
+[profile.release]
+codegen-units = 1
+lto = true
+strip = true

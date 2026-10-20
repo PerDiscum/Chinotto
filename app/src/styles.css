@@ -1,0 +1,100 @@
+/* Chinotto colour tokens. Named after the bitter citrus soda: smoked-glass
+   brown chrome, amber label, and a deep chinotto-brown for selection. */
+:root {
+  color-scheme: light dark;
+  --ui: -apple-system, BlinkMacSystemFont, "Segoe UI", "Cantarell", "Noto Sans", system-ui, sans-serif;
+  --rounded: ui-rounded, "SF Pro Rounded", "Nunito", var(--ui);
+
+  --bg: #ffffff;
+  --zebra: #f6f3f1;
+  --ink: #221a16;
+  --muted: #7b6e66;
+  --edge: #ddd4cd;
+  --header: #efe9e5;
+  --header-sorted: #e5dcd5;
+  --chrome: #e9e3de;
+  --chrome-edge: #cfc5bd;
+  --field: #ffffff;
+  --field-edge: #c9bfb7;
+
+  --accent: #7a3b14;
+  --accent-bright: #f0a23a;
+  --sel: #7a3b14;
+  --sel-ink: #fff8f1;
+  --sel-quiet: #e8dbd0;
+  --star: #9c5a24;
+
+  --side: #2b2421;
+  --side-deep: #1f1a18;
+  --side-ink: #ece2da;
+  --side-muted: #9d9087;
+  --side-icon: #b9aba1;
+  --side-edge: #3b322d;
+  --side-sel: #7a3b14;
+  --side-sel-ink: #fff8f1;
+
+  --label-bg: #1f1814;
+  --label-ink: #f3a73b;
+  --label-dim: #b7864a;
+  --label-rim: #8f7f73;
+
+  --cap-audio: #e0952f;
+  --cap-video: #5e7c4a;
+  --cap-other: #b9aaa0;
+  --cap-free: #f3efec;
+
+  --warn-bg: #fbe9d3;
+  --warn-ink: #6a3410;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1c1816;
+    --zebra: #221d1a;
+    --ink: #ede4dc;
+    --muted: #9a8d84;
+    --edge: #3a312b;
+    --header: #26201c;
+    --header-sorted: #2f2722;
+    --chrome: #2a2320;
+    --chrome-edge: #120f0d;
+    --field: #1c1816;
+    --field-edge: #4a3f38;
+    --sel: #8c4518;
+    --sel-quiet: #3a2c23;
+    --star: #e0a050;
+    --side: #151210;
+    --side-deep: #0f0d0c;
+    --side-edge: #2a2320;
+    --label-rim: #3a312b;
+    --cap-free: #2f2824;
+    --warn-bg: #3c2614;
+    --warn-ink: #f6c993;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--ui);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  -webkit-user-select: none;
+}
+input,
+.path,
+dd {
+  user-select: text;
+  -webkit-user-select: text;
+}
+button {
+  cursor: default;
+}
