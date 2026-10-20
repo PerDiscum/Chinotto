@@ -1,0 +1,13 @@
+[package]
+name = "chinotto-ipod"
+description = "Read and write classic iPod databases (iTunesDB, ArtworkDB)"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+# Deliberately none yet: everything here is plain Rust so it builds offline.
+
+[[bin]]
+name = "chinotto-inspect"
+path = "src/bin/inspect.rs"

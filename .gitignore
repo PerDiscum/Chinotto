@@ -1,0 +1,3 @@
+/target
+# Never commit real iPod data; tests read it from CHINOTTO_TEST_IPOD
+/fixtures-private
