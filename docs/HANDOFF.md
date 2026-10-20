@@ -86,9 +86,12 @@ macOS and Linux. Workflows use actions/checkout@v5 and actions/setup-node@v5
   integers; `browse()` builds the three browser columns in one pass).
 - Look: system UI font; smoked-brown source list; an amber "bottle label"
   status display in the toolbar; chinotto-brown selection; light and dark
-  mode. Icon: cut chinotto with a leaf (`app/src-tauri/icons/icon.svg`;
-  regenerate the set with `npx tauri icon src-tauri/icons/icon.svg -o src-tauri/icons`,
-  then delete the `android`, `ios` and `Square*`/`StoreLogo` outputs).
+  mode.
+- Icon: the developer's own artwork (a smiling orange wearing earbuds),
+  `app/src-tauri/icons/icon-original.png`. `icon-source.png` is it fitted to the
+  macOS icon grid (824 px inside 1024, soft shadow); regenerate the set with
+  `npx tauri icon src-tauri/icons/icon-source.png -o src-tauri/icons`, then
+  delete the `android`, `ios` and `Square*`/`StoreLogo` outputs.
 - Mac builds are ad-hoc signed (`signingIdentity: "-"`), not notarised.
 - CI runs `cargo fmt --check` and `clippy -D warnings`; keep both clean.
 - Rust is pinned to 1.97.0 (`rust-toolchain.toml` and both workflows) because
