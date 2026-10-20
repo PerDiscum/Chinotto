@@ -43,15 +43,19 @@ fn fill(img: &DynamicImage, w: u32, h: u32) -> RgbaImage {
     img.resize_to_fill(w, h, FilterType::Lanczos3).to_rgba8()
 }
 
-/// The picture stored in a thumbnail slot: rows are as wide as the header
-/// says, and there are as many as fit. (1061 on the iPod classic / nano 3G says
-/// 56×56 but holds 6,160 bytes: 56 columns × 55 rows. That is what iTunes'
-/// predecessors and TunesReloaded write, and how the iPod reads it.)
+/// The pixel layout of a thumbnail slot: (row width, rows).
+///
+/// Format 1061 (iPod classic / nano 3G) holds 6,160 bytes = 56 columns × 55
+/// rows, whatever its header says: TunesReloaded-style entries say 56×56,
+/// iTunes-style ones 55×55, and both are stored with 56-pixel rows (measured
+/// on the developer's nano). So when the header is narrower than the slot and
+/// one pixel more divides it evenly, rows are one pixel wider than the header.
 pub fn slot_dims(w: usize, h: usize, size: usize) -> (usize, usize) {
     if w == 0 {
         return (0, 0);
     }
-    (w, h.min(size / (w * 2)))
+    let stride = if w * h * 2 < size && size.is_multiple_of((w + 1) * 2) { w + 1 } else { w };
+    (stride, size / (stride * 2))
 }
 
 /// One image and the songs (dbids) that get it.
@@ -85,8 +89,7 @@ pub fn add_covers(root: &Path, assignments: &[Assignment]) -> Result<HashMap<u64
         // Thumbnails once per image, shared by all its songs.
         let mut thumbs = Vec::new();
         for f in &formats {
-            // Drawn at the header's size; rows that don't fit the slot are dropped.
-            let (w, h) = (f.width as usize, f.height as usize);
+            let (w, h) = slot_dims(f.width as usize, f.height as usize, f.size as usize);
             let rgba = fill(&img, w as u32, h as u32);
             let data = rgb565::encode(rgba.as_raw(), w, h, f.size as usize);
             let (file, offset) = append_ithmb(&layout, f.format, &mut file_index, &data)?;
@@ -156,6 +159,10 @@ mod tests {
     #[test]
     fn small_thumbnail_is_55_wide() {
         assert_eq!(slot_dims(56, 56, 6160), (56, 55));
+        assert_eq!(slot_dims(55, 55, 6160), (56, 55));
+        assert_eq!(slot_dims(128, 128, 32768), (128, 128));
+        assert_eq!(slot_dims(128, 120, 32768), (128, 128));
+        assert_eq!(slot_dims(320, 320, 204800), (320, 320));
         assert_eq!(slot_dims(128, 128, 32768), (128, 128));
         assert_eq!(slot_dims(320, 320, 204800), (320, 320));
     }
