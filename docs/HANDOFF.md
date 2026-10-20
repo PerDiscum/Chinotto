@@ -86,6 +86,12 @@ Everything decided and learned so far, so work can continue in a new session.
   is resizable by the bar under it (0014).
   Covers now confirmed correct on the nano 3G and the classic 7G.
 
+- **Other players (later):** USB-drive (MSC) players are added by hand through
+  a wizard: choose the drive, the music folder, the playlist folder, the
+  playlist format, and the player model and picture (settings depend on the
+  device). Zune: possible later via libmtp's MTP-Z support (needs the user's
+  own key file, which can't be shipped); not promised.
+
 Order chosen: confirm editing on the nano → **playback** (done) → artwork (done) → icon chooser → shuffle/repeat → playlist reordering → column browser fixes and Format/Bitrate columns → media library.
 
 ## Status (2026-10-20)
