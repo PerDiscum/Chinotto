@@ -57,3 +57,20 @@ export async function pickMusicFolder(): Promise<string | null> {
   const r = await open({ directory: true, multiple: false, title: "Add a folder to iPod" });
   return typeof r === "string" ? r : null;
 }
+
+// ---- Playback ----
+
+export interface PlayerStatus {
+  state: "playing" | "paused" | "stopped";
+  positionMs: number;
+  durationMs: number | null;
+}
+export const playTrack = (dbid: string, startMs = 0) => invoke<void>("play_track", { dbid, startMs });
+export const playerPlay = () => invoke<void>("player_play");
+export const playerPause = () => invoke<void>("player_pause");
+export const playerStop = () => invoke<void>("player_stop");
+export const playerSeek = (ms: number) => invoke<void>("player_seek", { ms: Math.max(0, Math.round(ms)) });
+export const playerVolume = (volume: number) => invoke<void>("player_volume", { volume });
+export const onPlayerStatus = (f: (s: PlayerStatus) => void) => listen<PlayerStatus>("player-status", (e) => f(e.payload));
+export const onPlayerEnded = (f: () => void) => listen("player-ended", () => f());
+export const onPlayerError = (f: (msg: string) => void) => listen<string>("player-error", (e) => f(e.payload));

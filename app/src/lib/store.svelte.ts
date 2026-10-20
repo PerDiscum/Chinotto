@@ -19,6 +19,15 @@ export type Dialog =
   | { kind: "delete-playlist"; id: string; name: string }
   | { kind: "report"; title: string; lines: string[] };
 
+function loadVolume(): number {
+  try {
+    const v = Number(localStorage.getItem("chinotto.volume"));
+    return v > 0 && v <= 1 ? v : 0.8;
+  } catch {
+    return 0.8;
+  }
+}
+
 /** On macOS Ctrl-click is a right-click; Cmd toggles selection. Elsewhere Ctrl toggles. */
 export const isMac = typeof navigator !== "undefined" && /Mac/.test(navigator.platform);
 
@@ -54,6 +63,20 @@ class Store {
   /** Songs being dragged inside the window (Chinotto's own drag, not the OS's). */
   songDrag = $state<{ dbids: string[]; x: number; y: number; target: string | null } | null>(null);
 
+  // ---- Playback ----
+  player = $state<api.PlayerStatus>({ state: "stopped", positionMs: 0, durationMs: null });
+  /** dbid of the song loaded in the player. */
+  nowPlaying = $state<string | null>(null);
+  /** Songs to play, in order (dbids), and where we are in it. */
+  queue = $state.raw<string[]>([]);
+  queuePos = $state(0);
+  volume = $state(loadVolume());
+
+  get playingTrack(): Track | null {
+    if (!this.nowPlaying || !this.ipod) return null;
+    return this.ipod.tracks.find((t) => t.dbid === this.nowPlaying) ?? null;
+  }
+
   get writable() {
     return !!this.ipod?.writable;
   }
@@ -88,6 +111,16 @@ class Store {
 
   async init() {
     await api.onDevicesChanged((d) => this.devicesChanged(d));
+    await api.onPlayerStatus((p) => {
+      this.player = p;
+      if (p.state === "stopped" && !this.advancing) this.nowPlaying = null;
+    });
+    await api.onPlayerEnded(() => void this.next(true));
+    await api.onPlayerError((msg) => {
+      this.error = msg;
+      this.nowPlaying = null;
+    });
+    void api.playerVolume(this.volume);
     await api.onAddProgress((p) => {
       this.progress = p;
       if (p.total) this.busy = `Adding ${Math.min(p.done + 1, p.total)} of ${p.total}${p.current ? `: ${p.current}` : ""}`;
@@ -110,6 +143,7 @@ class Store {
   }
 
   private forget() {
+    if (this.nowPlaying) void this.stopPlayback();
     this.ipod = null;
     this.index = null;
     this.source = { kind: "none" };
@@ -299,6 +333,82 @@ class Store {
   async pickAndAddFolder() {
     const dir = await api.pickMusicFolder();
     if (dir) await this.addFiles([dir]);
+  }
+
+  // ---- Playback ----
+
+  /** True while switching songs, so the brief "stopped" in between isn't taken as the end. */
+  private advancing = false;
+
+  /** Play `list` (in its current order) starting at `startIndex`. */
+  async playList(list: Track[], startIndex: number) {
+    if (!list.length) return;
+    this.queue = list.map((t) => t.dbid);
+    await this.playAt(Math.max(0, Math.min(startIndex, list.length - 1)));
+  }
+
+  private async playAt(pos: number, skipped = 0): Promise<void> {
+    const dbid = this.queue[pos];
+    if (!dbid) return this.stopPlayback();
+    this.queuePos = pos;
+    this.nowPlaying = dbid;
+    this.advancing = true;
+    try {
+      await api.playTrack(dbid);
+      if (skipped) this.error = `Skipped ${skipped} ${skipped === 1 ? "song" : "songs"} whose file couldn't be played.`;
+    } catch (e) {
+      // Like iTunes: skip a song that can't be played (e.g. its file is missing) and go on,
+      // but give up after a few in a row.
+      if (skipped < 4 && pos + 1 < this.queue.length) return this.playAt(pos + 1, skipped + 1);
+      this.error = String(e);
+      this.nowPlaying = null;
+    } finally {
+      // The player confirms with a status event shortly.
+      setTimeout(() => (this.advancing = false), 300);
+    }
+  }
+
+  /** Play/pause button and Space bar. */
+  async togglePlay(visible: Track[]) {
+    if (this.nowPlaying && this.player.state === "playing") return api.playerPause();
+    if (this.nowPlaying && this.player.state === "paused") return api.playerPlay();
+    // Nothing loaded: play the selection's first song (or the list from the top).
+    const sel = visible.findIndex((t) => this.selected.has(t.id));
+    await this.playList(visible, sel >= 0 ? sel : 0);
+  }
+
+  async next(auto = false) {
+    if (!this.queue.length) return;
+    if (this.queuePos + 1 < this.queue.length) await this.playAt(this.queuePos + 1);
+    else if (auto) await this.stopPlayback();
+  }
+
+  /** Like iTunes: back to the start of the song if more than 3 s in, else the previous song. */
+  async previous() {
+    if (!this.nowPlaying) return;
+    if (this.player.positionMs > 3000 || this.queuePos === 0) return api.playerSeek(0);
+    await this.playAt(this.queuePos - 1);
+  }
+
+  async seek(ms: number) {
+    this.player = { ...this.player, positionMs: ms };
+    await api.playerSeek(ms);
+  }
+
+  setVolume(v: number) {
+    this.volume = v;
+    void api.playerVolume(v);
+    try {
+      localStorage.setItem("chinotto.volume", String(v));
+    } catch {
+      /* not essential */
+    }
+  }
+
+  async stopPlayback() {
+    this.nowPlaying = null;
+    this.queue = [];
+    await api.playerStop();
   }
 
   select(src: Source) {

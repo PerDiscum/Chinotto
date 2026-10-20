@@ -1,8 +1,17 @@
 <script lang="ts">
   import { store } from "./store.svelte";
-  import { count, longDuration } from "./format";
+  import { count, duration, longDuration } from "./format";
+  import type { Track } from "./types";
 
-  let { visibleCount, visibleMs }: { visibleCount: number; visibleMs: number } = $props();
+  let { visible, visibleMs }: { visible: Track[]; visibleMs: number } = $props();
+  const visibleCount = $derived(visible.length);
+
+  const song = $derived(store.playingTrack);
+  const playing = $derived(store.player.state === "playing" && !!store.nowPlaying);
+  const total = $derived(store.player.durationMs ?? song?.lengthMs ?? 0);
+  // While the seek knob is being dragged, show where it is rather than the player's position.
+  let dragging = $state<number | null>(null);
+  const shown = $derived(dragging ?? store.player.positionMs);
 
   const openingName = $derived(
     store.opening ? (store.devices.find((d) => d.path === store.opening)?.volume ?? "iPod") : null,
@@ -19,7 +28,27 @@
 </script>
 
 <header class="toolbar" data-tauri-drag-region>
-  <div class="spacer" data-tauri-drag-region></div>
+  <div class="controls">
+    <div class="transport" role="group" aria-label="Playback">
+      <button aria-label="Previous" title="Previous" disabled={!store.nowPlaying} onclick={() => store.previous()}>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h2v14H6zM20 5v14L9 12z" /></svg>
+      </button>
+      <button class="main" aria-label={playing ? "Pause" : "Play"} title={playing ? "Pause (Space)" : "Play (Space)"} disabled={!store.ipod} onclick={() => store.togglePlay(visible)}>
+        {#if playing}
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z" /></svg>
+        {:else}
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+        {/if}
+      </button>
+      <button aria-label="Next" title="Next" disabled={!store.nowPlaying || store.queuePos + 1 >= store.queue.length} onclick={() => store.next()}>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 5h2v14h-2zM4 5v14l11-7z" /></svg>
+      </button>
+    </div>
+    <label class="volume" title="Volume">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" /></svg>
+      <input type="range" min="0" max="1" step="0.01" aria-label="Volume" value={store.volume} oninput={(e) => store.setVolume(Number(e.currentTarget.value))} />
+    </label>
+  </div>
 
   <div class="label" role="status" aria-live="polite">
     {#if store.busy}
@@ -37,6 +66,27 @@
     {:else if store.ejecting}
       <strong>Ejecting…</strong>
       <span class="sub">Don't unplug yet</span>
+    {:else if song}
+      <strong>{song.title ?? "Untitled"}</strong>
+      <span class="sub">{[song.artist, song.album].filter(Boolean).join(" — ")}</span>
+      <div class="seek">
+        <span class="t">{duration(shown)}</span>
+        <input
+          type="range"
+          min="0"
+          max={Math.max(total, 1)}
+          step="250"
+          value={shown}
+          aria-label="Position in song"
+          aria-valuetext="{duration(shown)} of {duration(total)}"
+          oninput={(e) => (dragging = Number(e.currentTarget.value))}
+          onchange={(e) => {
+            void store.seek(Number(e.currentTarget.value));
+            dragging = null;
+          }}
+        />
+        <span class="t">-{duration(Math.max(0, total - shown))}</span>
+      </div>
     {:else if store.ipod}
       <strong>{sourceName}</strong>
       <span class="sub">
@@ -70,7 +120,7 @@
   .toolbar {
     grid-area: toolbar;
     display: grid;
-    grid-template-columns: 1fr minmax(320px, 460px) 1fr;
+    grid-template-columns: 1fr minmax(320px, 480px) 1fr;
     align-items: center;
     gap: 16px;
     padding: 8px 14px;
@@ -83,7 +133,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    min-height: 42px;
+    min-height: 50px;
     padding: 4px 16px;
     border-radius: 9px;
     background: var(--label-bg);
@@ -123,6 +173,111 @@
     display: block;
     height: 100%;
     background: var(--label-ink);
+  }
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
+  }
+  .transport {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .transport button {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 1px solid var(--field-edge);
+    border-radius: 50%;
+    background: var(--field);
+    color: var(--ink);
+  }
+  .transport button.main {
+    width: 38px;
+    height: 38px;
+  }
+  .transport svg {
+    width: 14px;
+    height: 14px;
+    fill: currentColor;
+  }
+  .transport .main svg {
+    width: 18px;
+    height: 18px;
+  }
+  .transport button:disabled {
+    opacity: 0.4;
+  }
+  .transport button:focus-visible,
+  .volume input:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .volume {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted);
+  }
+  .volume svg {
+    flex: none;
+    width: 14px;
+    height: 14px;
+    fill: currentColor;
+  }
+  .volume input {
+    width: 90px;
+    accent-color: var(--accent);
+  }
+  .seek {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    margin-top: 2px;
+  }
+  .seek .t {
+    flex: none;
+    min-width: 38px;
+    font-size: 10px;
+    color: var(--label-dim);
+    font-variant-numeric: tabular-nums;
+  }
+  .seek .t:first-child {
+    text-align: right;
+  }
+  .seek .t:last-child {
+    text-align: left;
+  }
+  .seek input {
+    flex: 1;
+    min-width: 0;
+    height: 12px;
+    margin: 0;
+    background: transparent;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  .seek input::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 2px;
+    background: rgb(243 167 59 / 0.25);
+  }
+  .seek input::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 10px;
+    height: 10px;
+    margin-top: -3px;
+    border-radius: 50%;
+    background: var(--label-ink);
+  }
+  .seek input:focus-visible {
+    outline: 1px solid var(--label-ink);
+    outline-offset: 2px;
   }
   .search {
     justify-self: end;

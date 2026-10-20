@@ -43,6 +43,11 @@
       if (store.selected.size) store.dialog = { kind: "info" };
       return;
     }
+    if (e.key === "Enter" && store.selected.size) {
+      e.preventDefault();
+      playSelected();
+      return;
+    }
     if ((e.key === "Delete" || e.key === "Backspace") && store.selected.size) {
       e.preventDefault();
       store.removeSelected();
@@ -61,6 +66,12 @@
 
   const dash = (s?: string) => s ?? "";
 
+  /** Play from the first selected song, continuing down the list. */
+  function playSelected() {
+    const i = tracks.findIndex((x) => store.selected.has(x.id));
+    if (i >= 0) void store.playList(tracks, i);
+  }
+
   function contextmenu(e: MouseEvent, t: Track) {
     e.preventDefault();
     // Right-clicking outside the selection selects that song.
@@ -75,6 +86,7 @@
       x: e.clientX,
       y: e.clientY,
       items: [
+        { label: "Play", action: playSelected },
         { label: "Get Info", action: () => (store.dialog = { kind: "info" }) },
         { label: "", separator: true },
         {
@@ -170,11 +182,13 @@
         onclick={(e) => {
           if (store.selected.size > 1 && store.selected.has(t.id) && !e.shiftKey && !e.metaKey && !e.ctrlKey) store.clickTrack(t.id, tracks, e);
         }}
-        ondblclick={() => (store.dialog = { kind: "info" })}
+        ondblclick={() => void store.playList(tracks, n)}
         oncontextmenu={(e) => contextmenu(e, t)}
 
       >
-        <span class="cell c-title">{dash(t.title)}</span>
+        <span class="cell c-title">
+          {#if store.nowPlaying === t.dbid}<span class="playing" aria-label={store.player.state === "playing" ? "Playing" : "Paused"}>{store.player.state === "playing" ? "▶" : "❙❙"}</span>{/if}{dash(t.title)}
+        </span>
         <span class="cell c-time num">{duration(t.lengthMs)}</span>
         <span class="cell c-artist">{dash(t.artist)}</span>
         <span class="cell c-album">{dash(t.album)}</span>
@@ -270,6 +284,16 @@
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
+  }
+  .playing {
+    display: inline-block;
+    width: 14px;
+    margin-right: 2px;
+    color: var(--accent);
+    font-size: 9px;
+  }
+  .songs:focus-within .row.sel .playing {
+    color: inherit;
   }
   .num {
     text-align: right;

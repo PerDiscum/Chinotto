@@ -12,12 +12,16 @@ Once you switch on "Allow changes to this iPod" on its page, it can also edit
 songs (Get Info), add and delete them, and make and change playlists. Every
 save backs up the iPod's database first (`iPod_Control/iTunes/Chinotto Backups`).
 
+It also plays the iPod's songs (MP3, AAC, Apple Lossless, WAV, AIFF; FLAC and
+Ogg Vorbis too, for when it has its own library).
+
 ## Layout
 
 - `crates/chinotto-ipod` — iTunesDB / ArtworkDB parsing and writing, RGB565
   thumbnails, SysInfo. No external dependencies.
 - `crates/chinotto-gpod` — changes the iPod's database through a bundled
   libgpod (LGPL; see its README).
+- `crates/chinotto-player` — audio playback (Symphonia + cpal).
 - `app/` — the desktop app (Tauri 2).
   - `app/src/` — the window's interface (Svelte 5 + TypeScript).
   - `app/src-tauri/` — the Rust side: device detection, opening an iPod,
@@ -45,7 +49,7 @@ the app itself:
 You need Rust (rustup.rs) and Node.js 20 or newer.
 
 - **Linux** also needs the WebKitGTK and libxml2 development packages. Debian/Ubuntu:
-  `sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libssl-dev libxdo-dev libxml2-dev zlib1g-dev`
+  `sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libssl-dev libxdo-dev libxml2-dev zlib1g-dev libasound2-dev`
 - **macOS** needs the Xcode command line tools (`xcode-select --install`),
   plus a static glib for libgpod, built once:
   `brew install meson ninja && scripts/build-glib-macos.sh deps`, then

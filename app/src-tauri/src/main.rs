@@ -4,6 +4,7 @@
 mod artwork;
 mod commands;
 mod devices;
+mod playback;
 mod state;
 mod tags;
 mod write;
@@ -30,6 +31,12 @@ fn main() {
             commands::close_ipod,
             commands::eject,
             commands::startup_folder,
+            playback::play_track,
+            playback::player_play,
+            playback::player_pause,
+            playback::player_stop,
+            playback::player_seek,
+            playback::player_volume,
             write::set_allow_changes,
             write::edit_tracks,
             write::delete_tracks,
@@ -40,6 +47,7 @@ fn main() {
             write::set_playlist_tracks,
         ])
         .setup(|app| {
+            app.state::<AppState>().set_player(playback::start(app.handle()));
             if let Ok(dir) = app.path().app_config_dir() {
                 app.state::<AppState>().load_settings(dir.join("settings.json"));
             }

@@ -6,10 +6,13 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 
+use std::sync::OnceLock;
+
 use chinotto_gpod::Database;
 use chinotto_ipod::artworkdb::ArtworkDb;
 use chinotto_ipod::device::{Layout, SysInfo};
 use chinotto_ipod::itunesdb::ITunesDb;
+use chinotto_player::Player;
 use serde::{Deserialize, Serialize};
 
 #[derive(Default)]
@@ -21,6 +24,7 @@ pub struct AppState {
     pub writer: Mutex<Option<Database>>,
     settings: Mutex<Settings>,
     settings_path: Mutex<Option<PathBuf>>,
+    player: OnceLock<Player>,
 }
 
 /// Saved between runs in the app's config folder (settings.json).
@@ -44,6 +48,14 @@ pub struct Session {
 }
 
 impl AppState {
+    pub fn set_player(&self, p: Player) {
+        let _ = self.player.set(p);
+    }
+
+    pub fn player(&self) -> &Player {
+        self.player.get().expect("player not started")
+    }
+
     pub fn manual_roots(&self) -> Vec<PathBuf> {
         self.manual.lock().unwrap().clone()
     }

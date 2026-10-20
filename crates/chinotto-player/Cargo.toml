@@ -1,0 +1,16 @@
+[package]
+name = "chinotto-player"
+description = "Audio playback for Chinotto: Symphonia decoding, cpal output"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+# MP3, AAC (LC), ALAC, FLAC, Vorbis, PCM in MP4/M4A, WAV, AIFF, OGG, CAF, MKV. MPL-2.0.
+symphonia = { version = "0.6", features = ["all"] }
+cpal = "0.18"
+
+# Linux: talk to PulseAudio (or PipeWire's PulseAudio service, the norm on
+# current desktops) directly when it's running; ALSA otherwise.
+[target.'cfg(target_os = "linux")'.dependencies]
+cpal = { version = "0.18", features = ["pulseaudio"] }

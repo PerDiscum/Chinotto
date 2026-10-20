@@ -37,6 +37,32 @@ Everything decided and learned so far, so work can continue in a new session.
 5. Other players (MSC/MTP; per-device playlist format, path style, location presets incl. Rockbox).
 6. Windows.
 
+## Requested features (2026-10-20, from the developer)
+
+- **Playback** with basic controls for ALAC/AAC, MP3, WAV, FLAC, OGG and WMA.
+  Symphonia covers all but WMA (and AAC is LC only, no HE-AAC); those go
+  through the bundled FFmpeg helper.
+- **Last.fm scrobbling** of iPod plays, using code from LastPod (licence to
+  check before copying anything; Chinotto is MIT). The developer will send
+  LastPod's source. The iPod records play
+  counts and the last play time only, so earlier plays' times are estimated.
+- **Artwork auto-resize**: square images to 600×600; otherwise the shorter
+  side to 600 px and the longer side in proportion. Only shrink: images
+  already ≤ 600 px on the shorter side are left as they are.
+- **Per-model device icons**: iPod 1G, 2G, 3G, 4G/Photo, 5G/Video, 6G, 7G,
+  mini 1–2G, nano 1–5G, shuffles; later Sony, Sansa, Creative, Samsung,
+  FiiO, generic, SD card. **All icons are supplied by the developer**;
+  Chinotto provides the slots and a generic fallback.
+  Two images per model: a **square sidebar icon** (`ipod-7g.svg`, or PNG
+  ≥128 px, shown at 16–20 px) and a **full-length device-page graphic**
+  (`ipod-7g-full.svg`, or PNG ≥600 px tall, shown up to ~280 px high beside
+  the device details, aspect kept). Transparent backgrounds. Names: ipod-1g…
+  ipod-7g (4g = 4G/Photo, 5g = Video), ipod-mini, ipod-nano-1g…5g,
+  ipod-shuffle-1g…4g, generic; a missing image falls back to generic. Model detection from
+  SysInfo/SysInfoExtended via libgpod's device table; generic icon fallback.
+
+Order chosen: confirm editing on the nano → **playback** (done, see below) → the rest.
+
 ## Status (2026-10-20)
 
 Roadmap step 1 is half done: the **Tauri app and the Mac/Linux builds exist**;
@@ -70,6 +96,32 @@ eject on real hardware.
 Repository: github.com/PerDiscum/Chinotto (private). CI and "Build apps" pass on
 macOS and Linux. Workflows use actions/checkout@v5 and actions/setup-node@v5
 (the v4s run on the deprecated Node 20).
+
+## Playback (2026-10-20)
+
+- `crates/chinotto-player`: Symphonia 0.6 decoding (`decode.rs`) on a player
+  thread into a ~0.5 s buffer; cpal 0.18 output whose callback drains it
+  (volume applied there, squared for perceived loudness). Output runs at the
+  file's rate when the device allows, else linear resampling (`convert.rs`).
+  Small fixed buffer (2048 frames): PulseAudio otherwise asks for seconds of
+  audio at a time. The output stream is paused whenever nothing plays (a
+  running stream can keep a Mac awake). Events: Status (~4/s while playing),
+  Ended, Error. `stop_and_wait` closes the file before ejecting.
+- Linux: cpal's `pulseaudio` feature (pure Rust) so PulseAudio/PipeWire is
+  used directly; ALSA otherwise. CI needs `libasound2-dev`.
+- Formats tested: MP3, AAC, Apple Lossless, FLAC, Ogg Vorbis, AIFF, WAV
+  (`tests/decode.rs` with `CHINOTTO_TEST_AUDIO`; real-time test
+  `tests/playback.rs` with `CHINOTTO_TEST_PLAYBACK`). WMA and HE-AAC: not
+  yet (FFmpeg helper, with the library). AAC encoder padding isn't trimmed
+  (~20 ms extra at the end).
+- App: `playback.rs` commands (play_track by dbid from the open iPod, play,
+  pause, stop, seek, volume). Toolbar: previous / play-pause / next, volume
+  (remembered in localStorage); the amber display shows the playing song with
+  a seek bar. Double-click or Return plays from that song down the current
+  list (that list is the queue); Space plays/pauses; previous restarts the
+  song if >3 s in; unplayable songs (e.g. missing file) are skipped, up to 4
+  in a row. Artwork pane shows "Now playing" (click to switch to selected).
+- Not yet: shuffle/repeat, gapless, media keys, play counts from computer plays.
 
 ## App architecture
 

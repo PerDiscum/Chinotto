@@ -227,6 +227,10 @@ pub fn close_ipod(state: State<'_, AppState>) {
 #[tauri::command]
 pub async fn eject(path: String, state: State<'_, AppState>) -> Result<(), String> {
     let p = PathBuf::from(&path);
+    // Close any song file playing from the iPod first, or the disk would be busy.
+    if state.session().is_some_and(|s| s.root == p) {
+        state.player().stop_and_wait();
+    }
     state.close_if(&p);
     tauri::async_runtime::spawn_blocking(move || devices::eject(&p)).await.map_err(|e| e.to_string())?
 }

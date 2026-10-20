@@ -38,7 +38,15 @@
   });
 
   function keydown(e: KeyboardEvent) {
-    if (store.dialog || store.menu || !(e.metaKey || e.ctrlKey)) return;
+    if (store.dialog || store.menu) return;
+    const t = e.target as HTMLElement;
+    const typing = t.closest("input, textarea, select, button, [contenteditable]");
+    if (e.key === " " && !typing && store.ipod) {
+      e.preventDefault();
+      void store.togglePlay(visible);
+      return;
+    }
+    if (!(e.metaKey || e.ctrlKey)) return;
     const k = e.key.toLowerCase();
     if (k === "o" && store.writable) {
       e.preventDefault();
@@ -66,7 +74,7 @@
 <svelte:window onkeydown={keydown} />
 
 <div class="app">
-  <Toolbar visibleCount={visible.length} visibleMs={totals.ms} />
+  <Toolbar {visible} visibleMs={totals.ms} />
 
   <aside class="side">
     <SourceList />
