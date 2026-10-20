@@ -23,6 +23,10 @@ struct IpodView<'a> {
     db_version: u32,
     generation: u32,
     has_artwork_db: bool,
+    /// FireWire GUID or serial; None when the iPod doesn't say (then it can't be made writable).
+    identity: Option<String>,
+    /// The user allowed Chinotto to change this iPod.
+    writable: bool,
     playlists: Vec<PlaylistView<'a>>,
     tracks: Vec<TrackView<'a>>,
 }
@@ -42,6 +46,8 @@ struct PlaylistView<'a> {
 #[serde(rename_all = "camelCase")]
 struct TrackView<'a> {
     id: u32,
+    /// Permanent 64-bit id as a string; survives saves (unlike `id`).
+    dbid: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     title: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -66,6 +72,8 @@ struct TrackView<'a> {
     sort_album: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     sort_album_artist: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sort_composer: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     location: Option<&'a str>,
     kind: String,
@@ -119,6 +127,7 @@ fn track_view<'a>(s: &'a Session, t: &'a Track) -> TrackView<'a> {
     let art = if t.has_artwork == 1 && s.art_index.contains_key(&t.mhii_link) { t.mhii_link } else { 0 };
     TrackView {
         id: t.id,
+        dbid: t.dbid.to_string(),
         title: st.title.as_deref(),
         artist: st.artist.as_deref(),
         album_artist: st.album_artist.as_deref(),
@@ -131,6 +140,7 @@ fn track_view<'a>(s: &'a Session, t: &'a Track) -> TrackView<'a> {
         sort_artist: st.sort_artist.as_deref(),
         sort_album: st.sort_album.as_deref(),
         sort_album_artist: st.sort_album_artist.as_deref(),
+        sort_composer: st.sort_composer.as_deref(),
         location: st.location.as_deref(),
         kind: kind_of(t),
         year: t.year,
@@ -155,8 +165,10 @@ fn track_view<'a>(s: &'a Session, t: &'a Track) -> TrackView<'a> {
 
 /// The whole iPod as one JSON string. A `String` body is sent to the window as
 /// JSON (a `Vec<u8>` would arrive as raw bytes).
-fn view(s: &Session) -> Result<String, String> {
+pub(crate) fn view(s: &Session, state: &AppState) -> Result<String, String> {
     let master = s.db.master_playlist();
+    let identity = s.sysinfo.identity();
+    let writable = identity.as_deref().is_some_and(|i| state.is_writable(i));
     let device = devices::describe(&s.root, false);
     let v = IpodView {
         path: s.root.to_string_lossy().into_owned(),
@@ -166,6 +178,8 @@ fn view(s: &Session) -> Result<String, String> {
         db_version: s.db.version,
         generation: s.generation,
         has_artwork_db: s.art.is_some(),
+        identity,
+        writable,
         playlists: s
             .db
             .playlists
@@ -197,8 +211,9 @@ pub fn add_folder(path: String, state: State<'_, AppState>) -> Result<DeviceInfo
 pub async fn open_ipod(path: String, app: AppHandle) -> Result<Response, String> {
     // Parsing a large database takes a moment; keep it off the main thread.
     tauri::async_runtime::spawn_blocking(move || {
-        let s = app.state::<AppState>().open(&PathBuf::from(path))?;
-        view(&s).map(Response::new)
+        let state = app.state::<AppState>();
+        let s = state.open(&PathBuf::from(path))?;
+        view(&s, &state).map(Response::new)
     })
     .await
     .map_err(|e| e.to_string())?

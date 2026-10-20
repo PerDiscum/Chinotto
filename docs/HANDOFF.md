@@ -128,9 +128,27 @@ as /Volumes/iPod), so CAESAR is never written during development. Its
 FireWire GUID is only in SysInfoExtended (`FireWireGUID`), not in SysInfo, so
 libxml2 support is required.
 
-Still to do: hook it into the app (Get Info editing, add songs with tags from
-`lofty`, delete, playlists, artwork via our ArtworkDB appender), and check
-CAESAR's FireWire GUID is found (SysInfo or SysInfoExtended) before a real save.
+In the app (2026-10-20, tested on a scratch copy laid out like the nano):
+- Every iPod is read-only until "Allow changes to this iPod" is switched on on
+  its device page. Remembered per iPod (FireWire GUID, else serial) in the
+  app config folder's `settings.json` (`writableIpods`).
+- `app/src-tauri/src/write.rs`: set_allow_changes, edit_tracks, delete_tracks,
+  add_files (files or folders; progress via `add-progress` events; adds to the
+  open playlist too), create/rename/delete_playlist, set_playlist_tracks.
+  Each re-checks permission, applies via chinotto-gpod, saves, re-reads the
+  iPod and returns `{view, extra}`; on any error libgpod's copy is dropped.
+- `tags.rs`: lofty → TrackInfo; kinds MP3/AAC/Apple Lossless (m4a with a bit
+  depth)/WAV/AIFF; FLAC/OGG/etc. reported as needing conversion; album artist
+  falls back to artist; missing sort fields filled per the Swinsian rules.
+- UI: Get Info (Info/Sorting/Details; multi-song with "Mixed"; only touched
+  fields saved), right-click menus, Delete key (in a playlist: remove from it;
+  elsewhere: delete from iPod after confirming), ⌘/Ctrl+I, ⌘/Ctrl+O, ⌘/Ctrl+N,
+  drop files/folders on the window, drag songs onto playlists, double-click a
+  playlist to rename. Selection is kept across saves by dbid.
+- Not yet: cover art for added songs (ArtworkDB appender exists, needs
+  wiring), BPM (not read by chinotto-ipod), playlist reordering by drag,
+  smart playlist editing, conversion of FLAC etc. (FFmpeg helper).
+
 
 ## Original plan for this step
 
@@ -149,6 +167,7 @@ CAESAR's FireWire GUID is found (SysInfo or SysInfoExtended) before a real save.
 ## Open items
 
 - Try Eject on CAESAR from the app.
+- First real writes: on the nano CHINOTTO, after a "Build apps" run.
 - Claude has no GitHub access from its sessions yet; fixes go to the developer
   as `git am` patch files unless GitHub is connected under Connectors.
 

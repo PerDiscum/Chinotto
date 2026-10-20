@@ -5,6 +5,8 @@ mod artwork;
 mod commands;
 mod devices;
 mod state;
+mod tags;
+mod write;
 
 use tauri::Manager;
 
@@ -28,8 +30,19 @@ fn main() {
             commands::close_ipod,
             commands::eject,
             commands::startup_folder,
+            write::set_allow_changes,
+            write::edit_tracks,
+            write::delete_tracks,
+            write::add_files,
+            write::create_playlist,
+            write::rename_playlist,
+            write::delete_playlist,
+            write::set_playlist_tracks,
         ])
         .setup(|app| {
+            if let Ok(dir) = app.path().app_config_dir() {
+                app.state::<AppState>().load_settings(dir.join("settings.json"));
+            }
             devices::start_watcher(app.handle().clone());
             Ok(())
         })

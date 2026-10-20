@@ -6,12 +6,18 @@ modelled on the workflows of classic iTunes (9/10 era).
 Status: early. The desktop app opens a classic iPod (automatically when it's
 plugged in) and lets you browse it: source list with the iPod's playlists,
 Genre → Artist → Album column browser, sortable song list, search, covers,
-and a device page with the capacity bar. It doesn't change the iPod yet.
+and a device page with the capacity bar.
+
+Once you switch on "Allow changes to this iPod" on its page, it can also edit
+songs (Get Info), add and delete them, and make and change playlists. Every
+save backs up the iPod's database first (`iPod_Control/iTunes/Chinotto Backups`).
 
 ## Layout
 
 - `crates/chinotto-ipod` — iTunesDB / ArtworkDB parsing and writing, RGB565
   thumbnails, SysInfo. No external dependencies.
+- `crates/chinotto-gpod` — changes the iPod's database through a bundled
+  libgpod (LGPL; see its README).
 - `app/` — the desktop app (Tauri 2).
   - `app/src/` — the window's interface (Svelte 5 + TypeScript).
   - `app/src-tauri/` — the Rust side: device detection, opening an iPod,
@@ -38,9 +44,12 @@ the app itself:
 
 You need Rust (rustup.rs) and Node.js 20 or newer.
 
-- **Linux** also needs the WebKitGTK development packages. Debian/Ubuntu:
-  `sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libssl-dev libxdo-dev`
-- **macOS** needs the Xcode command line tools: `xcode-select --install`
+- **Linux** also needs the WebKitGTK and libxml2 development packages. Debian/Ubuntu:
+  `sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libssl-dev libxdo-dev libxml2-dev zlib1g-dev`
+- **macOS** needs the Xcode command line tools (`xcode-select --install`),
+  plus a static glib for libgpod, built once:
+  `brew install meson ninja && scripts/build-glib-macos.sh deps`, then
+  `export CHINOTTO_DEPS=$PWD/deps` before building.
 
 Then:
 

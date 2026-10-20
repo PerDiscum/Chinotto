@@ -31,6 +31,9 @@ impl Layout {
     pub fn sysinfo(&self) -> PathBuf {
         self.control().join("Device/SysInfo")
     }
+    pub fn sysinfo_extended(&self) -> PathBuf {
+        self.control().join("Device/SysInfoExtended")
+    }
 }
 
 /// True when `root` looks like the top of an iPod (has an iTunesDB).
@@ -64,14 +67,55 @@ impl SysInfo {
         s
     }
 
+    /// SysInfo, completed from SysInfoExtended (an XML plist) where SysInfo
+    /// lacks a value: newer iPods keep the FireWire GUID and serial only there.
     pub fn read(root: &Path) -> Option<Self> {
-        std::fs::read_to_string(Layout::new(root).sysinfo()).ok().map(|t| Self::parse(&t))
+        let layout = Layout::new(root);
+        let basic = std::fs::read_to_string(layout.sysinfo()).ok().map(|t| Self::parse(&t));
+        let ext = std::fs::read_to_string(layout.sysinfo_extended()).ok();
+        if basic.is_none() && ext.is_none() {
+            return None;
+        }
+        let mut s = basic.unwrap_or_default();
+        if let Some(x) = ext {
+            if s.firewire_guid.is_none() {
+                s.firewire_guid = plist_string(&x, "FireWireGUID");
+            }
+            if s.serial.is_none() {
+                s.serial = plist_string(&x, "SerialNumber");
+            }
+        }
+        Some(s)
+    }
+
+    /// A stable identity for this iPod: its FireWire GUID (normalised to
+    /// upper-case hex without 0x), else its serial number.
+    pub fn identity(&self) -> Option<String> {
+        if let Some(g) = &self.firewire_guid {
+            let g = g.trim().trim_start_matches("0x").trim_start_matches("0X").to_ascii_uppercase();
+            if !g.is_empty() {
+                return Some(g);
+            }
+        }
+        self.serial.clone()
     }
 
     /// Human-readable model, when the model number is one we know.
     pub fn model_name(&self) -> Option<&'static str> {
         model_name(self.model_number.as_deref()?)
     }
+}
+
+/// `<key>name</key><string>value</string>` from a plist, without a full XML parser.
+fn plist_string(xml: &str, key: &str) -> Option<String> {
+    let after = &xml[xml.find(&format!("<key>{key}</key>"))? + key.len() + 11..];
+    let start = after.find("<string>")?;
+    // The value must be the very next element.
+    if !after[..start].trim().is_empty() {
+        return None;
+    }
+    let rest = &after[start + 8..];
+    Some(rest[..rest.find("</string>")?].trim().to_string()).filter(|v| !v.is_empty())
 }
 
 /// Model names for the classic iPods, keyed by model number without the
@@ -101,5 +145,14 @@ mod tests {
         assert_eq!(s.firewire_guid.as_deref(), Some("0x000A27001B2C3D4E"));
         assert_eq!(s.model_name(), Some("iPod classic (7th generation)"));
         assert_eq!(model_name("xA980"), Some("iPod nano (3rd generation)"));
+        assert_eq!(s.identity().as_deref(), Some("000A27001B2C3D4E"));
+    }
+
+    #[test]
+    fn reads_guid_from_plist() {
+        let x = "<dict>\n\t<key>FireWireGUID</key>\n\t<string>000A27009999AAAA</string>\n\t<key>FireWireVersion</key>\n</dict>";
+        assert_eq!(plist_string(x, "FireWireGUID").as_deref(), Some("000A27009999AAAA"));
+        assert_eq!(plist_string(x, "FireWireVersion"), None);
+        assert_eq!(plist_string(x, "Missing"), None);
     }
 }

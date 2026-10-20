@@ -40,7 +40,26 @@
         <button onclick={() => store.eject(ipod.path)} disabled={!!store.ejecting}>Eject</button>
       {/if}
     </div>
-    <p class="note">Chinotto can browse this iPod but can't change it yet. Adding songs, editing and syncing come in the next version.</p>
+    <div class="changes">
+      {#if !ipod.identity}
+        <p class="note">This iPod doesn't report a FireWire ID or serial number, so Chinotto keeps it read-only.</p>
+      {:else}
+        <label class="switch">
+          <input type="checkbox" role="switch" checked={ipod.writable} onchange={(e) => store.allowChanges(e.currentTarget.checked)} disabled={!!store.busy} />
+          <span class="track" aria-hidden="true"><span class="knob"></span></span>
+          Allow changes to this iPod
+        </label>
+        <p class="note">
+          {#if ipod.writable}
+            Chinotto can edit, add and delete songs and change playlists on this iPod. Before every save it copies the
+            iPod's database to <code>iPod_Control/iTunes/Chinotto Backups</code> and keeps the newest 10.
+          {:else}
+            Chinotto only reads this iPod. Turn this on to edit songs, add or delete them and change playlists. The setting is
+            remembered for this iPod only.
+          {/if}
+        </p>
+      {/if}
+    </div>
   </section>
 
   {#if stats.cap}
@@ -111,8 +130,64 @@
     outline: 2px solid var(--accent);
     outline-offset: 1px;
   }
+  .changes {
+    margin-top: 22px;
+    padding-top: 16px;
+    border-top: 1px solid var(--edge);
+  }
+  .switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .switch input {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+  }
+  .switch .track {
+    position: relative;
+    width: 34px;
+    height: 20px;
+    border-radius: 10px;
+    background: var(--cap-other);
+    transition: background 0.15s;
+  }
+  .switch .knob {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
+    transition: transform 0.15s;
+  }
+  .switch input:checked + .track {
+    background: var(--accent);
+  }
+  .switch input:checked + .track .knob {
+    transform: translateX(14px);
+  }
+  .switch input:focus-visible + .track {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .switch .track,
+    .switch .knob {
+      transition: none;
+    }
+  }
+  code {
+    font-size: 11px;
+  }
   .note {
-    margin: 18px 0 0;
+    margin: 10px 0 0;
     max-width: 52ch;
     font-size: 12px;
     line-height: 1.5;

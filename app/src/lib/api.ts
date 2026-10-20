@@ -1,7 +1,7 @@
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { DeviceInfo, IpodView } from "./types";
+import type { AddProgress, AddResult, DeviceInfo, IpodView, TrackChanges, WriteResult } from "./types";
 
 export const listDevices = () => invoke<DeviceInfo[]>("list_devices");
 export const addFolder = (path: string) => invoke<DeviceInfo>("add_folder", { path });
@@ -21,3 +21,39 @@ export async function pickFolder(): Promise<string | null> {
 /** URL of a cover thumbnail at least `px` wide (served by the `art:` scheme). */
 export const artUrl = (generation: number, imageId: number, px: number) =>
   convertFileSrc(`${generation}-${imageId}-${px}`, "art");
+
+// ---- Changing the iPod (each returns the re-read iPod) ----
+
+export const setAllowChanges = (path: string, allow: boolean) =>
+  invoke<IpodView>("set_allow_changes", { path, allow });
+export const editTracks = (path: string, ids: string[], changes: TrackChanges) =>
+  invoke<WriteResult>("edit_tracks", { path, ids, changes });
+export const deleteTracks = (path: string, ids: string[]) => invoke<WriteResult>("delete_tracks", { path, ids });
+export const addFiles = (path: string, files: string[], playlist: string | null) =>
+  invoke<WriteResult<AddResult>>("add_files", { path, files, playlist });
+export const createPlaylist = (path: string, name: string, ids: string[]) =>
+  invoke<WriteResult<{ id: string }>>("create_playlist", { path, name, ids });
+export const renamePlaylist = (path: string, id: string, name: string) =>
+  invoke<WriteResult>("rename_playlist", { path, id, name });
+export const deletePlaylist = (path: string, id: string) => invoke<WriteResult>("delete_playlist", { path, id });
+export const setPlaylistTracks = (path: string, id: string, ids: string[]) =>
+  invoke<WriteResult>("set_playlist_tracks", { path, id, ids });
+
+export const onAddProgress = (f: (p: AddProgress) => void): Promise<UnlistenFn> =>
+  listen<AddProgress>("add-progress", (e) => f(e.payload));
+
+const AUDIO = ["mp3", "m4a", "aac", "wav", "aif", "aiff"];
+export async function pickMusicFiles(): Promise<string[]> {
+  const r = await open({
+    multiple: true,
+    directory: false,
+    title: "Add to iPod",
+    filters: [{ name: "Music the iPod plays", extensions: AUDIO }],
+  });
+  return Array.isArray(r) ? r : typeof r === "string" ? [r] : [];
+}
+
+export async function pickMusicFolder(): Promise<string | null> {
+  const r = await open({ directory: true, multiple: false, title: "Add a folder to iPod" });
+  return typeof r === "string" ? r : null;
+}

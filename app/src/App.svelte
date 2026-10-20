@@ -11,10 +11,38 @@
   import ArtworkPane from "./lib/ArtworkPane.svelte";
   import Welcome from "./lib/Welcome.svelte";
   import Icon from "./lib/Icon.svelte";
+  import Dialogs from "./lib/Dialogs.svelte";
+  import ContextMenu from "./lib/ContextMenu.svelte";
+  import { getCurrentWebview } from "@tauri-apps/api/webview";
+
+  /** Files being dragged in from Finder / the file manager. */
+  let fileDrag = $state(false);
 
   onMount(() => {
     void store.init();
+    const off = getCurrentWebview().onDragDropEvent((e) => {
+      const p = e.payload;
+      if (p.type === "enter" || p.type === "over") fileDrag = !!store.ipod;
+      else if (p.type === "leave") fileDrag = false;
+      else if (p.type === "drop") {
+        fileDrag = false;
+        if (store.ipod && store.writable && p.paths.length) void store.addFiles(p.paths);
+      }
+    });
+    return () => void off.then((f) => f());
   });
+
+  function keydown(e: KeyboardEvent) {
+    if (store.dialog || store.menu || !(e.metaKey || e.ctrlKey)) return;
+    const k = e.key.toLowerCase();
+    if (k === "o" && store.writable) {
+      e.preventDefault();
+      void store.pickAndAddFiles();
+    } else if (k === "n" && store.writable) {
+      e.preventDefault();
+      void store.newPlaylist(false);
+    }
+  }
 
   // Source → search → column browser → sort.
   const searched = $derived(store.index ? store.index.search(store.sourceTracks, store.search) : []);
@@ -30,6 +58,8 @@
   });
 </script>
 
+<svelte:window onkeydown={keydown} />
+
 <div class="app">
   <Toolbar visibleCount={visible.length} visibleMs={totals.ms} />
 
@@ -38,6 +68,31 @@
     {#if store.showArtwork && store.ipod}<ArtworkPane />{/if}
     <div class="side-tools">
       <button title="Open iPod folder…" aria-label="Open iPod folder" onclick={() => store.openFolder()}><Icon name="folder" /></button>
+      {#if store.ipod}
+        <button
+          title={store.writable ? "Add songs to the iPod… (also: drop files or folders on the window)" : "Allow changes on the iPod's page to add songs"}
+          aria-label="Add songs to the iPod"
+          disabled={!store.writable || !!store.busy}
+          onclick={(e) => {
+            const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            store.menu = {
+              x: r.left,
+              y: r.top - 64,
+              items: [
+                { label: "Add Files…", action: () => store.pickAndAddFiles() },
+                { label: "Add Folder…", action: () => store.pickAndAddFolder() },
+              ],
+            };
+          }}><Icon name="add" /></button
+        >
+        <button
+          title={store.writable ? "New playlist" : "Allow changes on the iPod's page to make playlists"}
+          aria-label="New playlist"
+          disabled={!store.writable || !!store.busy}
+          onclick={() => store.newPlaylist(false)}><Icon name="newlist" /></button
+        >
+      {/if}
+      <span class="spacer"></span>
       <button title={store.showBrowser ? "Hide column browser" : "Show column browser"} aria-pressed={store.showBrowser} onclick={() => (store.showBrowser = !store.showBrowser)}><Icon name="columns" /></button>
       <button title={store.showArtwork ? "Hide artwork" : "Show artwork"} aria-pressed={store.showArtwork} onclick={() => (store.showArtwork = !store.showArtwork)}><Icon name="artwork" /></button>
     </div>
@@ -60,6 +115,18 @@
       <SongList tracks={visible} />
     {/if}
   </main>
+
+  {#if fileDrag}
+    <div class="dropzone" aria-hidden="true">
+      <p>
+        {#if store.writable}Drop to add to {store.ipod?.name}{store.editablePlaylist ? ` and “${store.editablePlaylist.name}”` : ""}
+        {:else}Turn on “Allow changes” on the iPod's page to add songs{/if}
+      </p>
+    </div>
+  {/if}
+
+  <Dialogs />
+  <ContextMenu />
 
   <footer class="status">
     {#if store.ipod && store.source.kind === "playlist"}
@@ -101,7 +168,13 @@
     background: none;
     color: var(--side-icon);
   }
-  .side-tools button:hover {
+  .side-tools .spacer {
+    flex: 1;
+  }
+  .side-tools button:disabled {
+    opacity: 0.35;
+  }
+  .side-tools button:hover:not(:disabled) {
     background: rgb(255 255 255 / 0.08);
     color: var(--side-ink);
   }
@@ -111,6 +184,24 @@
   .side-tools button:focus-visible {
     outline: 2px solid var(--accent-bright);
     outline-offset: -2px;
+  }
+  .dropzone {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    display: grid;
+    place-items: center;
+    background: rgb(122 59 20 / 0.18);
+    border: 3px dashed var(--accent);
+    pointer-events: none;
+  }
+  .dropzone p {
+    padding: 10px 18px;
+    border-radius: 9px;
+    background: var(--label-bg);
+    color: var(--label-ink);
+    font-family: var(--rounded);
+    font-weight: 600;
   }
   .main {
     grid-area: main;

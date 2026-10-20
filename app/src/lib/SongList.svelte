@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { store } from "./store.svelte";
+  import { store, isMac } from "./store.svelte";
   import { duration, stars, count } from "./format";
   import type { SortKey, Track } from "./types";
 
@@ -38,6 +38,16 @@
       store.selectAll(tracks);
       return;
     }
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "i") {
+      e.preventDefault();
+      if (store.selected.size) store.dialog = { kind: "info" };
+      return;
+    }
+    if ((e.key === "Delete" || e.key === "Backspace") && store.selected.size) {
+      e.preventDefault();
+      store.removeSelected();
+      return;
+    }
     const step = e.key === "ArrowDown" ? 1 : e.key === "ArrowUp" ? -1 : e.key === "PageDown" ? 20 : e.key === "PageUp" ? -20 : 0;
     if (!step) return;
     e.preventDefault();
@@ -50,6 +60,47 @@
   }
 
   const dash = (s?: string) => s ?? "";
+
+  function contextmenu(e: MouseEvent, t: Track) {
+    e.preventDefault();
+    // Right-clicking outside the selection selects that song.
+    if (!store.selected.has(t.id)) store.clickTrack(t.id, tracks, { shiftKey: false, metaKey: false, ctrlKey: false });
+    const n = store.selected.size;
+    const songs = n === 1 ? "Song" : `${n} Songs`;
+    const ro = !store.writable;
+    const pl = store.editablePlaylist;
+    const targets = (store.ipod?.playlists ?? []).filter((p) => !p.master && !p.smart && p.id !== pl?.id);
+    const dbids = store.selectedTracks.map((x) => x.dbid);
+    store.menu = {
+      x: e.clientX,
+      y: e.clientY,
+      items: [
+        { label: "Get Info", action: () => (store.dialog = { kind: "info" }) },
+        { label: "", separator: true },
+        {
+          label: "Add to Playlist",
+          disabled: ro,
+          submenu: targets.map((p) => ({ label: p.name, action: () => store.addToPlaylist(p.id, dbids) })),
+        },
+        { label: "New Playlist from Selection", disabled: ro, action: () => store.newPlaylist(true) },
+        { label: "", separator: true },
+        ...(pl ? [{ label: `Remove from “${pl.name}”`, disabled: ro, action: () => store.removeFromPlaylist(pl.id, [...store.selected]) }] : []),
+        {
+          label: `Delete ${songs} from iPod…`,
+          danger: true,
+          disabled: ro,
+          action: () => (store.dialog = { kind: "delete-songs", ids: dbids }),
+        },
+      ],
+    };
+  }
+
+  function dragstart(e: DragEvent, t: Track) {
+    if (!store.writable || !e.dataTransfer) return;
+    if (!store.selected.has(t.id)) store.clickTrack(t.id, tracks, { shiftKey: false, metaKey: false, ctrlKey: false });
+    e.dataTransfer.setData("application/x-chinotto-songs", JSON.stringify(store.selectedTracks.map((x) => x.dbid)));
+    e.dataTransfer.effectAllowed = "copy";
+  }
 </script>
 
 <div
@@ -82,6 +133,8 @@
   <div class="body" style:height="{tracks.length * ROW}px">
     {#each slice as t, i (t.id)}
       {@const n = first + i}
+      <!-- Keyboard use is handled by the list itself (arrows, Delete, Cmd/Ctrl+I). -->
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
       <div
         class="row"
         class:odd={n % 2 === 1}
@@ -91,7 +144,18 @@
         aria-rowindex={n + 1}
         aria-selected={store.selected.has(t.id)}
         style:transform="translateY({n * ROW}px)"
-        onmousedown={(e) => store.clickTrack(t.id, tracks, e)}
+        draggable={store.writable}
+        onmousedown={(e) => {
+          // Keep a multi-selection when starting a drag or right-clicking inside it.
+          if (isMac && e.ctrlKey) return; // that's a right-click
+          if (e.button === 0 && !(store.selected.has(t.id) && !e.shiftKey && !e.metaKey && !e.ctrlKey && store.selected.size > 1)) store.clickTrack(t.id, tracks, e);
+        }}
+        onclick={(e) => {
+          if (store.selected.size > 1 && store.selected.has(t.id) && !e.shiftKey && !e.metaKey && !e.ctrlKey) store.clickTrack(t.id, tracks, e);
+        }}
+        ondblclick={() => (store.dialog = { kind: "info" })}
+        oncontextmenu={(e) => contextmenu(e, t)}
+        ondragstart={(e) => dragstart(e, t)}
       >
         <span class="cell c-title">{dash(t.title)}</span>
         <span class="cell c-time num">{duration(t.lengthMs)}</span>
@@ -120,7 +184,7 @@
     background: var(--bg);
     font-size: 12px;
     outline: none;
-    --cols: minmax(180px, 2.4fr) 52px minmax(120px, 1.5fr) minmax(120px, 1.5fr) minmax(80px, 0.9fr) 46px 66px 50px;
+    --cols: minmax(180px, 2.4fr) 52px minmax(120px, 1.5fr) minmax(120px, 1.5fr) minmax(80px, 0.9fr) 46px 76px 50px;
   }
   .songs:focus-visible {
     box-shadow: inset 0 0 0 2px var(--accent);

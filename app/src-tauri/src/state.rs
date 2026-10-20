@@ -1,19 +1,34 @@
-//! Application state: folders added by hand and the currently open iPod.
+//! Application state: folders added by hand, the currently open iPod (read
+//! with chinotto-ipod), the libgpod writer for it, and saved settings.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 
+use chinotto_gpod::Database;
 use chinotto_ipod::artworkdb::ArtworkDb;
 use chinotto_ipod::device::{Layout, SysInfo};
 use chinotto_ipod::itunesdb::ITunesDb;
+use serde::{Deserialize, Serialize};
 
 #[derive(Default)]
 pub struct AppState {
     manual: Mutex<Vec<PathBuf>>,
     session: RwLock<Option<Arc<Session>>>,
     generation: AtomicU32,
+    /// libgpod's copy of the open iPod's database, opened on the first change.
+    pub writer: Mutex<Option<Database>>,
+    settings: Mutex<Settings>,
+    settings_path: Mutex<Option<PathBuf>>,
+}
+
+/// Saved between runs in the app's config folder (settings.json).
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Settings {
+    /// iPods (by FireWire GUID or serial) the user has allowed Chinotto to change.
+    pub writable_ipods: Vec<String>,
 }
 
 /// An iPod's databases, read into memory. Read-only for now.
@@ -46,6 +61,7 @@ impl AppState {
 
     pub fn close(&self) {
         *self.session.write().unwrap() = None;
+        *self.writer.lock().unwrap() = None;
     }
 
     pub fn close_if(&self, root: &Path) {
@@ -53,6 +69,38 @@ impl AppState {
         if s.as_ref().is_some_and(|s| s.root == root) {
             *s = None;
         }
+        let mut w = self.writer.lock().unwrap();
+        if w.as_ref().is_some_and(|w| w.root() == root) {
+            *w = None;
+        }
+    }
+
+    pub fn load_settings(&self, path: PathBuf) {
+        let s = std::fs::read(&path).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+        *self.settings.lock().unwrap() = s;
+        *self.settings_path.lock().unwrap() = Some(path);
+    }
+
+    pub fn is_writable(&self, identity: &str) -> bool {
+        self.settings.lock().unwrap().writable_ipods.iter().any(|i| i == identity)
+    }
+
+    pub fn set_writable(&self, identity: &str, allow: bool) -> Result<(), String> {
+        let mut s = self.settings.lock().unwrap();
+        s.writable_ipods.retain(|i| i != identity);
+        if allow {
+            s.writable_ipods.push(identity.to_string());
+        }
+        if let Some(path) = self.settings_path.lock().unwrap().as_ref() {
+            if let Some(dir) = path.parent() {
+                std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+            }
+            // Write a temporary file, then rename over the old one.
+            let tmp = path.with_extension("json.tmp");
+            std::fs::write(&tmp, serde_json::to_vec_pretty(&*s).unwrap()).map_err(|e| e.to_string())?;
+            std::fs::rename(&tmp, path).map_err(|e| e.to_string())?;
+        }
+        Ok(())
     }
 
     pub fn open(&self, root: &Path) -> Result<Arc<Session>, String> {

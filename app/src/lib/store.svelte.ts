@@ -2,7 +2,25 @@
 
 import * as api from "./api";
 import { TrackIndex } from "./library";
-import type { DeviceInfo, IpodView, SortKey, Source, Track } from "./types";
+import type { AddProgress, DeviceInfo, IpodView, SortKey, Source, Track, TrackChanges, WriteResult } from "./types";
+
+export interface MenuItem {
+  label: string;
+  action?: () => void;
+  disabled?: boolean;
+  danger?: boolean;
+  separator?: boolean;
+  submenu?: MenuItem[];
+}
+
+export type Dialog =
+  | { kind: "info" }
+  | { kind: "delete-songs"; ids: string[] }
+  | { kind: "delete-playlist"; id: string; name: string }
+  | { kind: "report"; title: string; lines: string[] };
+
+/** On macOS Ctrl-click is a right-click; Cmd toggles selection. Elsewhere Ctrl toggles. */
+export const isMac = typeof navigator !== "undefined" && /Mac/.test(navigator.platform);
 
 class Store {
   devices = $state<DeviceInfo[]>([]);
@@ -26,6 +44,30 @@ class Store {
   /** Last clicked track (anchor for shift-click ranges). */
   anchor = $state<number | null>(null);
 
+  /** What's being written to the iPod right now (shown in the status display). */
+  busy = $state<string | null>(null);
+  progress = $state<AddProgress | null>(null);
+  dialog = $state<Dialog | null>(null);
+  menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  /** Playlist whose name is being edited in the source list. */
+  renaming = $state<string | null>(null);
+
+  get writable() {
+    return !!this.ipod?.writable;
+  }
+
+  /** The regular (non-library, non-smart) playlist being shown, if any. */
+  get editablePlaylist() {
+    const s = this.source;
+    if (s.kind !== "playlist" || !this.ipod) return null;
+    const p = this.ipod.playlists.find((x) => x.id === s.id);
+    return p && !p.master && !p.smart ? p : null;
+  }
+
+  dbidsOf(ids: number[]): string[] {
+    return this.index ? this.index.get(ids).map((t) => t.dbid) : [];
+  }
+
   get masterPlaylist() {
     return this.ipod?.playlists.find((p) => p.master) ?? null;
   }
@@ -44,6 +86,10 @@ class Store {
 
   async init() {
     await api.onDevicesChanged((d) => this.devicesChanged(d));
+    await api.onAddProgress((p) => {
+      this.progress = p;
+      if (p.total) this.busy = `Adding ${Math.min(p.done + 1, p.total)} of ${p.total}${p.current ? `: ${p.current}` : ""}`;
+    });
     const start = await api.startupFolder();
     this.devicesChanged(await api.listDevices());
     if (start && !this.ipod) await this.open(start);
@@ -114,6 +160,145 @@ class Store {
     }
   }
 
+  // ---- Changing the iPod ----
+
+  /** Show a freshly re-read iPod, keeping the selection and current playlist. */
+  private applyView(view: IpodView, keep: string[] = [], anchor: string | null = null) {
+    const index = new TrackIndex(view.tracks);
+    const byDbid = new Map(view.tracks.map((t) => [t.dbid, t.id]));
+    this.index = index;
+    this.ipod = view;
+    this.selected = new Set(keep.map((d) => byDbid.get(d)).filter((x): x is number => x !== undefined));
+    this.anchor = anchor !== null ? (byDbid.get(anchor) ?? null) : null;
+    const s = this.source;
+    if (s.kind === "playlist" && !view.playlists.some((p) => p.id === s.id)) {
+      const master = view.playlists.find((p) => p.master);
+      this.source = master ? { kind: "playlist", id: master.id } : { kind: "device" };
+    }
+  }
+
+  /** Run one change against the open iPod. Returns `{ extra }` (the command's extra result), or null on failure. */
+  private async write<T>(label: string, run: (path: string) => Promise<WriteResult<T>>): Promise<{ extra: T } | null> {
+    if (!this.ipod || this.busy) return null;
+    const keep = this.selectedTracks.map((t) => t.dbid);
+    const anchor = this.anchor !== null ? (this.index?.byId.get(this.anchor)?.dbid ?? null) : null;
+    this.busy = label;
+    this.error = null;
+    try {
+      const r = await run(this.ipod.path);
+      this.applyView(r.view, keep, anchor);
+      return { extra: r.extra };
+    } catch (e) {
+      this.error = String(e);
+      return null;
+    } finally {
+      this.busy = null;
+      this.progress = null;
+    }
+  }
+
+  async allowChanges(allow: boolean) {
+    if (!this.ipod) return;
+    try {
+      this.applyView(await api.setAllowChanges(this.ipod.path, allow), this.selectedTracks.map((t) => t.dbid));
+    } catch (e) {
+      this.error = String(e);
+    }
+  }
+
+  async saveInfo(ids: string[], changes: TrackChanges) {
+    if (!Object.keys(changes).length) return true;
+    return (await this.write("Saving…", (p) => api.editTracks(p, ids, changes))) !== null;
+  }
+
+  /** Delete key / menu: in a playlist, take songs out of it; elsewhere, delete from the iPod (asks first). */
+  removeSelected() {
+    if (!this.writable || !this.selected.size) return;
+    const pl = this.editablePlaylist;
+    if (pl) void this.removeFromPlaylist(pl.id, [...this.selected]);
+    else this.dialog = { kind: "delete-songs", ids: this.selectedTracks.map((t) => t.dbid) };
+  }
+
+  async deleteSongs(ids: string[]) {
+    this.dialog = null;
+    const n = ids.length;
+    const ok = await this.write(`Deleting ${n} ${n === 1 ? "song" : "songs"}…`, (p) => api.deleteTracks(p, ids));
+    if (ok !== null) this.selected = new Set();
+  }
+
+  private playlistDbids(id: string): string[] {
+    const pl = this.ipod?.playlists.find((p) => p.id === id);
+    return pl ? this.dbidsOf(pl.trackIds) : [];
+  }
+
+  async removeFromPlaylist(id: string, trackIds: number[]) {
+    const drop = new Set(this.dbidsOf(trackIds));
+    const rest = this.playlistDbids(id).filter((d) => !drop.has(d));
+    const ok = await this.write("Saving…", (p) => api.setPlaylistTracks(p, id, rest));
+    if (ok !== null) this.selected = new Set();
+  }
+
+  async addToPlaylist(id: string, dbids: string[]) {
+    const have = this.playlistDbids(id);
+    const present = new Set(have);
+    const add = dbids.filter((d) => !present.has(d));
+    if (!add.length) return;
+    await this.write("Saving…", (p) => api.setPlaylistTracks(p, id, [...have, ...add]));
+  }
+
+  async newPlaylist(fromSelection: boolean) {
+    const ids = fromSelection ? this.selectedTracks.map((t) => t.dbid) : [];
+    const r = await this.write("Saving…", (p) => api.createPlaylist(p, "untitled playlist", ids));
+    if (r) {
+      this.select({ kind: "playlist", id: r.extra.id });
+      this.renaming = r.extra.id;
+    }
+  }
+
+  async renamePlaylist(id: string, name: string) {
+    this.renaming = null;
+    const pl = this.ipod?.playlists.find((p) => p.id === id);
+    const clean = name.trim();
+    if (!pl || !clean || clean === pl.name) return;
+    await this.write("Saving…", (p) => api.renamePlaylist(p, id, clean));
+  }
+
+  async deletePlaylist(id: string) {
+    this.dialog = null;
+    await this.write("Deleting playlist…", (p) => api.deletePlaylist(p, id));
+  }
+
+  /** Copy files or folders onto the iPod (into the current playlist too, if one is shown). */
+  async addFiles(paths: string[]) {
+    if (!paths.length || !this.writable) return;
+    const pl = this.editablePlaylist?.id ?? null;
+    const res = await this.write("Adding songs…", (p) => api.addFiles(p, paths, pl));
+    if (!res) return;
+    const r = res.extra;
+    if (r.skipped.length) {
+      this.dialog = {
+        kind: "report",
+        title: `Added ${r.added.length} ${r.added.length === 1 ? "song" : "songs"}; ${r.skipped.length} not added`,
+        lines: r.skipped,
+      };
+    }
+    // Show what was added: clear filters that could hide it.
+    this.search = "";
+    this.resetBrowser();
+    const byDbid = new Map(this.ipod!.tracks.map((t) => [t.dbid, t.id]));
+    this.selected = new Set(r.added.map((d) => byDbid.get(d)).filter((x): x is number => x !== undefined));
+  }
+
+  async pickAndAddFiles() {
+    const files = await api.pickMusicFiles();
+    if (files.length) await this.addFiles(files);
+  }
+
+  async pickAndAddFolder() {
+    const dir = await api.pickMusicFolder();
+    if (dir) await this.addFiles([dir]);
+  }
+
   select(src: Source) {
     this.source = src;
     this.selected = new Set();
@@ -156,7 +341,7 @@ class Store {
 
   /** Click handling for the song list: plain, Shift (range), Cmd/Ctrl (toggle). */
   clickTrack(id: number, visible: Track[], e: { shiftKey: boolean; metaKey: boolean; ctrlKey: boolean }) {
-    const toggle = e.metaKey || e.ctrlKey;
+    const toggle = isMac ? e.metaKey : e.ctrlKey || e.metaKey;
     if (e.shiftKey && this.anchor !== null) {
       const a = visible.findIndex((t) => t.id === this.anchor);
       const b = visible.findIndex((t) => t.id === id);

@@ -5,6 +5,54 @@
   const playlists = $derived(store.ipod?.playlists.filter((p) => !p.master) ?? []);
   const isOpen = (path: string) => store.ipod?.path === path;
   const isPlaylist = (id: string) => store.source.kind === "playlist" && store.source.id === id;
+
+  let dropTarget = $state<string | null>(null);
+  const SONGS = "application/x-chinotto-songs";
+
+  function canDrop(e: DragEvent, smart: boolean) {
+    return store.writable && !smart && !!e.dataTransfer?.types.includes(SONGS);
+  }
+
+  function drop(e: DragEvent, id: string) {
+    e.preventDefault();
+    dropTarget = null;
+    const raw = e.dataTransfer?.getData(SONGS);
+    if (raw) void store.addToPlaylist(id, JSON.parse(raw) as string[]);
+  }
+
+  function playlistMenu(e: MouseEvent, id: string, name: string, smart: boolean) {
+    e.preventDefault();
+    const ro = !store.writable || smart;
+    store.menu = {
+      x: e.clientX,
+      y: e.clientY,
+      items: [
+        { label: "Rename", disabled: ro, action: () => (store.renaming = id) },
+        { label: "Delete Playlist…", danger: true, disabled: ro, action: () => (store.dialog = { kind: "delete-playlist", id, name }) },
+      ],
+    };
+  }
+
+  function renameKey(e: KeyboardEvent, id: string) {
+    if (e.key === "Enter") store.renamePlaylist(id, (e.currentTarget as HTMLInputElement).value);
+    else if (e.key === "Escape") store.renaming = null;
+  }
+
+  function rowKey(e: KeyboardEvent, id: string, name: string, smart: boolean) {
+    if (!store.writable || smart) return;
+    if (e.key === "Enter") {
+      e.preventDefault();
+      store.renaming = id;
+    } else if (e.key === "Delete" || e.key === "Backspace") {
+      e.preventDefault();
+      store.dialog = { kind: "delete-playlist", id, name };
+    }
+  }
+
+  function focusSelect(node: HTMLInputElement) {
+    node.focus();
+    node.select();
+  }
 </script>
 
 <nav class="sources" aria-label="Sources">
@@ -41,9 +89,39 @@
             </li>
             {#each playlists as p (p.id)}
               <li>
-                <button class="row" class:active={isPlaylist(p.id)} onclick={() => store.select({ kind: "playlist", id: p.id })}>
-                  <Icon name={p.smart ? "smart" : "playlist"} /><span>{p.name}</span>
-                </button>
+                {#if store.renaming === p.id}
+                  <div class="row active">
+                    <Icon name={p.smart ? "smart" : "playlist"} />
+                    <input
+                      class="rename"
+                      value={p.name}
+                      aria-label="Playlist name"
+                      use:focusSelect
+                      onkeydown={(e) => renameKey(e, p.id)}
+                      onblur={(e) => store.renaming === p.id && store.renamePlaylist(p.id, e.currentTarget.value)}
+                    />
+                  </div>
+                {:else}
+                  <button
+                    class="row"
+                    class:active={isPlaylist(p.id)}
+                    class:drop={dropTarget === p.id}
+                    onclick={() => store.select({ kind: "playlist", id: p.id })}
+                    ondblclick={() => store.writable && !p.smart && (store.renaming = p.id)}
+                    oncontextmenu={(e) => playlistMenu(e, p.id, p.name, p.smart)}
+                    onkeydown={(e) => rowKey(e, p.id, p.name, p.smart)}
+                    ondragover={(e) => {
+                      if (canDrop(e, p.smart)) {
+                        e.preventDefault();
+                        dropTarget = p.id;
+                      }
+                    }}
+                    ondragleave={() => dropTarget === p.id && (dropTarget = null)}
+                    ondrop={(e) => drop(e, p.id)}
+                  >
+                    <Icon name={p.smart ? "smart" : "playlist"} /><span>{p.name}</span>
+                  </button>
+                {/if}
               </li>
             {/each}
           </ul>
@@ -132,6 +210,24 @@
   button:focus-visible {
     outline: 2px solid var(--accent-bright);
     outline-offset: -2px;
+  }
+  .row.drop {
+    background: var(--accent-bright);
+    color: #2b1608;
+  }
+  .rename {
+    flex: 1;
+    min-width: 0;
+    height: 20px;
+    padding: 0 4px;
+    border: 1px solid var(--accent-bright);
+    border-radius: 4px;
+    background: var(--side-deep);
+    color: var(--side-ink);
+    font: inherit;
+    font-size: 13px;
+    user-select: text;
+    -webkit-user-select: text;
   }
   .eject {
     flex: none;

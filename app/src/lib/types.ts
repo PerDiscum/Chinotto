@@ -20,6 +20,8 @@ export interface Playlist {
 
 export interface Track {
   id: number;
+  /** Permanent id (64-bit, as text); survives saves, unlike `id`. */
+  dbid: string;
   title?: string;
   artist?: string;
   albumArtist?: string;
@@ -32,6 +34,7 @@ export interface Track {
   sortArtist?: string;
   sortAlbum?: string;
   sortAlbumArtist?: string;
+  sortComposer?: string;
   location?: string;
   kind: string;
   year: number;
@@ -61,6 +64,10 @@ export interface IpodView {
   dbVersion: number;
   generation: number;
   hasArtworkDb: boolean;
+  /** FireWire GUID or serial; null if the iPod doesn't report one. */
+  identity?: string | null;
+  /** The user allowed Chinotto to change this iPod. */
+  writable: boolean;
   playlists: Playlist[];
   tracks: Track[];
 }
@@ -73,3 +80,45 @@ export type Source =
 
 export type SortKey =
   | "title" | "time" | "artist" | "album" | "genre" | "year" | "rating" | "plays" | "added" | "kind";
+
+/** What every command that changes the iPod returns. */
+export interface WriteResult<T = unknown> {
+  view: IpodView;
+  extra: T;
+}
+
+export interface AddResult {
+  added: string[];
+  skipped: string[];
+}
+
+export interface AddProgress {
+  done: number;
+  total: number;
+  current: string;
+}
+
+/** Fields the Get Info window can change; only the keys present are sent. */
+export interface TrackChanges {
+  title?: string | null;
+  artist?: string | null;
+  albumArtist?: string | null;
+  album?: string | null;
+  genre?: string | null;
+  composer?: string | null;
+  comment?: string | null;
+  grouping?: string | null;
+  sortTitle?: string | null;
+  sortArtist?: string | null;
+  sortAlbum?: string | null;
+  sortAlbumArtist?: string | null;
+  sortComposer?: string | null;
+  year?: number | null;
+  trackNr?: number | null;
+  trackCount?: number | null;
+  discNr?: number | null;
+  discCount?: number | null;
+  bpm?: number | null;
+  rating?: number;
+  compilation?: boolean;
+}

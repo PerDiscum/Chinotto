@@ -22,7 +22,16 @@
   <div class="spacer" data-tauri-drag-region></div>
 
   <div class="label" role="status" aria-live="polite">
-    {#if openingName}
+    {#if store.busy}
+      <strong>{store.busy}</strong>
+      {#if store.progress && store.progress.total}
+        <span class="bar" role="progressbar" aria-valuemin="0" aria-valuemax={store.progress.total} aria-valuenow={store.progress.done}>
+          <span style:width="{(store.progress.done / store.progress.total) * 100}%"></span>
+        </span>
+      {:else}
+        <span class="sub">Don't unplug the iPod</span>
+      {/if}
+    {:else if openingName}
       <strong>Reading {openingName}…</strong>
       <span class="sub">Loading songs and playlists</span>
     {:else if store.ejecting}
@@ -100,6 +109,20 @@
     font-size: 11px;
     color: var(--label-dim);
     font-variant-numeric: tabular-nums;
+  }
+  .bar {
+    display: block;
+    width: 70%;
+    height: 4px;
+    margin-top: 4px;
+    border-radius: 2px;
+    background: rgb(243 167 59 / 0.2);
+    overflow: hidden;
+  }
+  .bar span {
+    display: block;
+    height: 100%;
+    background: var(--label-ink);
   }
   .search {
     justify-self: end;
