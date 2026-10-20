@@ -134,9 +134,7 @@ impl ArtworkDb {
             key.sort_by_key(|f| f.format);
             *counts.entry(key).or_default() += 1;
         }
-        // Prefer the fullest set (iTunes' own covers carry every format the
-        // iPod uses), then the most common one.
-        counts.into_iter().max_by_key(|(k, n)| (k.len(), *n)).map(|(k, _)| k).unwrap_or_default()
+        counts.into_iter().max_by_key(|(_, n)| *n).map(|(k, _)| k).unwrap_or_default()
     }
 
     /// Most recent image using exactly these formats, each in an `F<fmt>_<n>.ithmb` file.

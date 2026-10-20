@@ -43,32 +43,15 @@ fn fill(img: &DynamicImage, w: u32, h: u32) -> RgbaImage {
     img.resize_to_fill(w, h, FilterType::Lanczos3).to_rgba8()
 }
 
-/// The real pixel size of a thumbnail slot. Some formats claim more than their
-/// slot holds: 1061 on the iPod classic / nano 3G says 56×56 but stores 55
-/// columns × 56 rows (6,160 bytes). Writing 56-pixel rows into it shears the
-/// picture diagonally, so the width is taken from the slot size.
+/// The picture stored in a thumbnail slot: rows are as wide as the header
+/// says, and there are as many as fit. (1061 on the iPod classic / nano 3G says
+/// 56×56 but holds 6,160 bytes: 56 columns × 55 rows. That is what iTunes'
+/// predecessors and TunesReloaded write, and how the iPod reads it.)
 pub fn slot_dims(w: usize, h: usize, size: usize) -> (usize, usize) {
-    if size == w * h * 2 || w < 2 || h < 2 {
-        (w, h)
-    } else if size == (w - 1) * h * 2 {
-        (w - 1, h)
-    } else if size == w * (h - 1) * 2 {
-        (w, h - 1)
-    } else {
-        (w, h)
+    if w == 0 {
+        return (0, 0);
     }
-}
-
-/// The picture to draw in a slot. A square format whose slot is a pixel
-/// narrower (1061: 55 px rows in a 56 × 56 slot) gets a square picture of the
-/// narrower size, which is what iTunes writes (55 × 55).
-pub fn picture_dims(w: usize, h: usize, size: usize) -> (usize, usize) {
-    let (sw, sh) = slot_dims(w, h, size);
-    if w == h && sw < w {
-        (sw, sw.min(sh))
-    } else {
-        (sw, sh)
-    }
+    (w, h.min(size / (w * 2)))
 }
 
 /// One image and the songs (dbids) that get it.
@@ -102,11 +85,12 @@ pub fn add_covers(root: &Path, assignments: &[Assignment]) -> Result<HashMap<u64
         // Thumbnails once per image, shared by all its songs.
         let mut thumbs = Vec::new();
         for f in &formats {
-            let (w, h) = picture_dims(f.width as usize, f.height as usize, f.size as usize);
+            // Drawn at the header's size; rows that don't fit the slot are dropped.
+            let (w, h) = (f.width as usize, f.height as usize);
             let rgba = fill(&img, w as u32, h as u32);
             let data = rgb565::encode(rgba.as_raw(), w, h, f.size as usize);
             let (file, offset) = append_ithmb(&layout, f.format, &mut file_index, &data)?;
-            thumbs.push(NewThumb { format: f.format, file, offset, width: w as u16, height: h as u16 });
+            thumbs.push(NewThumb { format: f.format, file, offset, width: f.width, height: f.height });
         }
         for dbid in &a.dbids {
             entries.push(NewImage { id: next_id, song_dbid: *dbid, source_pixels, thumbs: thumbs.clone() });
@@ -127,14 +111,19 @@ fn append_ithmb(layout: &Layout, format: u32, index: &mut HashMap<u32, u32>, dat
     let mut name = ithmb_name(format, *n);
     let mut path = layout.artwork_dir().join(&name);
     let len = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
-    let mut offset = len;
+    let mut len = len;
     if len >= ITHMB_LIMIT {
         *n += 1;
         name = ithmb_name(format, *n);
         path = layout.artwork_dir().join(&name);
-        offset = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+        len = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
     }
+    // The iPod finds a thumbnail by slot number (offset ÷ slot size), so a new
+    // one must start on a slot boundary: pad the file up to the next one.
+    let slot = (data.len() as u64).max(1);
+    let offset = len.div_ceil(slot) * slot;
     let mut f = OpenOptions::new().create(true).append(true).open(&path).map_err(|e| format!("Couldn't write {name}: {e}"))?;
+    f.write_all(&vec![0u8; (offset - len) as usize]).map_err(|e| format!("Couldn't write {name}: {e}"))?;
     f.write_all(data).map_err(|e| format!("Couldn't write {name}: {e}"))?;
     let offset = u32::try_from(offset).map_err(|_| format!("{name} is too large"))?;
     Ok((name, offset))
@@ -166,10 +155,7 @@ mod tests {
 
     #[test]
     fn small_thumbnail_is_55_wide() {
-        assert_eq!(slot_dims(56, 56, 6160), (55, 56));
-        assert_eq!(picture_dims(56, 56, 6160), (55, 55));
-        assert_eq!(picture_dims(55, 55, 6160), (55, 55));
-        assert_eq!(picture_dims(128, 128, 32768), (128, 128));
+        assert_eq!(slot_dims(56, 56, 6160), (56, 55));
         assert_eq!(slot_dims(128, 128, 32768), (128, 128));
         assert_eq!(slot_dims(320, 320, 204800), (320, 320));
     }
@@ -229,11 +215,8 @@ mod tests {
             assert_eq!(t.artwork_size, 771 * 600 + 1);
             let im = art.images.iter().find(|i| i.id == t.mhii_link).expect("linked entry exists");
             assert_eq!(im.song_dbid, dbid);
-            // Same formats and small-thumbnail header as iTunes' own covers.
-            let fmts = art.common_formats();
-            assert_eq!(im.thumbs.len(), fmts.len());
-            if let Some(s) = im.thumbs.iter().find(|t| t.format == 1061 && t.size == 6160) {
-                assert_eq!((s.width, s.height), (55, 55));
+            for th in &im.thumbs {
+                assert_eq!(th.offset % th.size, 0, "{} starts on a slot boundary", th.file);
             }
             for th in &im.thumbs {
                 let data = std::fs::read(root.join("iPod_Control/Artwork").join(&th.file)).unwrap();

@@ -292,7 +292,11 @@ album-artist only (not albums). No sort title is written.
 ## ArtworkDB facts (verified)
 
 - Formats: 1055 (128×128, 32,768 B), 1060 (320×320, 204,800 B), 1061 (56×56
-  nominal, stored **55 wide × 56 high** = 6,160 B; writing 56-px rows shears it). RGB565 little-endian, row-major, no padding.
+  nominal, 6,160 B = **56 wide × 55 rows**, as TunesReloaded writes and the
+  nano 3G shows correctly). New thumbnails must start on a slot boundary
+  (offset a multiple of the slot size): the iPod finds them by slot number,
+  so appending at an unaligned file end distorts them (patches 0010/0011
+  guessed wrong; 0012 fixed it, following TunesReloaded). RGB565 little-endian, row-major, no padding.
   54 images also use 1068/1069 (another source; left alone).
 - mhii 764 bytes incl. children; covers shared per album via identical offsets.
 - mhfd +0x1C holds the last used image id.

@@ -50,10 +50,8 @@ fn artwork_append_matches_the_proven_javascript_writer() {
     let art = ArtworkDb::parse(&bytes).unwrap();
     assert_eq!(art.images.len(), 23093);
     assert_eq!(art.max_id(), 23192);
-    // iTunes' own covers on this nano carry five formats, so those win.
-    let common: Vec<u32> = art.common_formats().iter().map(|f| f.format).collect();
-    assert_eq!(common, vec![1055, 1060, 1061, 1068, 1069]);
-    let formats = vec![1055, 1060, 1061];
+    let formats: Vec<u32> = art.common_formats().iter().map(|f| f.format).collect();
+    assert_eq!(formats, vec![1055, 1060, 1061]);
 
     // Same two entries the JavaScript test appended; compare byte-for-byte when that output is present.
     let tpl = art.find_template(&formats).unwrap();
