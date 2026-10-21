@@ -146,7 +146,7 @@
   {/if}
   <h2>{t("Devices")}</h2>
   {#if store.devices.length === 0}
-    <p class="hint">{t("Connect an iPod and it shows up here.")}</p>
+    <p class="hint">{t("Connect your device, and it will show up here.")}</p>
   {/if}
   <ul>
     {#each store.devices as d (d.path)}

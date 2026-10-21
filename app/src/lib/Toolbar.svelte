@@ -107,7 +107,7 @@
       </span>
     {:else}
       <strong>{t("Chinotto")}</strong>
-      <span class="sub">{t("No iPod connected")}</span>
+      <span class="sub">{t("No device connected.")}</span>
     {/if}
   </div>
 

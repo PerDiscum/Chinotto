@@ -292,7 +292,7 @@
         </div>
         <div class="side">
           {#if artwork && artwork !== "remove"}
-            <p class="hint">{store.source.kind === "library" ? t("New cover, {size}. It's saved into the song files when you press OK; images larger than 600 px on the shorter side are shrunk to that.", { size: artwork.size }) : t("New cover, {size}. It's saved to the iPod when you press OK; images larger than 600 px on the shorter side are shrunk to that.", { size: artwork.size })}</p>
+            <p class="hint">{t("This new cover is {size}.", { size: artwork.size })} {store.source.kind === "library" ? t("It's saved into the song files when you press OK; images larger than 600 px on the shorter side are shrunk to that.") : t("It will be automatically resized such that its shortest side measures 600px. The change applies once the image is saved to your iPod.")}</p>
           {:else if artwork === "remove"}
             <p class="hint">{t("The cover is taken off when you press OK.")}</p>
           {:else}

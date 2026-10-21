@@ -5,9 +5,9 @@
 
 <div class="welcome">
   <div class="inner">
-    <h1>{t("Ready? Plug in your digital audio player to begin!")}</h1>
+    <h1>{t("Connect your device!")}</h1>
     <p>
-      {t("If you’re using a classic, pre-iOS Apple iPod or an MTP device (such as a Creative Zen), it will show up here automatically. If you are using an MSC device (such as most Sony Walkman and Sansa models), click below to add the drive manually to Chinotto.")}
+      {t("Welcome to Chinotto! Ready? Plug in your digital audio player to begin! If you’re using a classic, pre-iOS Apple iPod or an MTP device (such as a Creative Zen), it will show up here automatically. If you are using an MSC device (e.g., most Sony Walkman and Sansa models), click below to add the drive manually to Chinotto.")}
     </p>
     <div class="buttons">
       <button onclick={() => store.openFolder()}>{t("Add Drive…")}</button>

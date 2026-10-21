@@ -19,7 +19,6 @@ export function songMenu(e: MouseEvent, track: Track, tracks: Track[]) {
   // Right-clicking outside the selection selects that song.
   if (!store.selected.has(track.id)) store.clickTrack(track.id, tracks, plain);
   const n = store.selected.size;
-  
   const ro = !store.writable;
   const pl = store.editablePlaylist;
   const dbids = store.selectedTracks.map((x) => x.dbid);

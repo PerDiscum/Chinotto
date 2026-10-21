@@ -32,7 +32,7 @@
 <Modal title={id ? t("Edit Library") : t("New Library")} onclose={close} width={520}>
   <div class="form">
     <label>
-      <span>{t("Name")}</span>
+      <span>{t("Library name")}</span>
       <input bind:value={name} placeholder={t("e.g. Lossless Archive")} onkeydown={(e) => e.key === "Enter" && save()} />
     </label>
     <div class="folders">
