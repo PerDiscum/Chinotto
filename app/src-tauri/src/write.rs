@@ -78,7 +78,7 @@ pub fn set_allow_changes(path: String, allow: bool, app: AppHandle) -> Result<Re
 
 /// Fields from the Get Info window: only the keys present are changed.
 /// Strings: text, or null/"" to clear. Rating is in stars (0–5).
-fn fields(changes: &HashMap<String, Value>) -> Result<Vec<Field>, String> {
+pub(crate) fn fields(changes: &HashMap<String, Value>) -> Result<Vec<Field>, String> {
     let text = |v: &Value| v.as_str().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
     let int = |k: &str, v: &Value| -> Result<i32, String> {
         match v {

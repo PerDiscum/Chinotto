@@ -19,7 +19,10 @@
   const sourceName = $derived.by(() => {
     const s = store.source;
     if (s.kind === "device") return store.ipod?.name ?? "";
-    if (s.kind === "library") return `${store.libView?.view.name ?? "Library"} — Music`;
+    if (s.kind === "library") {
+      const pl = store.libView?.view.playlists.find((p) => p.id === s.id);
+      return pl && !pl.master ? pl.name : (store.libView?.view.name ?? "Library");
+    }
     if (s.kind === "playlist") {
       const p = store.ipod?.playlists.find((x) => x.id === s.id);
       return p?.master ? `${store.ipod?.name} — Music` : (p?.name ?? "");

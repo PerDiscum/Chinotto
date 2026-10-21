@@ -252,7 +252,7 @@
         </label>
       </div>
     {:else if tab === "sorting"}
-      <p class="hint">The iPod sorts by these instead of the names when they're filled in (for example “Beatles” for “The Beatles”).</p>
+      <p class="hint">{store.source.kind === "library" ? "Chinotto and iPods sort" : "The iPod sorts"} by these instead of the names when they're filled in (for example “Beatles” for “The Beatles”).</p>
       <div class="sortgrid">
         {#each SORT_PAIRS as [name, sort] (sort)}
           {#if !(many && name === "title")}
@@ -291,7 +291,7 @@
         </div>
         <div class="side">
           {#if artwork && artwork !== "remove"}
-            <p class="hint">New cover, {artwork.size}. It's saved to the iPod when you press OK; images larger than 600 px on the shorter side are shrunk to that.</p>
+            <p class="hint">New cover, {artwork.size}. It's saved {store.source.kind === "library" ? "into the song files" : "to the iPod"} when you press OK; images larger than 600 px on the shorter side are shrunk to that.</p>
           {:else if artwork === "remove"}
             <p class="hint">The cover is taken off when you press OK.</p>
           {:else}

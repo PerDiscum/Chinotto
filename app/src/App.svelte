@@ -109,7 +109,7 @@
           };
         }}><Icon name="folder" /></button
       >
-      {#if store.ipod}
+      {#if store.ipod && store.source.kind !== "library"}
         <button
           title={store.writable ? "Add songs to the iPod… (also: drop files or folders on the window)" : "Allow changes on the iPod's page to add songs"}
           aria-label="Add songs to the iPod"
@@ -131,6 +131,10 @@
           aria-label="New playlist"
           disabled={!store.writable || !!store.busy}
           onclick={() => store.newPlaylist(false)}><Icon name="newlist" /></button
+        >
+      {:else if store.source.kind === "library"}
+        <button title="New playlist in this library" aria-label="New playlist" disabled={!!store.busy} onclick={() => store.newPlaylist(false)}
+          ><Icon name="newlist" /></button
         >
       {/if}
         <button

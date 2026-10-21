@@ -20,7 +20,8 @@ export type Dialog =
   | { kind: "delete-playlist"; id: string; name: string }
   | { kind: "report"; title: string; lines: string[] }
   | { kind: "library"; id: string | null }
-  | { kind: "delete-library"; id: string; name: string };
+  | { kind: "delete-library"; id: string; name: string }
+  | { kind: "remove-from-library"; ids: number[] };
 
 function loadVolume(): number {
   try {
@@ -59,6 +60,9 @@ function loadList(key: string, fallback: string[]): string[] {
     return fallback;
   }
 }
+
+/** A library song's number, from its dbid "lib:<library>:<song>". */
+const libSongId = (dbid: string) => Number(dbid.split(":")[2]);
 
 /** Fisher–Yates shuffle of a copy. */
 function shuffled<T>(a: T[]): T[] {
@@ -159,14 +163,18 @@ class Store {
     return this.ipod?.tracks.find((t) => t.dbid === d) ?? null;
   }
 
-  /** The iPod can be changed (and the iPod is what's shown). */
+  /** What's shown can be changed: a library always; the iPod when allowed. */
   get writable() {
-    return !!this.ipod?.writable && this.source.kind !== "library";
+    return this.source.kind === "library" ? !!this.libView : !!this.ipod?.writable;
   }
 
   /** The regular (non-library, non-smart) playlist being shown, if any. */
   get editablePlaylist() {
     const s = this.source;
+    if (s.kind === "library") {
+      const p = this.libView?.view.playlists.find((x) => x.id === s.id);
+      return p && !p.master ? p : null;
+    }
     if (s.kind !== "playlist" || !this.ipod) return null;
     const p = this.ipod.playlists.find((x) => x.id === s.id);
     return p && !p.master && !p.smart ? p : null;
@@ -218,6 +226,8 @@ class Store {
     await api.onLibraryUpdated((id) => void this.reloadLibrary(id));
     await api.onLibraryProgress((p) => (this.scanProgress = { ...this.scanProgress, [p.id]: p }));
     this.libraries = await api.listLibraries().catch(() => []);
+    // Expanded libraries show their playlists in the sidebar.
+    for (const l of this.libraries) if (!this.collapsed.includes(l.id)) void this.loadLibrary(l.id);
     const start = await api.startupFolder();
     this.devicesChanged(await api.listDevices());
     if (start && !this.ipod) await this.open(start);
@@ -341,6 +351,22 @@ class Store {
   }
 
   async saveInfo(ids: string[], changes: TrackChanges, artwork: { set: string } | "remove" | null = null) {
+    const s = this.source;
+    if (s.kind === "library") {
+      if (!Object.keys(changes).length && !artwork) return true;
+      this.busy = ids.length > 1 ? `Saving ${count(ids.length)} songs…` : "Saving…";
+      try {
+        const cover = artwork === "remove" ? "" : artwork ? artwork.set : null;
+        const problems = await api.libEditTracks(s.lib, ids.map(libSongId), changes, cover);
+        if (problems.length) this.dialog = { kind: "report", title: `${count(problems.length)} ${problems.length === 1 ? "file" : "files"} couldn't be changed`, lines: problems };
+        return !problems.length;
+      } catch (e) {
+        this.error = String(e);
+        return false;
+      } finally {
+        this.busy = null;
+      }
+    }
     if (Object.keys(changes).length && (await this.write("Saving…", (p) => api.editTracks(p, ids, changes))) === null) return false;
     if (artwork === "remove") return (await this.write("Removing artwork…", (p) => api.removeArtwork(p, ids))) !== null;
     if (artwork) return (await this.write("Adding artwork…", (p) => api.setArtwork(p, ids, artwork.set))) !== null;
@@ -357,7 +383,8 @@ class Store {
     if (!t) return null;
     if (t.dbid.startsWith("lib:")) {
       const [, lib] = t.dbid.split(":");
-      return t.hasCover ? api.libArtUrl(lib, t.id, px) : null;
+      // The file's date is in the URL, so a changed cover isn't served from the cache.
+      return t.hasCover ? api.libArtUrl(lib, t.id, px, t.modified ?? 0) : null;
     }
     return this.ipod && t.art ? api.artUrl(this.ipod.generation, t.art, px) : null;
   }
@@ -368,7 +395,7 @@ class Store {
     this.select({ kind: "library", lib, id });
   }
 
-  private async loadLibrary(lib: string): Promise<boolean> {
+  async loadLibrary(lib: string): Promise<boolean> {
     try {
       const view = await api.libraryView(lib);
       this.libViews = { ...this.libViews, [lib]: { view, index: new TrackIndex(view.tracks) } };
@@ -391,7 +418,15 @@ class Store {
     this.selected = new Set(keep.map((d) => byDbid.get(d)).filter((x): x is number => x !== undefined));
   }
 
+  /** New empty playlist in a library (from its menu). */
+  async newLibraryPlaylist(lib: string) {
+    await this.showLibrary(lib);
+    if (this.collapsed.includes(lib)) this.toggleCollapsed(lib);
+    await this.newPlaylist(false);
+  }
+
   toggleCollapsed(lib: string) {
+    if (this.collapsed.includes(lib) && !this.libViews[lib]) void this.loadLibrary(lib);
     this.collapsed = this.collapsed.includes(lib) ? this.collapsed.filter((x) => x !== lib) : [...this.collapsed, lib];
     savePref("chinotto.collapsed", JSON.stringify(this.collapsed));
   }
@@ -488,7 +523,8 @@ class Store {
       this.error = String(e);
       return;
     }
-    await this.write("Adding artwork…", (p) => api.setArtwork(p, ids, image));
+    if (this.source.kind === "library") await this.saveInfo(ids, {}, { set: image });
+    else await this.write("Adding artwork…", (p) => api.setArtwork(p, ids, image));
   }
 
   /** Delete key / menu: in a playlist, take songs out of it; elsewhere, delete from the iPod (asks first). */
@@ -496,6 +532,7 @@ class Store {
     if (!this.writable || !this.selected.size) return;
     const pl = this.editablePlaylist;
     if (pl) void this.removeFromPlaylist(pl.id, [...this.selected]);
+    else if (this.source.kind === "library") this.dialog = { kind: "remove-from-library", ids: [...this.selected] };
     else this.dialog = { kind: "delete-songs", ids: this.selectedTracks.map((t) => t.dbid) };
   }
 
@@ -508,25 +545,74 @@ class Store {
 
   private playlistDbids(id: string): string[] {
     const pl = this.ipod?.playlists.find((p) => p.id === id);
-    return pl ? this.dbidsOf(pl.trackIds) : [];
+    return pl ? (this.ipodIndex?.get(pl.trackIds).map((t) => t.dbid) ?? []) : [];
+  }
+
+  /** A library playlist, from its sidebar id "lib:<library>:<playlist>". */
+  private libPlaylist(scoped: string) {
+    const [, lib, pid] = scoped.split(":");
+    const pl = this.libViews[lib]?.view.playlists.find((p) => p.id === pid);
+    return pl ? { lib, pl } : null;
+  }
+
+  /** Run a change to a library; the library-updated event then shows it. */
+  private async libChange<T>(run: () => Promise<T>): Promise<T | null> {
+    this.error = null;
+    try {
+      return await run();
+    } catch (e) {
+      this.error = String(e);
+      return null;
+    }
   }
 
   async removeFromPlaylist(id: string, trackIds: number[]) {
+    const s = this.source;
+    if (s.kind === "library") {
+      const pl = this.libView?.view.playlists.find((p) => p.id === id);
+      if (!pl) return;
+      const drop = new Set(trackIds);
+      const ok = await this.libChange(() => api.libSetPlaylistTracks(s.lib, id, pl.trackIds.filter((t) => !drop.has(t))));
+      if (ok !== null) this.selected = new Set();
+      return;
+    }
     const drop = new Set(this.dbidsOf(trackIds));
     const rest = this.playlistDbids(id).filter((d) => !drop.has(d));
     const ok = await this.write("Saving…", (p) => api.setPlaylistTracks(p, id, rest));
     if (ok !== null) this.selected = new Set();
   }
 
+  /** Add songs to a playlist: an iPod playlist id, or "lib:<library>:<playlist>". */
   async addToPlaylist(id: string, dbids: string[]) {
+    if (id.startsWith("lib:")) {
+      const t = this.libPlaylist(id);
+      if (!t) return;
+      // Only the same library's songs (copying between libraries isn't a thing).
+      const add = dbids.filter((d) => d.startsWith(`lib:${t.lib}:`)).map(libSongId);
+      const have = new Set(t.pl.trackIds);
+      const fresh = add.filter((x) => !have.has(x));
+      if (fresh.length) await this.libChange(() => api.libSetPlaylistTracks(t.lib, t.pl.id, [...t.pl.trackIds, ...fresh]));
+      return;
+    }
     const have = this.playlistDbids(id);
     const present = new Set(have);
-    const add = dbids.filter((d) => !present.has(d));
+    const add = dbids.filter((d) => !d.startsWith("lib:") && !present.has(d));
     if (!add.length) return;
     await this.write("Saving…", (p) => api.setPlaylistTracks(p, id, [...have, ...add]));
   }
 
   async newPlaylist(fromSelection: boolean) {
+    const s = this.source;
+    if (s.kind === "library") {
+      const ids = fromSelection ? this.selectedTracks.map((t) => t.id) : [];
+      const pid = await this.libChange(() => api.libCreatePlaylist(s.lib, "untitled playlist", ids));
+      if (pid) {
+        await this.loadLibrary(s.lib);
+        this.select({ kind: "library", lib: s.lib, id: pid });
+        this.renaming = `lib:${s.lib}:${pid}`;
+      }
+      return;
+    }
     const ids = fromSelection ? this.selectedTracks.map((t) => t.dbid) : [];
     const r = await this.write("Saving…", (p) => api.createPlaylist(p, "untitled playlist", ids));
     if (r) {
@@ -537,15 +623,36 @@ class Store {
 
   async renamePlaylist(id: string, name: string) {
     this.renaming = null;
-    const pl = this.ipod?.playlists.find((p) => p.id === id);
     const clean = name.trim();
+    if (id.startsWith("lib:")) {
+      const t = this.libPlaylist(id);
+      if (t && clean && clean !== t.pl.name) await this.libChange(() => api.libRenamePlaylist(t.lib, t.pl.id, clean));
+      return;
+    }
+    const pl = this.ipod?.playlists.find((p) => p.id === id);
     if (!pl || !clean || clean === pl.name) return;
     await this.write("Saving…", (p) => api.renamePlaylist(p, id, clean));
   }
 
   async deletePlaylist(id: string) {
     this.dialog = null;
+    if (id.startsWith("lib:")) {
+      const t = this.libPlaylist(id);
+      if (!t) return;
+      if (this.source.kind === "library" && this.source.lib === t.lib && this.source.id === t.pl.id) this.select({ kind: "library", lib: t.lib, id: "all" });
+      await this.libChange(() => api.libDeletePlaylist(t.lib, t.pl.id));
+      return;
+    }
     await this.write("Deleting playlist…", (p) => api.deletePlaylist(p, id));
+  }
+
+  /** Take songs out of a library (files stay where they are). */
+  async removeFromLibrary(ids: number[]) {
+    this.dialog = null;
+    const s = this.source;
+    if (s.kind !== "library") return;
+    const ok = await this.libChange(() => api.libRemoveTracks(s.lib, ids));
+    if (ok !== null) this.selected = new Set();
   }
 
   /** Copy files or folders onto the iPod (into the current playlist too, if one is shown). */
@@ -779,6 +886,7 @@ class Store {
   /** Whether the shown list is a playlist with an order of its own (not the whole library). */
   get hasOwnOrder(): boolean {
     const s = this.source;
+    if (s.kind === "library") return s.id !== "all";
     return s.kind === "playlist" && !!this.ipod?.playlists.some((p) => p.id === s.id && !p.master);
   }
 
@@ -815,7 +923,9 @@ class Store {
     const after = tracks.slice(at).filter((t) => !this.selected.has(t.id));
     const order = [...before, ...moving, ...after].map((t) => t.dbid);
     if (order.every((d, i) => d === tracks[i].dbid)) return; // no change
-    await this.write("Saving…", (p) => api.setPlaylistTracks(p, pl.id, order));
+    const s = this.source;
+    if (s.kind === "library") await this.libChange(() => api.libSetPlaylistTracks(s.lib, pl.id, order.map(libSongId)));
+    else await this.write("Saving…", (p) => api.setPlaylistTracks(p, pl.id, order));
   }
 
   /** Click handling for the song list: plain, Shift (range), Cmd/Ctrl (toggle). */

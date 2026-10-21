@@ -27,7 +27,7 @@
 {:else if store.dialog?.kind === "delete-playlist"}
   {@const d = store.dialog}
   <Modal title="Delete the playlist “{d.name}”?" onclose={close}>
-    <p>Its songs stay on the iPod.</p>
+    <p>Its songs stay {d.id.startsWith("lib:") ? "in the library" : "on the iPod"}.</p>
     {#snippet buttons()}
       <button onclick={close}>Cancel</button>
       <button class="danger" onclick={() => store.deletePlaylist(d.id)}>Delete Playlist</button>
@@ -42,6 +42,19 @@
     {#snippet buttons()}
       <button onclick={close}>Cancel</button>
       <button class="danger" onclick={() => store.deleteLibrary(d.id)}>Delete Library</button>
+    {/snippet}
+  </Modal>
+{:else if store.dialog?.kind === "remove-from-library"}
+  {@const ids = store.dialog.ids}
+  {@const n = ids.length}
+  <Modal title="Remove {n === 1 ? 'this song' : `${count(n)} songs`} from the library?" onclose={close}>
+    <p>
+      {n === 1 ? "It" : "They"}'ll be taken out of this library and its playlists, and won't come back at the next scan.
+      The music {n === 1 ? "file stays" : "files stay"} where {n === 1 ? "it is" : "they are"}: nothing is deleted.
+    </p>
+    {#snippet buttons()}
+      <button onclick={close}>Cancel</button>
+      <button class="danger" onclick={() => store.removeFromLibrary(ids)}>Remove</button>
     {/snippet}
   </Modal>
 {:else if store.dialog?.kind === "report"}

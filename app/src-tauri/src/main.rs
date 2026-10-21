@@ -10,6 +10,7 @@ mod library;
 mod playback;
 mod state;
 mod tags;
+mod tagwrite;
 mod write;
 
 use tauri::Manager;
@@ -65,6 +66,12 @@ fn main() {
             libcommands::scan_library,
             libcommands::remove_unavailable,
             libcommands::library_view,
+            libcommands::lib_create_playlist,
+            libcommands::lib_rename_playlist,
+            libcommands::lib_delete_playlist,
+            libcommands::lib_set_playlist_tracks,
+            libcommands::lib_remove_tracks,
+            libcommands::lib_edit_tracks,
             commands::set_device_icon,
         ])
         .setup(|app| {

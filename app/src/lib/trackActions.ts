@@ -21,26 +21,33 @@ export function songMenu(e: MouseEvent, t: Track, tracks: Track[]) {
   const songs = n === 1 ? "Song" : `${n} Songs`;
   const ro = !store.writable;
   const pl = store.editablePlaylist;
-  const targets = (store.ipod?.playlists ?? []).filter((p) => !p.master && !p.smart && p.id !== pl?.id);
   const dbids = store.selectedTracks.map((x) => x.dbid);
-  const onIpod = store.source.kind !== "library";
+  const src = store.source;
+  const onIpod = src.kind !== "library";
+  // Playlists to add to, as addToPlaylist ids.
+  const targets = onIpod
+    ? (store.ipod?.playlists ?? []).filter((p) => !p.master && !p.smart && p.id !== pl?.id).map((p) => ({ id: p.id, name: p.name }))
+    : (store.libView?.view.playlists ?? []).filter((p) => !p.master && p.id !== pl?.id).map((p) => ({ id: `lib:${src.kind === "library" ? src.lib : ""}:${p.id}`, name: p.name }));
   store.menu = {
     x: e.clientX,
     y: e.clientY,
     items: [
       { label: "Play", action: () => playSelected(tracks) },
       { label: "Get Info", action: () => (store.dialog = { kind: "info" }) },
+      { label: "", separator: true },
+      {
+        label: "Add to Playlist",
+        disabled: ro || !targets.length,
+        submenu: targets.map((p) => ({ label: p.name, action: () => store.addToPlaylist(p.id, dbids) })),
+      },
+      { label: "New Playlist from Selection", disabled: ro, action: () => store.newPlaylist(true) },
+      { label: "", separator: true },
+      ...(pl ? [{ label: `Remove from “${pl.name}”`, disabled: ro, action: () => store.removeFromPlaylist(pl.id, [...store.selected]) }] : []),
+      ...(!onIpod
+        ? [{ label: `Remove ${songs} from Library…`, action: () => (store.dialog = { kind: "remove-from-library", ids: [...store.selected] }) }]
+        : []),
       ...(onIpod
         ? [
-            { label: "", separator: true },
-            {
-              label: "Add to Playlist",
-              disabled: ro,
-              submenu: targets.map((p) => ({ label: p.name, action: () => store.addToPlaylist(p.id, dbids) })),
-            },
-            { label: "New Playlist from Selection", disabled: ro, action: () => store.newPlaylist(true) },
-            { label: "", separator: true },
-            ...(pl ? [{ label: `Remove from “${pl.name}”`, disabled: ro, action: () => store.removeFromPlaylist(pl.id, [...store.selected]) }] : []),
             {
               label: `Delete ${songs} from iPod…`,
               danger: true,

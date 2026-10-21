@@ -100,6 +100,14 @@ pub struct LibTrack {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
+pub struct LibPlaylist {
+    pub id: u32,
+    pub name: String,
+    pub tracks: Vec<u32>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
 pub struct Library {
     pub id: String,
     pub name: String,
@@ -107,6 +115,10 @@ pub struct Library {
     pub next_id: u32,
     pub tracks: Vec<LibTrack>,
     pub last_scan: Option<i64>,
+    pub playlists: Vec<LibPlaylist>,
+    pub next_playlist_id: u32,
+    /// Files taken out of the library by hand: scans skip them.
+    pub excluded: Vec<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -164,6 +176,54 @@ impl Library {
         self.tracks.iter().find(|t| t.id == id)
     }
 
+    /// Drop playlist entries whose song is gone.
+    pub fn prune_playlists(&mut self) {
+        let ids: HashSet<u32> = self.tracks.iter().map(|t| t.id).collect();
+        for p in &mut self.playlists {
+            p.tracks.retain(|t| ids.contains(t));
+        }
+    }
+
+    pub fn new_playlist(&mut self, name: &str, tracks: Vec<u32>) -> u32 {
+        self.next_playlist_id = self.next_playlist_id.max(1);
+        let id = self.next_playlist_id;
+        self.next_playlist_id += 1;
+        self.playlists.push(LibPlaylist { id, name: name.to_string(), tracks });
+        self.prune_playlists();
+        id
+    }
+
+    /// Take songs out of the library (their files stay; later scans skip them).
+    pub fn remove_tracks(&mut self, ids: &HashSet<u32>) -> usize {
+        let before = self.tracks.len();
+        let mut gone = Vec::new();
+        self.tracks.retain(|t| {
+            let keep = !ids.contains(&t.id);
+            if !keep {
+                gone.push(t.path.clone());
+            }
+            keep
+        });
+        self.excluded.extend(gone);
+        self.excluded.sort();
+        self.excluded.dedup();
+        self.prune_playlists();
+        before - self.tracks.len()
+    }
+
+    /// Re-read one song's file (after its tags were written).
+    pub fn reread(&mut self, id: u32) {
+        let Some(t) = self.tracks.iter_mut().find(|t| t.id == id) else { return };
+        let p = PathBuf::from(&t.path);
+        if let Ok(m) = std::fs::metadata(&p) {
+            t.size = m.len();
+            t.mtime = mtime_of(&m);
+        }
+        let (tags, cover) = read_track(&p, &mut HashMap::new());
+        t.tags = tags;
+        t.cover = cover;
+    }
+
     pub fn load(path: &Path) -> Result<Self, String> {
         let bytes = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
         serde_json::from_slice(&bytes).map_err(|e| format!("{}: {e}", path.display()))
@@ -188,7 +248,9 @@ impl Library {
             // Songs outside every folder (a folder was taken out of the library) go too.
             f.is_some_and(|f| !gone.contains(f.as_str()))
         });
-        before - self.tracks.len()
+        let n = before - self.tracks.len();
+        self.prune_playlists();
+        n
     }
 }
 
@@ -285,6 +347,10 @@ pub fn scan(lib: &mut Library, mut progress: impl FnMut(usize, usize, &str)) -> 
         }
     }
 
+    if !lib.excluded.is_empty() {
+        let ex: HashSet<&str> = lib.excluded.iter().map(String::as_str).collect();
+        found.retain(|(p, _, _)| !ex.contains(&*p.to_string_lossy()));
+    }
     let by_path: HashMap<String, usize> = lib.tracks.iter().enumerate().map(|(i, t)| (t.path.clone(), i)).collect();
     let mut seen = vec![false; lib.tracks.len()];
     let todo: Vec<&(PathBuf, u64, i64)> = found
@@ -344,6 +410,7 @@ pub fn scan(lib: &mut Library, mut progress: impl FnMut(usize, usize, &str)) -> 
         keep
     });
     lib.tracks.extend(new_tracks);
+    lib.prune_playlists();
     lib.last_scan = Some(now());
     res
 }

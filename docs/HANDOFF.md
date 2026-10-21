@@ -152,6 +152,21 @@ Everything decided and learned so far, so work can continue in a new session.
   browser and the Artists list). `library.ts`: `albums()`, `groups()`,
   `albumKey()` (album + album artist; compilations by album only).
 
+## Library playlists and editing (0027)
+
+- Library playlists live in the library JSON (`playlists`, ids "p<n>" in the
+  view; sidebar/drag ids "lib:<library>:p<n>"). Sidebar: the library's row is
+  its Music; its playlists are nested under it.
+- Editing writes into the music files (the developer's choice): `tagwrite.rs`
+  copies the file beside itself (".<name>.chinotto-<pid>"), edits the copy
+  with lofty split/merge on the format's own tag (keeps everything else),
+  then renames it over the original. Ratings stay in the library JSON.
+  Covers: front cover replaced, 600 px rule, JPEG/PNG. WMA can't be written.
+  Tested on MP3, AAC, ALAC, FLAC, Ogg, WAV, AIFF (CHINOTTO_TEST_AUDIO).
+- "Remove from Library" adds the paths to `excluded` (scans skip them);
+  files are never deleted.
+- Scans merge with changes made meanwhile (ratings, plays, removals, newer tags).
+
 Order chosen: confirm editing on the nano → **playback** (done) → artwork (done) → icon chooser → shuffle/repeat → playlist reordering → column browser fixes and Format/Bitrate columns → media library.
 
 ## Status (2026-10-20)

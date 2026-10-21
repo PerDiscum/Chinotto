@@ -105,9 +105,29 @@ pub fn start_scan(app: &AppHandle, id: &str) {
         if let Ok(cur) = libs.get_mut(&id) {
             // Keep a rename made meanwhile; scan again if the folders changed.
             rescan = cur.folders != lib.folders;
-            cur.tracks = lib.tracks;
-            cur.next_id = lib.next_id;
+            // Keep what changed meanwhile: ratings and plays, songs taken out,
+            // and tags just written (those files are re-read next scan anyway).
+            let now: std::collections::HashMap<u32, &library::LibTrack> = cur.tracks.iter().map(|t| (t.id, t)).collect();
+            let excluded: HashSet<&str> = cur.excluded.iter().map(String::as_str).collect();
+            let mut merged = lib.tracks;
+            merged.retain(|t| !excluded.contains(t.path.as_str()));
+            for t in &mut merged {
+                if let Some(c) = now.get(&t.id) {
+                    t.rating = c.rating;
+                    t.play_count = c.play_count;
+                    t.played = c.played;
+                    if c.mtime > t.mtime {
+                        t.tags = c.tags.clone();
+                        t.cover = c.cover;
+                        t.mtime = c.mtime;
+                        t.size = c.size;
+                    }
+                }
+            }
+            cur.tracks = merged;
+            cur.next_id = cur.next_id.max(lib.next_id);
             cur.last_scan = lib.last_scan;
+            cur.prune_playlists();
             if let Err(e) = libs.save(&id) {
                 let _ = app.emit("player-error", e);
             }
@@ -271,13 +291,21 @@ pub fn library_view(id: String, state: State<'_, AppState>) -> Result<tauri::ipc
     let v = LibraryView {
         id: &lib.id,
         name: &lib.name,
-        playlists: vec![PlaylistView {
+        playlists: std::iter::once(PlaylistView {
             id: "all".into(),
             name: lib.name.clone(),
             master: true,
             smart: false,
             track_ids: lib.tracks.iter().map(|t| t.id).collect(),
-        }],
+        })
+        .chain(lib.playlists.iter().map(|p| PlaylistView {
+            id: format!("p{}", p.id),
+            name: p.name.clone(),
+            master: false,
+            smart: false,
+            track_ids: p.tracks.clone(),
+        }))
+        .collect(),
         tracks: lib
             .tracks
             .iter()
@@ -352,4 +380,143 @@ fn cover_jpeg(bytes: &[u8], px: u32) -> Option<Vec<u8>> {
     let enc = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, 88);
     small.to_rgb8().write_with_encoder(enc).ok()?;
     Some(out)
+}
+
+// ---- Changing a library ----
+
+/// Run `f` on library `id`, save it, and tell the window.
+fn change<T>(app: &AppHandle, id: &str, f: impl FnOnce(&mut Library) -> Result<T, String>) -> Result<T, String> {
+    let r = {
+        let state = app.state::<AppState>();
+        let mut libs = state.libraries.lock().unwrap();
+        let r = f(libs.get_mut(id)?)?;
+        libs.save(id)?;
+        r
+    };
+    emit_list(app);
+    let _ = app.emit("library-updated", id);
+    Ok(r)
+}
+
+fn playlist_id(s: &str) -> Result<u32, String> {
+    s.strip_prefix('p').and_then(|n| n.parse().ok()).ok_or_else(|| "That isn't one of the library's playlists".to_string())
+}
+
+#[tauri::command]
+pub fn lib_create_playlist(lib: String, name: String, ids: Vec<u32>, app: AppHandle) -> Result<String, String> {
+    change(&app, &lib, |l| Ok(format!("p{}", l.new_playlist(name.trim(), ids))))
+}
+
+#[tauri::command]
+pub fn lib_rename_playlist(lib: String, id: String, name: String, app: AppHandle) -> Result<(), String> {
+    let pid = playlist_id(&id)?;
+    change(&app, &lib, |l| {
+        let p = l.playlists.iter_mut().find(|p| p.id == pid).ok_or("No such playlist")?;
+        p.name = name.trim().to_string();
+        Ok(())
+    })
+}
+
+#[tauri::command]
+pub fn lib_delete_playlist(lib: String, id: String, app: AppHandle) -> Result<(), String> {
+    let pid = playlist_id(&id)?;
+    change(&app, &lib, |l| {
+        l.playlists.retain(|p| p.id != pid);
+        Ok(())
+    })
+}
+
+#[tauri::command]
+pub fn lib_set_playlist_tracks(lib: String, id: String, ids: Vec<u32>, app: AppHandle) -> Result<(), String> {
+    let pid = playlist_id(&id)?;
+    change(&app, &lib, |l| {
+        l.playlists.iter_mut().find(|p| p.id == pid).ok_or("No such playlist")?.tracks = ids;
+        l.prune_playlists();
+        Ok(())
+    })
+}
+
+/// Take songs out of the library. Their files aren't touched; scans skip them.
+#[tauri::command]
+pub fn lib_remove_tracks(lib: String, ids: Vec<u32>, app: AppHandle) -> Result<usize, String> {
+    let ids: HashSet<u32> = ids.into_iter().collect();
+    change(&app, &lib, |l| Ok(l.remove_tracks(&ids)))
+}
+
+/// A cover for embedding: shrunk by the 600 px rule, JPEG or PNG.
+fn cover_bytes(image: &str) -> Result<(Vec<u8>, lofty::picture::MimeType), String> {
+    use lofty::picture::MimeType;
+    let raw = std::fs::read(image).map_err(|e| format!("Couldn't open the image: {e}"))?;
+    let img = crate::cover::decode(&raw)?;
+    let small = crate::cover::limit_600(img.clone());
+    let is = |sig: &[u8]| raw.starts_with(sig);
+    if small.width() == img.width() && small.height() == img.height() {
+        if is(&[0xFF, 0xD8]) {
+            return Ok((raw, MimeType::Jpeg));
+        }
+        if is(b"\x89PNG") {
+            return Ok((raw, MimeType::Png));
+        }
+    }
+    let mut out = Vec::new();
+    let enc = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, 92);
+    small.to_rgb8().write_with_encoder(enc).map_err(|e| e.to_string())?;
+    Ok((out, MimeType::Jpeg))
+}
+
+/// Get Info for library songs: tags (and the cover) are written into the
+/// files; the rating is kept in the library. `cover`: an image file, "" to
+/// remove the cover, or null to leave it. Returns the files that couldn't be
+/// changed, with the reason.
+#[tauri::command]
+pub async fn lib_edit_tracks(
+    lib: String,
+    ids: Vec<u32>,
+    mut changes: std::collections::HashMap<String, serde_json::Value>,
+    cover: Option<String>,
+    app: AppHandle,
+) -> Result<Vec<String>, String> {
+    let rating = changes.remove("rating").and_then(|v| v.as_u64()).map(|r| r.min(5) as u8);
+    let fields = crate::write::fields(&changes)?;
+    let cover = match cover.as_deref() {
+        None => None,
+        Some("") => Some(crate::tagwrite::CoverChange::Remove),
+        Some(path) => {
+            let (bytes, mime) = cover_bytes(path)?;
+            Some(crate::tagwrite::CoverChange::Set(bytes, mime))
+        }
+    };
+    let paths: Vec<(u32, PathBuf)> = {
+        let state = app.state::<AppState>();
+        let libs = state.libraries.lock().unwrap();
+        let l = libs.list.iter().find(|l| l.id == lib).ok_or("That library doesn't exist any more")?;
+        ids.iter().filter_map(|id| l.track(*id).map(|t| (*id, PathBuf::from(&t.path)))).collect()
+    };
+    let app2 = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut problems = Vec::new();
+        let mut done = Vec::new();
+        if !fields.is_empty() || cover.is_some() {
+            for (id, path) in &paths {
+                match crate::tagwrite::write(path, &fields, cover.as_ref()) {
+                    Ok(()) => done.push(*id),
+                    Err(e) => problems.push(e),
+                }
+            }
+        }
+        change(&app2, &lib, |l| {
+            for id in &done {
+                l.reread(*id);
+            }
+            if let Some(r) = rating {
+                for t in l.tracks.iter_mut().filter(|t| ids.contains(&t.id)) {
+                    t.rating = r;
+                }
+            }
+            Ok(())
+        })?;
+        Ok(problems)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }

@@ -121,8 +121,17 @@ export const onLibrariesChanged = (f: (l: LibrarySummary[]) => void) => listen<L
 export const onLibraryUpdated = (f: (id: string) => void) => listen<string>("library-updated", (e) => f(e.payload));
 export const onLibraryProgress = (f: (p: ScanProgress) => void) => listen<ScanProgress>("library-progress", (e) => f(e.payload));
 /** Cover of a library song, about `px` wide. */
-export const libArtUrl = (lib: string, id: number, px: number) => convertFileSrc(`${lib}-${id}-${px}`, "libart");
+export const libArtUrl = (lib: string, id: number, px: number, version = 0) =>
+  convertFileSrc(`${lib}-${id}-${px}-${version}`, "libart");
 export async function pickMusicFolders(): Promise<string[]> {
   const r = await open({ directory: true, multiple: true, title: "Choose music folders" });
   return Array.isArray(r) ? r : typeof r === "string" ? [r] : [];
 }
+export const libCreatePlaylist = (lib: string, name: string, ids: number[]) => invoke<string>("lib_create_playlist", { lib, name, ids });
+export const libRenamePlaylist = (lib: string, id: string, name: string) => invoke<void>("lib_rename_playlist", { lib, id, name });
+export const libDeletePlaylist = (lib: string, id: string) => invoke<void>("lib_delete_playlist", { lib, id });
+export const libSetPlaylistTracks = (lib: string, id: string, ids: number[]) => invoke<void>("lib_set_playlist_tracks", { lib, id, ids });
+export const libRemoveTracks = (lib: string, ids: number[]) => invoke<number>("lib_remove_tracks", { lib, ids });
+/** Returns the files that couldn't be changed. `cover`: image path, "" to remove, null to leave. */
+export const libEditTracks = (lib: string, ids: number[], changes: TrackChanges, cover: string | null) =>
+  invoke<string[]>("lib_edit_tracks", { lib, ids, changes, cover });
