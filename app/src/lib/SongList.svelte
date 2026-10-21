@@ -72,6 +72,20 @@
     if (scroller) scroller.scrollTop = 0;
   });
 
+  // Show Playing Song: scroll the song into the middle of the list.
+  $effect(() => {
+    const id = store.reveal;
+    if (id === null || !scroller) return;
+    const i = tracks.findIndex((x) => x.id === id);
+    if (i < 0) return;
+    const el = scroller;
+    requestAnimationFrame(() => {
+      el.scrollTop = Math.max(0, i * ROW - el.clientHeight / 2);
+      el.focus();
+    });
+    store.reveal = null;
+  });
+
   function keydown(e: KeyboardEvent) {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "a") {
       e.preventDefault();

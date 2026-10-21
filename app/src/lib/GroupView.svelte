@@ -8,6 +8,7 @@
   import type { Track } from "./types";
   import Cover from "./Cover.svelte";
   import AlbumTracks from "./AlbumTracks.svelte";
+  import { startAlbumDrag } from "./trackActions";
 
   let { tracks, by, view }: { tracks: Track[]; by: "artist" | "genre" | "composer"; view: MusicView } = $props();
 
@@ -45,7 +46,8 @@
       <h1>{picked.name}</h1>
       {#each shown as a (a.key)}
         <section class="album">
-          <div class="cover"><Cover track={a.coverTrack} px={300} alt={t("Cover of {name}", { name: a.title })} /></div>
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div class="cover" onmousedown={(e) => startAlbumDrag(e, a.tracks)} ondragstart={(e) => e.preventDefault()}><Cover track={a.coverTrack} px={300} alt={t("Cover of {name}", { name: a.title })} /></div>
           <div class="body">
             <h2>{a.title}</h2>
             <p class="meta">{by !== "artist" ? `${a.artist}${a.year ? " · " : ""}` : ""}{a.year || ""}</p>

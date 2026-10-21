@@ -1,7 +1,7 @@
 // What a song row does on right-click and when dragged, shared by the song
 // list and the album views.
 
-import { store } from "./store.svelte";
+import { store, isMac } from "./store.svelte";
 import type { Track } from "./types";
 import { t, tn } from "./i18n";
 
@@ -31,7 +31,7 @@ export function songMenu(e: MouseEvent, track: Track, tracks: Track[]) {
       y: e.clientY,
       items: [
         { label: t("Play"), action: () => playSelected(tracks) },
-        { label: t("Get Info"), action: () => (store.dialog = { kind: "info" }) },
+        { label: t("Song Details"), action: () => (store.dialog = { kind: "info" }) },
         { label: n > 1 ? t("Save As Zip…") : t("Save As…"), action: () => store.exportSongs(store.selectedTracks) },
         ...(store.ipod
           ? [{ label: t("Copy to {name}", { name: store.ipod.name }), disabled: !store.ipod.writable, action: () => store.copyToIpod(dbids, null) }]
@@ -51,7 +51,7 @@ export function songMenu(e: MouseEvent, track: Track, tracks: Track[]) {
     y: e.clientY,
     items: [
       { label: t("Play"), action: () => playSelected(tracks) },
-      { label: t("Get Info"), action: () => (store.dialog = { kind: "info" }) },
+      { label: t("Song Details"), action: () => (store.dialog = { kind: "info" }) },
       { label: n > 1 ? t("Save As Zip…") : t("Save As…"), action: () => store.exportSongs(store.selectedTracks) },
       { label: "", separator: true },
       {
@@ -121,6 +121,40 @@ export function startSongDrag(
     store.songDrag = null;
     if (d?.target) void store.addToPlaylist(d.target, d.dbids);
     else if (d?.insertAt != null) void store.moveSelected(d.insertAt);
+  };
+  window.addEventListener("mousemove", move);
+  window.addEventListener("mouseup", up);
+}
+
+/**
+ * Press on an album's cover and move: its songs become the selection and are
+ * dragged like songs (onto the iPod or a playlist). A plain click still opens it.
+ */
+export function startAlbumDrag(e: MouseEvent, tracks: Track[]) {
+  if (e.button !== 0 || (isMac && e.ctrlKey) || !tracks.length) return;
+  if (!store.writable) return;
+  const x0 = e.clientX, y0 = e.clientY;
+  const move = (m: MouseEvent) => {
+    if (!store.songDrag) {
+      if (Math.hypot(m.clientX - x0, m.clientY - y0) < 6) return;
+      store.selected = new Set(tracks.map((x) => x.id));
+      store.anchor = tracks[0].id;
+      store.songDrag = { dbids: tracks.map((x) => x.dbid), x: m.clientX, y: m.clientY, target: null };
+    }
+    const over = document.elementFromPoint(m.clientX, m.clientY)?.closest<HTMLElement>("[data-drop-playlist]");
+    store.songDrag = { ...store.songDrag, x: m.clientX, y: m.clientY, target: over?.dataset.dropPlaylist ?? null };
+  };
+  const up = () => {
+    window.removeEventListener("mousemove", move);
+    window.removeEventListener("mouseup", up);
+    const d = store.songDrag;
+    store.songDrag = null;
+    if (!d) return;
+    // The click that ends a drag doesn't open or close the album.
+    const swallow = (c: MouseEvent) => c.stopPropagation();
+    window.addEventListener("click", swallow, { capture: true, once: true });
+    setTimeout(() => window.removeEventListener("click", swallow, { capture: true }), 0);
+    if (d.target) void store.addToPlaylist(d.target, d.dbids);
   };
   window.addEventListener("mousemove", move);
   window.addEventListener("mouseup", up);

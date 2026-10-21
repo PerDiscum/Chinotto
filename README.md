@@ -9,7 +9,7 @@ Genre → Artist → Album column browser, sortable song list, search, covers,
 and a device page with the capacity bar.
 
 Once you switch on "Allow changes to this iPod" on its page, it can also edit
-songs (Get Info), add and delete them, and make and change playlists. Every
+songs (Song Details), add and delete them, and make and change playlists. Every
 save backs up the iPod's database first (`iPod_Control/iTunes/Chinotto Backups`).
 
 It also plays the iPod's songs (MP3, AAC, Apple Lossless, WAV, AIFF; FLAC and

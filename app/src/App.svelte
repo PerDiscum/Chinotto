@@ -18,12 +18,15 @@
   import Dialogs from "./lib/Dialogs.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
+  import { handleKey, installMenu, setVisibleSongs } from "./lib/commands.svelte";
 
   /** Files being dragged in from Finder / the file manager. */
   let fileDrag = $state(false);
 
   onMount(() => {
     void store.init();
+    setVisibleSongs(() => visible);
+    void installMenu();
     const off = getCurrentWebview().onDragDropEvent((e) => {
       const p = e.payload;
       // Only real files from Finder / the file manager (they carry paths);
@@ -36,7 +39,7 @@
       else if (p.type === "drop") {
         fileDrag = false;
         if (store.dialog?.kind === "info") {
-          // Dropped on Get Info: an image becomes the cover.
+          // Dropped on Song Details: an image becomes the cover.
           const img = p.paths.find((x) => /\.(jpe?g|png|gif|bmp|webp|tiff?)$/i.test(x));
           if (img) store.infoImageDrop = img;
         } else if (store.ipod?.writable && (store.source.kind === "playlist" || store.source.kind === "device") && p.paths.length) {
@@ -50,30 +53,14 @@
     return () => void off.then((f) => f());
   });
 
-  function keydown(e: KeyboardEvent) {
-    if (store.dialog || store.menu) return;
-    const t = e.target as HTMLElement;
-    const typing = t.closest("input, textarea, select, button, [contenteditable]");
-    if (e.key === " " && !typing && store.index) {
-      e.preventDefault();
-      void store.togglePlay(visible);
-      return;
-    }
-    if (!(e.metaKey || e.ctrlKey)) return;
-    const k = e.key.toLowerCase();
-    // ⌘. (Ctrl+. on Linux): stop, as in iTunes.
-    if (k === "." && store.nowPlaying) {
-      e.preventDefault();
-      void store.stopPlayback();
-      return;
-    }
-    if (k === "o" && store.writable) {
-      e.preventDefault();
-      void store.pickAndAddFiles();
-    } else if (k === "n" && store.writable) {
-      e.preventDefault();
-      void store.newPlaylist(false);
-    }
+  /** A click on an empty part of the window clears the song selection. */
+  function mousedown(e: MouseEvent) {
+    if (store.dialog || store.menu || !store.selected.size) return;
+    const el = e.target as HTMLElement;
+    // Not on a scroll bar.
+    if (e.offsetX > el.clientWidth || e.offsetY > el.clientHeight) return;
+    const keep = "button, input, select, textarea, a, label, [role=row], [role=option], [role=menu], [role=dialog], [role=separator], .toolbar, .art, .catcher, .backdrop, .band";
+    if (!el.closest(keep)) store.selected = new Set();
   }
 
   // Source → search → column browser → sort.
@@ -92,7 +79,8 @@
 </script>
 
 <svelte:window
-  onkeydown={keydown}
+  onkeydown={(e) => handleKey(e)}
+  onmousedown={mousedown}
   oncontextmenu={(e) => {
     // The web view's own menu (Back, Reload…) isn't Chinotto's: only text fields keep theirs.
     if (!(e.target as HTMLElement).closest("input, textarea, [contenteditable]")) e.preventDefault();

@@ -469,7 +469,7 @@ fn cover_bytes(image: &str) -> Result<(Vec<u8>, lofty::picture::MimeType), Strin
     Ok((out, MimeType::Jpeg))
 }
 
-/// Get Info for library songs: tags (and the cover) are written into the
+/// Song Details for library songs: tags (and the cover) are written into the
 /// files; the rating is kept in the library. `cover`: an image file, "" to
 /// remove the cover, or null to leave it. Returns the files that couldn't be
 /// changed, with the reason.

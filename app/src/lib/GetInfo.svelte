@@ -187,7 +187,7 @@
   />
 {/snippet}
 
-<Modal title={t("Get Info")} onclose={close} width={600}>
+<Modal title={t("Song Details")} onclose={close} width={600}>
   <div class="info" role="presentation" onkeydown={keydown}>
     <header>
       <div class="thumb">{#if cover && !many}<img src={cover} alt="" />{/if}</div>

@@ -429,7 +429,7 @@ class Store {
     return true;
   }
 
-  /** An image file dropped on the window while Get Info is open. */
+  /** An image file dropped on the window while Song Details is open. */
   infoImageDrop = $state<string | null>(null);
 
   // ---- Libraries ----
@@ -1093,6 +1093,27 @@ class Store {
 
   selectAll(visible: Track[]) {
     this.selected = new Set(visible.map((t) => t.id));
+  }
+
+  /** Song the list should scroll to (set by Show Playing Song). */
+  reveal = $state<number | null>(null);
+
+  /** Show the playing song in its list, selected (⌘L). */
+  revealPlaying() {
+    const d = this.nowPlaying;
+    const track = this.playingTrack;
+    if (!d || !track) return;
+    let src: Source;
+    if (d.startsWith("scratch:")) src = { kind: "scratch" };
+    else if (d.startsWith("lib:")) src = { kind: "library", lib: d.split(":")[1], id: "all" };
+    else if (this.masterPlaylist) src = { kind: "playlist", id: this.masterPlaylist.id };
+    else return;
+    this.select(src);
+    this.search = "";
+    if (this.hasViews && this.musicView !== "songs") this.setView("songs");
+    this.selected = new Set([track.id]);
+    this.anchor = track.id;
+    this.reveal = track.id;
   }
 
   /** Arrow-key movement in the song list; returns the new row index. */

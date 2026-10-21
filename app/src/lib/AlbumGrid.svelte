@@ -7,6 +7,7 @@
   import type { Album } from "./library";
   import Cover from "./Cover.svelte";
   import AlbumTracks from "./AlbumTracks.svelte";
+  import { startAlbumDrag } from "./trackActions";
 
   let { albums, empty = t("No albums") }: { albums: Album[]; empty?: string } = $props();
 
@@ -56,7 +57,7 @@
   {#each rows as row (row[0].key)}
     <div class="row">
       {#each row as a (a.key)}
-        <button class="album" class:open={store.openAlbum === a.key} onclick={(e) => toggle(a, e)} aria-expanded={store.openAlbum === a.key}>
+        <button class="album" class:open={store.openAlbum === a.key} onclick={(e) => toggle(a, e)} onmousedown={(e) => startAlbumDrag(e, a.tracks)} ondragstart={(e) => e.preventDefault()} aria-expanded={store.openAlbum === a.key}>
           <Cover track={a.coverTrack} px={300} alt="" />
           <span class="t">{a.title}</span>
           <span class="a">{a.artist}</span>

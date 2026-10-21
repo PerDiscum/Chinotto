@@ -219,17 +219,23 @@ Everything decided and learned so far, so work can continue in a new session.
 - File associations (bundle.fileAssociations) use rank Alternate, so
   Chinotto never becomes the default player by itself.
 
-## Small fixes requested (2026-10-21)
+## Small fixes (done 2026-10-21, patch 0036)
 
-- Keyboard shortcuts throughout (⌘I Song Details already works in the song
-  list; extend to the album views, sidebar, and add the usual set).
-- Clicking a blank area (or elsewhere) deselects songs.
-- macOS menu bar (File, Edit, View, Controls…) filled with Chinotto's
-  actions: New Library, Open File, Open Device, Repeat/Shuffle, etc.
-- Compilation flag: also under the Sorting tab of the info window (it's on
-  the Info tab today as "Part of a compilation").
-- Rename "Get Info" to "Song Details" everywhere.
-- Device pictures: new icon pack from the developer (to be sent).
+- Keyboard shortcuts live in `lib/commands.svelte.ts` (`run` holds every
+  command; `handleKey` maps keys; on macOS `installMenu` builds the menu bar
+  from the same commands, with t() labels). ⌘I Song Details, ⌘N new playlist,
+  ⌥⌘N new library, ⌘O open file (Scratch), ⇧⌘O add to iPod, ⇧⌘S Save As,
+  ⌘E eject, ⌘F search, ⌘1–6 views, ⌘B column browser, ⌘G artwork, ⌘L show
+  playing song, Space play/pause, ⌘. stop, ⌘←/→ previous/next, ⌘↑/↓ volume,
+  ⌘A select all. On Linux the same keys use Ctrl. The web view's handler acts
+  first (preventDefault), so the menu shortcut and the key never both fire.
+- A click on an empty part of the window clears the song selection
+  (App.svelte `mousedown`; buttons, rows, menus, dialogs are left alone).
+- "Get Info" is now "Song Details" (the new string needs translating).
+- Album covers (Albums/Compilations grid, Artists/Genres/Composers views) can
+  be dragged: the album's songs are selected and dropped like songs (onto the
+  iPod, its playlists or a library playlist). A click still opens the album.
+- Compilation flag: dropped (already on the Info tab).
 
 Order chosen: confirm editing on the nano → **playback** (done) → artwork (done) → icon chooser → shuffle/repeat → playlist reordering → column browser fixes and Format/Bitrate columns → media library.
 

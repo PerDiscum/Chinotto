@@ -138,7 +138,7 @@ export interface AddProgress {
   current: string;
 }
 
-/** Fields the Get Info window can change; only the keys present are sent. */
+/** Fields the Song Details window can change; only the keys present are sent. */
 export interface TrackChanges {
   title?: string | null;
   artist?: string | null;

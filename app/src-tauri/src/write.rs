@@ -76,7 +76,7 @@ pub fn set_allow_changes(path: String, allow: bool, app: AppHandle) -> Result<Re
     view(&session, &state).map(Response::new)
 }
 
-/// Fields from the Get Info window: only the keys present are changed.
+/// Fields from the Song Details window: only the keys present are changed.
 /// Strings: text, or null/"" to clear. Rating is in stars (0–5).
 pub(crate) fn fields(changes: &HashMap<String, Value>) -> Result<Vec<Field>, String> {
     let text = |v: &Value| v.as_str().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
@@ -348,7 +348,7 @@ pub async fn remove_artwork(path: String, ids: Vec<String>, app: AppHandle) -> R
         .await
 }
 
-/// A small PNG preview (data URL) of an image file, for Get Info before saving.
+/// A small PNG preview (data URL) of an image file, for Song Details before saving.
 #[tauri::command]
 pub async fn image_preview(image: String) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
