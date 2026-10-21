@@ -27,6 +27,8 @@ pub struct AppState {
     player: OnceLock<Player>,
     /// Remembers which volumes are iPods (see devices::Scanner).
     pub scanner: Mutex<crate::devices::Scanner>,
+    /// Music libraries on the computer.
+    pub libraries: Mutex<crate::libcommands::Libraries>,
 }
 
 /// Saved between runs in the app's config folder (settings.json).

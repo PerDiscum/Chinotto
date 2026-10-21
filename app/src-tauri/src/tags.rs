@@ -20,11 +20,34 @@ pub fn ipod_kind(path: &Path) -> Option<&'static str> {
     }
 }
 
+/// Music files a library can hold (and Chinotto plays, or will: WMA).
+pub fn library_kind(path: &Path) -> Option<&'static str> {
+    match path.extension()?.to_str()?.to_ascii_lowercase().as_str() {
+        "mp3" => Some("MPEG audio file"),
+        "m4a" | "aac" => Some("AAC audio file"),
+        "m4b" => Some("Audiobook"),
+        "wav" => Some("WAV audio file"),
+        "aif" | "aiff" => Some("AIFF audio file"),
+        "flac" => Some("FLAC audio file"),
+        "ogg" | "oga" => Some("Ogg Vorbis audio file"),
+        "opus" => Some("Opus audio file"),
+        "wma" => Some("Windows Media audio file"),
+        _ => None,
+    }
+}
+
 /// Tags and audio details of `path`, ready for [`chinotto_gpod::Database::add_track`].
 pub fn read(path: &Path) -> Result<TrackInfo, String> {
     let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    let mut kind = ipod_kind(path)
+    let kind = ipod_kind(path)
         .ok_or_else(|| format!("{name}: this kind of file doesn't play on an iPod (MP3, AAC, Apple Lossless, WAV and AIFF do)"))?;
+    read_tags(path, kind).map(|(t, _)| t)
+}
+
+/// Tags and audio details of any music file `lofty` reads, described as
+/// `kind`; also whether it has an embedded picture.
+pub fn read_tags(path: &Path, mut kind: &'static str) -> Result<(TrackInfo, bool), String> {
+    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     let tagged = lofty::read_from_path(path).map_err(|e| format!("{name}: couldn't read it as audio ({e})"))?;
     let props = tagged.properties();
     // In an .m4a, AAC has no bit depth; Apple Lossless does.
@@ -40,7 +63,9 @@ pub fn read(path: &Path) -> Result<TrackInfo, String> {
         ..Default::default()
     };
 
+    let mut has_picture = false;
     if let Some(tag) = tagged.primary_tag().or(tagged.first_tag()) {
+        has_picture = !tag.pictures().is_empty();
         let s = |k: ItemKey| tag.get_string(k).map(str::trim).filter(|v| !v.is_empty()).map(str::to_string);
         t.title = tag.title().map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
         t.artist = tag.artist().map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
@@ -72,7 +97,7 @@ pub fn read(path: &Path) -> Result<TrackInfo, String> {
         t.title = path.file_stem().map(|n| n.to_string_lossy().into_owned());
     }
     fill_sort_fields(&mut t);
-    Ok(t)
+    Ok((t, has_picture))
 }
 
 /// The file's embedded cover (front cover if marked, else the first picture).

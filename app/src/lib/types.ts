@@ -58,6 +58,10 @@ export interface Track {
   played?: number;
   modified?: number;
   art: number;
+  /** Library songs: a cover can be shown (embedded or beside the file). */
+  hasCover?: boolean;
+  /** Library songs: its folder isn't there (drive unplugged). */
+  unavailable?: boolean;
 }
 
 export interface IpodView {
@@ -80,7 +84,32 @@ export interface IpodView {
 export type Source =
   | { kind: "none" }
   | { kind: "device" }
-  | { kind: "playlist"; id: string };
+  | { kind: "playlist"; id: string }
+  /** A library's songs ("all") or one of its playlists. */
+  | { kind: "library"; lib: string; id: string };
+
+export interface LibrarySummary {
+  id: string;
+  name: string;
+  folders: { path: string; available: boolean }[];
+  songs: number;
+  lastScan?: number | null;
+  scanning: boolean;
+}
+
+export interface LibraryView {
+  id: string;
+  name: string;
+  playlists: Playlist[];
+  tracks: Track[];
+}
+
+export interface ScanProgress {
+  id: string;
+  done: number;
+  total: number;
+  current: string;
+}
 
 export type SortKey =
   | "order" | "title" | "time" | "artist" | "album" | "genre" | "year" | "rating" | "plays" | "added" | "kind" | "format" | "bitrate";

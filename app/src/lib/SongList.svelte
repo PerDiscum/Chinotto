@@ -222,6 +222,8 @@
         class="row"
         class:odd={n % 2 === 1}
         class:sel={store.selected.has(t.id)}
+        class:unavailable={t.unavailable}
+        title={t.unavailable ? "Not available: its drive isn't connected" : undefined}
         role="row"
         tabindex="-1"
         aria-rowindex={n + 1}
@@ -351,6 +353,10 @@
   }
   .body .row.odd {
     background: var(--zebra);
+  }
+  .body .row.unavailable {
+    color: var(--muted);
+    font-style: italic;
   }
   .body .row.sel {
     background: var(--sel-quiet);

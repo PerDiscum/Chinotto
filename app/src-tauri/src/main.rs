@@ -5,6 +5,8 @@ mod artwork;
 mod commands;
 mod cover;
 mod devices;
+mod libcommands;
+mod library;
 mod playback;
 mod state;
 mod tags;
@@ -24,6 +26,10 @@ fn main() {
                 let session = app.state::<AppState>().session();
                 responder.respond(artwork::handle(session.as_deref(), &request));
             });
+        })
+        .register_asynchronous_uri_scheme_protocol("libart", |ctx, request, responder| {
+            let app = ctx.app_handle().clone();
+            std::thread::spawn(move || responder.respond(libcommands::handle_art(&app, &request)));
         })
         .invoke_handler(tauri::generate_handler![
             commands::list_devices,
@@ -52,6 +58,13 @@ fn main() {
             write::save_cover,
             write::paste_image,
             commands::device_icons,
+            libcommands::list_libraries,
+            libcommands::create_library,
+            libcommands::update_library,
+            libcommands::delete_library,
+            libcommands::scan_library,
+            libcommands::remove_unavailable,
+            libcommands::library_view,
             commands::set_device_icon,
         ])
         .setup(|app| {
@@ -59,6 +72,10 @@ fn main() {
             if let Ok(dir) = app.path().app_config_dir() {
                 app.state::<AppState>().load_settings(dir.join("settings.json"));
             }
+            if let Ok(dir) = app.path().app_data_dir() {
+                *app.state::<AppState>().libraries.lock().unwrap() = libcommands::Libraries::load(dir.join("libraries"));
+            }
+            libcommands::start_hourly(app.handle().clone());
             devices::start_watcher(app.handle().clone());
             Ok(())
         })

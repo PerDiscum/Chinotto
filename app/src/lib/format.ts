@@ -39,6 +39,10 @@ export function formatName(t: Track): string {
   const k = t.kind.toLowerCase();
   const ext = (t.location ?? "").split(".").pop()?.toLowerCase() ?? "";
   if (k.includes("lossless")) return "ALAC";
+  if (k.includes("flac") || ext === "flac") return "FLAC";
+  if (k.includes("vorbis") || ext === "ogg" || ext === "oga") return "Ogg";
+  if (k.includes("opus") || ext === "opus") return "Opus";
+  if (k.includes("windows media") || ext === "wma") return "WMA";
   if (k.includes("mpeg audio") || ext === "mp3") return "MP3";
   if (k.includes("wav") || ext === "wav") return "WAV";
   if (k.includes("aiff") || ext === "aif" || ext === "aiff") return "AIFF";

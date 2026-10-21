@@ -1,13 +1,12 @@
 <script lang="ts">
   import { store } from "./store.svelte";
-  import { artUrl } from "./api";
 
   // Like iTunes: the playing song's cover, or the selected song's when you choose.
   let mode = $state<"playing" | "selected">("playing");
   const track = $derived(mode === "playing" && store.playingTrack ? store.playingTrack : store.selectedTracks[0]);
   const showingPlaying = $derived(mode === "playing" && !!store.playingTrack);
   let failed = $state(false);
-  const src = $derived(store.ipod && track?.art ? artUrl(store.ipod.generation, track.art, 320) : null);
+  const src = $derived(store.coverUrl(track, 320));
   $effect(() => {
     void src;
     failed = false;
@@ -24,7 +23,7 @@
         { label: "Save Cover As…", disabled: !track?.art || failed, action: () => track && store.saveCover(track) },
         {
           label: n > 1 ? `Paste Cover to ${n} Selected Songs` : "Paste Cover to Selected Song",
-          disabled: !n || !store.writable || !!store.busy,
+          disabled: !n || !store.writable || !!store.busy || store.source.kind === "library",
           action: () => store.pasteCover(targets),
         },
       ],
@@ -46,7 +45,7 @@
     {#if src && !failed}
       <img {src} alt="Cover of {track?.album ?? track?.title ?? 'the selected song'}" onerror={() => (failed = true)} />
     {:else}
-      <p>{track ? (track.art && failed ? "Cover file missing" : "No artwork") : "Select a song to see its cover"}</p>
+      <p>{track ? (src && failed ? "Cover file missing" : "No artwork") : "Select a song to see its cover"}</p>
     {/if}
   </div>
 </figure>

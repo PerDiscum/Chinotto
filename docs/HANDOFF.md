@@ -122,6 +122,23 @@ Everything decided and learned so far, so work can continue in a new session.
 - **To the iPod**: drag and drop from the library first; full sync later.
 - **No iTunes library import** for now.
 
+## Media library: step 1 (0023)
+
+- `app/src-tauri/src/library.rs`: data model (`Library`, `LibTrack`, `Tags`),
+  scan (walk folders; re-read tags only when size/mtime changed; unreadable
+  files such as WMA listed by file name), the missing-files rule, folder covers
+  (cover/folder/front/album .jpg/.png). Unit-tested.
+- `libcommands.rs`: library list in AppState, commands (list/create/update/
+  delete/scan/remove_unavailable/library_view), background scans with
+  `library-progress` / `library-updated` / `libraries-changed` events, scan at
+  start-up (+10 s) and hourly, `libart:` scheme (`<lib>-<song>-<px>` → JPEG).
+  Stored in the app data folder, `libraries/<id>.json`.
+- Library songs use the iPod's Track shape; dbid `lib:<lib>:<song>` (playback
+  resolves it). Source `{kind: "library", lib, id: "all"}`; `store.index` is
+  the shown collection's index. Read-only in Get Info.
+- Not yet: library playlists, play counts/ratings in libraries, dragging to
+  the iPod, WMA playback.
+
 Order chosen: confirm editing on the nano → **playback** (done) → artwork (done) → icon chooser → shuffle/repeat → playlist reordering → column browser fixes and Format/Bitrate columns → media library.
 
 ## Status (2026-10-20)

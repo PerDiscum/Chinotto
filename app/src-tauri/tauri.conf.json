@@ -22,7 +22,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self' ipc: http://ipc.localhost; img-src 'self' data: art: http://art.localhost; style-src 'self' 'unsafe-inline'"
+      "csp": "default-src 'self' ipc: http://ipc.localhost; img-src 'self' data: art: http://art.localhost libart: http://libart.localhost; style-src 'self' 'unsafe-inline'"
     }
   },
   "bundle": {

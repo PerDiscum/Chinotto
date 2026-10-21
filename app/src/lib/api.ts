@@ -1,7 +1,7 @@
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import type { AddProgress, AddResult, DeviceInfo, IpodView, TrackChanges, WriteResult } from "./types";
+import type { AddProgress, AddResult, DeviceInfo, IpodView, LibrarySummary, LibraryView, ScanProgress, TrackChanges, WriteResult } from "./types";
 
 export const listDevices = () => invoke<DeviceInfo[]>("list_devices");
 export const addFolder = (path: string) => invoke<DeviceInfo>("add_folder", { path });
@@ -107,3 +107,22 @@ export const pasteImage = () => invoke<string>("paste_image");
 // ---- Device pictures ----
 export const deviceIcons = () => invoke<Record<string, string>>("device_icons");
 export const setDeviceIcon = (identity: string, icon: string | null) => invoke<void>("set_device_icon", { identity, icon });
+
+// ---- Libraries ----
+export const listLibraries = () => invoke<LibrarySummary[]>("list_libraries");
+export const createLibrary = (name: string, folders: string[]) => invoke<string>("create_library", { name, folders });
+export const updateLibrary = (id: string, name: string | null, folders: string[] | null) =>
+  invoke<void>("update_library", { id, name, folders });
+export const deleteLibrary = (id: string) => invoke<void>("delete_library", { id });
+export const scanLibrary = (id: string) => invoke<void>("scan_library", { id });
+export const removeUnavailable = (id: string) => invoke<number>("remove_unavailable", { id });
+export const libraryView = (id: string) => invoke<LibraryView>("library_view", { id });
+export const onLibrariesChanged = (f: (l: LibrarySummary[]) => void) => listen<LibrarySummary[]>("libraries-changed", (e) => f(e.payload));
+export const onLibraryUpdated = (f: (id: string) => void) => listen<string>("library-updated", (e) => f(e.payload));
+export const onLibraryProgress = (f: (p: ScanProgress) => void) => listen<ScanProgress>("library-progress", (e) => f(e.payload));
+/** Cover of a library song, about `px` wide. */
+export const libArtUrl = (lib: string, id: number, px: number) => convertFileSrc(`${lib}-${id}-${px}`, "libart");
+export async function pickMusicFolders(): Promise<string[]> {
+  const r = await open({ directory: true, multiple: true, title: "Choose music folders" });
+  return Array.isArray(r) ? r : typeof r === "string" ? [r] : [];
+}

@@ -24,7 +24,7 @@
       const p = e.payload;
       // Only real files from Finder / the file manager (they carry paths);
       // drags inside the window are Chinotto's own song drags.
-      if (p.type === "enter") fileDrag = !!store.ipod && p.paths.length > 0 && !store.songDrag && store.dialog?.kind !== "info";
+      if (p.type === "enter") fileDrag = !!store.ipod && store.source.kind !== "library" && p.paths.length > 0 && !store.songDrag && store.dialog?.kind !== "info";
       else if (p.type === "over") {
         /* keep the current state */
       }
@@ -45,7 +45,7 @@
     if (store.dialog || store.menu) return;
     const t = e.target as HTMLElement;
     const typing = t.closest("input, textarea, select, button, [contenteditable]");
-    if (e.key === " " && !typing && store.ipod) {
+    if (e.key === " " && !typing && store.index) {
       e.preventDefault();
       void store.togglePlay(visible);
       return;
@@ -88,9 +88,23 @@
 
   <aside class="side">
     <SourceList />
-    {#if store.showArtwork && store.ipod}<ArtworkPane />{/if}
+    {#if store.showArtwork && (store.ipod || store.source.kind === "library")}<ArtworkPane />{/if}
     <div class="side-tools">
-      <button title="Open iPod folder…" aria-label="Open iPod folder" onclick={() => store.openFolder()}><Icon name="folder" /></button>
+      <button
+        title="New library or open an iPod folder"
+        aria-label="New library or open an iPod folder"
+        onclick={(e) => {
+          const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+          store.menu = {
+            x: r.left,
+            y: r.top - 64,
+            items: [
+              { label: "New Library…", action: () => (store.dialog = { kind: "library", id: null }) },
+              { label: "Open iPod Folder…", action: () => store.openFolder() },
+            ],
+          };
+        }}><Icon name="folder" /></button
+      >
       {#if store.ipod}
         <button
           title={store.writable ? "Add songs to the iPod… (also: drop files or folders on the window)" : "Allow changes on the iPod's page to add songs"}
@@ -114,6 +128,7 @@
           disabled={!store.writable || !!store.busy}
           onclick={() => store.newPlaylist(false)}><Icon name="newlist" /></button
         >
+      {/if}
         <button
           title={store.shuffle ? "Shuffle is on" : "Shuffle is off"}
           aria-label="Shuffle"
@@ -126,7 +141,6 @@
           aria-pressed={store.repeat !== "off"}
           onclick={() => store.cycleRepeat()}><Icon name={store.repeat === "one" ? "repeat-one" : "repeat"} /></button
         >
-      {/if}
       <span class="spacer"></span>
       <button title={store.showBrowser ? "Hide column browser" : "Show column browser"} aria-pressed={store.showBrowser} onclick={() => (store.showBrowser = !store.showBrowser)}><Icon name="columns" /></button>
       <button title={store.showArtwork ? "Hide artwork" : "Show artwork"} aria-pressed={store.showArtwork} onclick={() => (store.showArtwork = !store.showArtwork)}><Icon name="artwork" /></button>
@@ -141,7 +155,10 @@
       </div>
     {/if}
 
-    {#if !store.ipod}
+    {#if store.source.kind === "library"}
+      {#if browsed}<ColumnBrowser columns={browsed.columns} />{/if}
+      <SongList tracks={visible} />
+    {:else if !store.ipod}
       <Welcome />
     {:else if store.source.kind === "device"}
       <DevicePage />
@@ -170,7 +187,7 @@
   <ContextMenu />
 
   <footer class="status">
-    {#if store.ipod && store.source.kind === "playlist"}
+    {#if (store.ipod && store.source.kind === "playlist") || store.source.kind === "library"}
       {count(visible.length)} {visible.length === 1 ? "song" : "songs"}, {longDuration(totals.ms)}, {bytes(totals.size)}{#if store.selected.size > 1}; {count(store.selected.size)} selected{/if}
     {/if}
   </footer>

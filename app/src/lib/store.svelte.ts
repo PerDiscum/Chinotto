@@ -2,7 +2,8 @@
 
 import * as api from "./api";
 import { TrackIndex } from "./library";
-import type { AddProgress, BrowseField, DeviceInfo, IpodView, SortKey, Source, Track, TrackChanges, WriteResult } from "./types";
+import { count } from "./format";
+import type { AddProgress, BrowseField, DeviceInfo, IpodView, LibrarySummary, LibraryView, ScanProgress, SortKey, Source, Track, TrackChanges, WriteResult } from "./types";
 
 export interface MenuItem {
   label: string;
@@ -17,7 +18,9 @@ export type Dialog =
   | { kind: "info" }
   | { kind: "delete-songs"; ids: string[] }
   | { kind: "delete-playlist"; id: string; name: string }
-  | { kind: "report"; title: string; lines: string[] };
+  | { kind: "report"; title: string; lines: string[] }
+  | { kind: "library"; id: string | null }
+  | { kind: "delete-library"; id: string; name: string };
 
 function loadVolume(): number {
   try {
@@ -71,7 +74,27 @@ export const isMac = typeof navigator !== "undefined" && /Mac/.test(navigator.pl
 class Store {
   devices = $state<DeviceInfo[]>([]);
   ipod = $state.raw<IpodView | null>(null);
-  index = $state.raw<TrackIndex | null>(null);
+  /** Index of the open iPod's songs. */
+  ipodIndex = $state.raw<TrackIndex | null>(null);
+
+  // ---- Libraries ----
+  libraries = $state<LibrarySummary[]>([]);
+  /** Libraries loaded so far (songs and playlists), with their indexes. */
+  libViews = $state.raw<Record<string, { view: LibraryView; index: TrackIndex }>>({});
+  scanProgress = $state<Record<string, ScanProgress>>({});
+  /** Libraries collapsed in the sidebar. */
+  collapsed = $state<string[]>(loadList("chinotto.collapsed", []));
+
+  /** The shown library's songs, when a library is shown. */
+  get libView(): { view: LibraryView; index: TrackIndex } | null {
+    const s = this.source;
+    return s.kind === "library" ? (this.libViews[s.lib] ?? null) : null;
+  }
+
+  /** Index of the songs being shown (a library's or the iPod's). */
+  get index(): TrackIndex | null {
+    return this.source.kind === "library" ? (this.libView?.index ?? null) : this.ipodIndex;
+  }
   /** Path of the iPod being read, while it's being read. */
   opening = $state<string | null>(null);
   ejecting = $state<string | null>(null);
@@ -118,12 +141,18 @@ class Store {
   private listOrder: string[] = [];
 
   get playingTrack(): Track | null {
-    if (!this.nowPlaying || !this.ipod) return null;
-    return this.ipod.tracks.find((t) => t.dbid === this.nowPlaying) ?? null;
+    const d = this.nowPlaying;
+    if (!d) return null;
+    if (d.startsWith("lib:")) {
+      const [, lib, id] = d.split(":");
+      return this.libViews[lib]?.index.byId.get(Number(id)) ?? null;
+    }
+    return this.ipod?.tracks.find((t) => t.dbid === d) ?? null;
   }
 
+  /** The iPod can be changed (and the iPod is what's shown). */
   get writable() {
-    return !!this.ipod?.writable;
+    return !!this.ipod?.writable && this.source.kind !== "library";
   }
 
   /** The regular (non-library, non-smart) playlist being shown, if any. */
@@ -145,6 +174,11 @@ class Store {
   /** Tracks of the current source before search and browser filters. */
   get sourceTracks(): Track[] {
     const s = this.source;
+    if (s.kind === "library") {
+      const lv = this.libView;
+      const pl = lv?.view.playlists.find((p) => p.id === s.id);
+      return lv && pl ? lv.index.get(pl.trackIds) : [];
+    }
     if (!this.ipod || !this.index || s.kind !== "playlist") return [];
     const pl = this.ipod.playlists.find((p) => p.id === s.id);
     return pl ? this.index.get(pl.trackIds) : [];
@@ -171,6 +205,10 @@ class Store {
       if (p.total) this.busy = `Adding ${Math.min(p.done + 1, p.total)} of ${p.total}${p.current ? `: ${p.current}` : ""}`;
     });
     this.deviceIcons = await api.deviceIcons().catch(() => ({}));
+    await api.onLibrariesChanged((l) => (this.libraries = l));
+    await api.onLibraryUpdated((id) => void this.reloadLibrary(id));
+    await api.onLibraryProgress((p) => (this.scanProgress = { ...this.scanProgress, [p.id]: p }));
+    this.libraries = await api.listLibraries().catch(() => []);
     const start = await api.startupFolder();
     this.devicesChanged(await api.listDevices());
     if (start && !this.ipod) await this.open(start);
@@ -184,31 +222,36 @@ class Store {
     // Open a newly plugged-in iPod when nothing else is open.
     if (!this.ipod && !this.opening) {
       const fresh = list.find((d) => !before.has(d.path) && !d.manual) ?? (before.size === 0 ? list[0] : undefined);
-      if (fresh) void this.open(fresh.path);
+      if (fresh) void this.open(fresh.path, true);
     }
   }
 
   private forget() {
     if (this.nowPlaying) void this.stopPlayback();
     this.ipod = null;
-    this.index = null;
-    this.source = { kind: "none" };
-    this.selected = new Set();
-    this.resetBrowser();
+    this.ipodIndex = null;
+    if (this.source.kind !== "library") {
+      this.source = { kind: "none" };
+      this.selected = new Set();
+      this.resetBrowser();
+    }
   }
 
-  async open(path: string) {
+  async open(path: string, auto = false) {
     if (this.opening) return;
     this.opening = path;
     this.error = null;
     try {
       const view = await api.openIpod(path);
-      this.index = new TrackIndex(view.tracks);
+      this.ipodIndex = new TrackIndex(view.tracks);
       this.ipod = view;
-      this.selected = new Set();
-      this.resetBrowser();
-      const master = view.playlists.find((p) => p.master);
-      this.source = master ? { kind: "playlist", id: master.id } : { kind: "device" };
+      // Opened by hand, or nothing else shown: show the iPod's music.
+      if (this.source.kind !== "library" || !auto) {
+        this.selected = new Set();
+        this.resetBrowser();
+        const master = view.playlists.find((p) => p.master);
+        this.source = master ? { kind: "playlist", id: master.id } : { kind: "device" };
+      }
     } catch (e) {
       this.error = String(e);
     } finally {
@@ -248,7 +291,7 @@ class Store {
   private applyView(view: IpodView, keep: string[] = [], anchor: string | null = null) {
     const index = new TrackIndex(view.tracks);
     const byDbid = new Map(view.tracks.map((t) => [t.dbid, t.id]));
-    this.index = index;
+    this.ipodIndex = index;
     this.ipod = view;
     this.selected = new Set(keep.map((d) => byDbid.get(d)).filter((x): x is number => x !== undefined));
     this.anchor = anchor !== null ? (byDbid.get(anchor) ?? null) : null;
@@ -297,6 +340,106 @@ class Store {
 
   /** An image file dropped on the window while Get Info is open. */
   infoImageDrop = $state<string | null>(null);
+
+  // ---- Libraries ----
+
+  /** URL of a song's cover about `px` wide, or null when it has none. */
+  coverUrl(t: Track | null | undefined, px: number): string | null {
+    if (!t) return null;
+    if (t.dbid.startsWith("lib:")) {
+      const [, lib] = t.dbid.split(":");
+      return t.hasCover ? api.libArtUrl(lib, t.id, px) : null;
+    }
+    return this.ipod && t.art ? api.artUrl(this.ipod.generation, t.art, px) : null;
+  }
+
+  /** Show a library's songs (loading them the first time). */
+  async showLibrary(lib: string, id = "all") {
+    if (!this.libViews[lib] && !(await this.loadLibrary(lib))) return;
+    this.select({ kind: "library", lib, id });
+  }
+
+  private async loadLibrary(lib: string): Promise<boolean> {
+    try {
+      const view = await api.libraryView(lib);
+      this.libViews = { ...this.libViews, [lib]: { view, index: new TrackIndex(view.tracks) } };
+      return true;
+    } catch (e) {
+      this.error = String(e);
+      return false;
+    }
+  }
+
+  /** A scan finished: re-read the library if it's loaded, keeping the selection. */
+  private async reloadLibrary(lib: string) {
+    const { [lib]: _, ...rest } = this.scanProgress;
+    this.scanProgress = rest;
+    if (!this.libViews[lib]) return;
+    const showing = this.source.kind === "library" && this.source.lib === lib;
+    const keep = showing ? this.selectedTracks.map((t) => t.dbid) : [];
+    if (!(await this.loadLibrary(lib)) || !showing) return;
+    const byDbid = new Map(this.libViews[lib].view.tracks.map((t) => [t.dbid, t.id]));
+    this.selected = new Set(keep.map((d) => byDbid.get(d)).filter((x): x is number => x !== undefined));
+  }
+
+  toggleCollapsed(lib: string) {
+    this.collapsed = this.collapsed.includes(lib) ? this.collapsed.filter((x) => x !== lib) : [...this.collapsed, lib];
+    savePref("chinotto.collapsed", JSON.stringify(this.collapsed));
+  }
+
+  async createLibrary(name: string, folders: string[]) {
+    try {
+      const id = await api.createLibrary(name, folders);
+      this.dialog = null;
+      this.libraries = await api.listLibraries();
+      await this.showLibrary(id);
+    } catch (e) {
+      this.error = String(e);
+    }
+  }
+
+  async updateLibrary(id: string, name: string, folders: string[]) {
+    try {
+      await api.updateLibrary(id, name, folders);
+      this.dialog = null;
+      this.libraries = await api.listLibraries();
+      const lv = this.libViews[id];
+      if (lv) this.libViews = { ...this.libViews, [id]: { ...lv, view: { ...lv.view, name } } };
+    } catch (e) {
+      this.error = String(e);
+    }
+  }
+
+  async deleteLibrary(id: string) {
+    this.dialog = null;
+    try {
+      if (this.nowPlaying?.startsWith(`lib:${id}:`)) await this.stopPlayback();
+      await api.deleteLibrary(id);
+      const { [id]: _, ...rest } = this.libViews;
+      this.libViews = rest;
+      if (this.source.kind === "library" && this.source.lib === id) this.select(this.ipod ? { kind: "device" } : { kind: "none" });
+      this.libraries = await api.listLibraries();
+    } catch (e) {
+      this.error = String(e);
+    }
+  }
+
+  async scanLibrary(id: string) {
+    try {
+      await api.scanLibrary(id);
+    } catch (e) {
+      this.error = String(e);
+    }
+  }
+
+  async removeUnavailable(id: string) {
+    try {
+      const n = await api.removeUnavailable(id);
+      this.dialog = { kind: "report", title: n ? `Removed ${count(n)} unavailable ${n === 1 ? "song" : "songs"}` : "No unavailable songs", lines: [] };
+    } catch (e) {
+      this.error = String(e);
+    }
+  }
 
   /** The picture to show for a device: the user's choice, else its model's. */
   iconFor(d: { icon: string; identity?: string | null }): string {
@@ -600,7 +743,8 @@ class Store {
   }
 
   private get sortSlot(): string {
-    return this.source.kind === "playlist" ? this.source.id : "";
+    const s = this.source;
+    return s.kind === "playlist" ? s.id : s.kind === "library" ? `lib:${s.lib}:${s.id}` : "";
   }
 
   /** Whether the shown list is a playlist with an order of its own (not the whole library). */

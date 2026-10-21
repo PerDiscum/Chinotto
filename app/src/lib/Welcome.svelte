@@ -10,7 +10,11 @@
       automatically. If you are using an MSC device (such as most Sony Walkman and Sansa models), click below to add the
       drive manually to Chinotto.
     </p>
-    <button onclick={() => store.openFolder()}>Add Drive…</button>
+    <div class="buttons">
+      <button onclick={() => store.openFolder()}>Add Drive…</button>
+      <button class="quiet" onclick={() => (store.dialog = { kind: "library", id: null })}>New Library…</button>
+    </div>
+    <p class="small">A library holds the music on your computer: choose its folders and Chinotto lists what's in them, without changing your files.</p>
   </div>
 </div>
 
@@ -43,6 +47,19 @@
     color: #fff;
     font: inherit;
     font-weight: 500;
+  }
+  .buttons {
+    display: flex;
+    gap: 8px;
+  }
+  button.quiet {
+    background: none;
+    color: var(--accent);
+    box-shadow: inset 0 0 0 1px var(--accent);
+  }
+  .small {
+    margin-top: 14px;
+    font-size: 12px;
   }
   button:focus-visible {
     outline: 2px solid var(--accent);

@@ -54,8 +54,11 @@ fn track_file(app: &AppHandle, dbid: u64) -> Result<PathBuf, String> {
 
 #[tauri::command]
 pub fn play_track(dbid: String, start_ms: Option<u64>, app: AppHandle) -> Result<(), String> {
-    let dbid: u64 = dbid.parse().map_err(|_| "bad id")?;
-    let file = track_file(&app, dbid)?;
+    let file = if dbid.starts_with("lib:") {
+        crate::libcommands::track_file(&app, &dbid)?
+    } else {
+        track_file(&app, dbid.parse().map_err(|_| "bad id")?)?
+    };
     app.state::<AppState>().player().load(file, start_ms.unwrap_or(0), true);
     Ok(())
 }

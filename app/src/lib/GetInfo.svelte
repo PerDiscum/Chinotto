@@ -2,7 +2,7 @@
   import { untrack } from "svelte";
   import { store } from "./store.svelte";
   import Modal from "./Modal.svelte";
-  import { artUrl, imagePreview, pasteImage as pastedImagePath, pickImage } from "./api";
+  import { imagePreview, pasteImage as pastedImagePath, pickImage } from "./api";
   import { bytes, count, date, duration } from "./format";
   import type { Track, TrackChanges } from "./types";
 
@@ -45,7 +45,7 @@
   /** Artwork change to apply on OK. */
   let artwork = $state<{ set: string; preview: string; size: string } | "remove" | null>(null);
   let artProblem = $state<string | null>(null);
-  const covers = untrack(() => (store.ipod ? tracks.map((t) => (t.art ? artUrl(store.ipod!.generation, t.art, 320) : null)) : []));
+  const covers = untrack(() => tracks.map((t) => store.coverUrl(t, 320)));
   const sameCover = covers.every((c) => c === covers[0]);
 
   async function useImage(path: string) {
@@ -151,7 +151,7 @@
   const first = tracks[0];
   const totalMs = tracks.reduce((a, t) => a + t.lengthMs, 0);
   const totalSize = tracks.reduce((a, t) => a + t.size, 0);
-  const cover = untrack(() => (store.ipod && first?.art ? artUrl(store.ipod.generation, first.art, 128) : null));
+  const cover = untrack(() => store.coverUrl(first, 128));
   const heading = many ? `${count(tracks.length)} songs` : first?.title || "Untitled";
 </script>
 
@@ -332,7 +332,7 @@
 
   {#snippet buttons()}
     {#if readOnly}
-      <span class="left">Read-only: turn on “Allow changes” on the iPod's page to edit.</span>
+      <span class="left">{store.source.kind === "library" ? "Read-only: Chinotto doesn't change your music files." : "Read-only: turn on “Allow changes” on the iPod's page to edit."}</span>
       <button class="primary" onclick={close}>Done</button>
     {:else}
       <button onclick={close} disabled={saving}>Cancel</button>

@@ -1,0 +1,355 @@
+//! Commands for music libraries (see library.rs), the hourly scan, and the
+//! `libart:` URL scheme serving their covers.
+
+use std::collections::HashSet;
+use std::path::PathBuf;
+use std::time::{Duration, Instant};
+
+use serde::Serialize;
+use tauri::http::{header, Request, Response as HttpResponse, StatusCode};
+use tauri::{AppHandle, Emitter, Manager, State};
+
+use crate::library::{self, Library, Summary};
+use crate::state::AppState;
+
+/// All libraries, kept in memory; each saved to `<dir>/<id>.json`.
+#[derive(Default)]
+pub struct Libraries {
+    pub dir: Option<PathBuf>,
+    pub list: Vec<Library>,
+    pub scanning: HashSet<String>,
+}
+
+impl Libraries {
+    pub fn load(dir: PathBuf) -> Self {
+        let mut list = Vec::new();
+        if let Ok(rd) = std::fs::read_dir(&dir) {
+            for e in rd.flatten() {
+                let p = e.path();
+                if p.extension().is_some_and(|x| x == "json") {
+                    match Library::load(&p) {
+                        Ok(l) => list.push(l),
+                        Err(e) => eprintln!("Skipping library {e}"),
+                    }
+                }
+            }
+        }
+        list.sort_by_key(|l| l.name.to_lowercase());
+        Libraries { dir: Some(dir), list, scanning: HashSet::new() }
+    }
+
+    fn get_mut(&mut self, id: &str) -> Result<&mut Library, String> {
+        self.list.iter_mut().find(|l| l.id == id).ok_or_else(|| "That library doesn't exist any more".to_string())
+    }
+
+    fn save(&self, id: &str) -> Result<(), String> {
+        let dir = self.dir.as_deref().ok_or("No place to keep libraries")?;
+        self.list.iter().find(|l| l.id == id).ok_or("No such library")?.save(dir)
+    }
+
+    fn summaries(&self) -> Vec<LibrarySummary> {
+        self.list.iter().map(|l| LibrarySummary { scanning: self.scanning.contains(&l.id), summary: l.summary() }).collect()
+    }
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct LibrarySummary {
+    #[serde(flatten)]
+    summary: Summary,
+    scanning: bool,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct Progress<'a> {
+    id: &'a str,
+    done: usize,
+    total: usize,
+    current: &'a str,
+}
+
+fn emit_list(app: &AppHandle) {
+    let list = app.state::<AppState>().libraries.lock().unwrap().summaries();
+    let _ = app.emit("libraries-changed", list);
+}
+
+/// Scan a library in the background (nothing happens if it's already scanning).
+pub fn start_scan(app: &AppHandle, id: &str) {
+    let snapshot = {
+        let state = app.state::<AppState>();
+        let mut libs = state.libraries.lock().unwrap();
+        if libs.scanning.contains(id) {
+            return;
+        }
+        let Some(lib) = libs.list.iter().find(|l| l.id == id).cloned() else { return };
+        libs.scanning.insert(id.to_string());
+        lib
+    };
+    emit_list(app);
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let mut lib = snapshot;
+        let id = lib.id.clone();
+        let mut last = Instant::now();
+        let result = library::scan(&mut lib, |done, total, current| {
+            if done == total || last.elapsed() > Duration::from_millis(250) {
+                last = Instant::now();
+                let _ = app.emit("library-progress", Progress { id: &id, done, total, current });
+            }
+        });
+        let state = app.state::<AppState>();
+        let mut libs = state.libraries.lock().unwrap();
+        libs.scanning.remove(&id);
+        let mut rescan = false;
+        if let Ok(cur) = libs.get_mut(&id) {
+            // Keep a rename made meanwhile; scan again if the folders changed.
+            rescan = cur.folders != lib.folders;
+            cur.tracks = lib.tracks;
+            cur.next_id = lib.next_id;
+            cur.last_scan = lib.last_scan;
+            if let Err(e) = libs.save(&id) {
+                let _ = app.emit("player-error", e);
+            }
+        }
+        drop(libs);
+        eprintln!("Scanned library {id}: {result:?}");
+        emit_list(&app);
+        let _ = app.emit("library-updated", &id);
+        if rescan {
+            start_scan(&app, &id);
+        }
+    });
+}
+
+/// Scan every library shortly after start-up, then every hour.
+pub fn start_hourly(app: AppHandle) {
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_secs(10));
+        loop {
+            let ids: Vec<String> = app.state::<AppState>().libraries.lock().unwrap().list.iter().map(|l| l.id.clone()).collect();
+            for id in ids {
+                start_scan(&app, &id);
+            }
+            std::thread::sleep(Duration::from_secs(3600));
+        }
+    });
+}
+
+#[tauri::command]
+pub fn list_libraries(state: State<'_, AppState>) -> Vec<LibrarySummary> {
+    state.libraries.lock().unwrap().summaries()
+}
+
+#[tauri::command]
+pub fn create_library(name: String, folders: Vec<String>, app: AppHandle) -> Result<String, String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("Give the library a name".into());
+    }
+    let lib = Library::new(name, folders);
+    let id = lib.id.clone();
+    {
+        let state = app.state::<AppState>();
+        let mut libs = state.libraries.lock().unwrap();
+        libs.list.push(lib);
+        libs.save(&id)?;
+    }
+    start_scan(&app, &id);
+    Ok(id)
+}
+
+#[tauri::command]
+pub fn update_library(id: String, name: Option<String>, folders: Option<Vec<String>>, app: AppHandle) -> Result<(), String> {
+    let changed_folders;
+    {
+        let state = app.state::<AppState>();
+        let mut libs = state.libraries.lock().unwrap();
+        let lib = libs.get_mut(&id)?;
+        if let Some(n) = name.as_deref().map(str::trim).filter(|n| !n.is_empty()) {
+            lib.name = n.to_string();
+        }
+        let before = lib.folders.clone();
+        if let Some(f) = folders {
+            library::set_folders(lib, f);
+        }
+        changed_folders = lib.folders != before;
+        libs.save(&id)?;
+    }
+    emit_list(&app);
+    if changed_folders {
+        start_scan(&app, &id);
+    }
+    Ok(())
+}
+
+/// Forget a library: only Chinotto's own list of it is deleted, never the music.
+#[tauri::command]
+pub fn delete_library(id: String, app: AppHandle) -> Result<(), String> {
+    {
+        let state = app.state::<AppState>();
+        let mut libs = state.libraries.lock().unwrap();
+        let dir = libs.dir.clone().ok_or("No place to keep libraries")?;
+        libs.list.retain(|l| l.id != id);
+        let file = dir.join(format!("{id}.json"));
+        if file.is_file() {
+            std::fs::remove_file(&file).map_err(|e| format!("Couldn't remove the library: {e}"))?;
+        }
+    }
+    emit_list(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn scan_library(id: String, app: AppHandle) {
+    start_scan(&app, &id);
+}
+
+#[tauri::command]
+pub fn remove_unavailable(id: String, app: AppHandle) -> Result<usize, String> {
+    let n = {
+        let state = app.state::<AppState>();
+        let mut libs = state.libraries.lock().unwrap();
+        let n = libs.get_mut(&id)?.remove_unavailable();
+        libs.save(&id)?;
+        n
+    };
+    emit_list(&app);
+    let _ = app.emit("library-updated", &id);
+    Ok(n)
+}
+
+// ---- The library as the window sees it (same shape as an iPod's songs) ----
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TrackView<'a> {
+    id: u32,
+    dbid: String,
+    #[serde(flatten)]
+    tags: &'a library::Tags,
+    location: &'a str,
+    size: u64,
+    rating: u8,
+    play_count: u32,
+    media_type: u32,
+    added: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    played: Option<i64>,
+    modified: i64,
+    art: u32,
+    has_cover: bool,
+    /// Its folder isn't there (drive unplugged).
+    unavailable: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PlaylistView {
+    id: String,
+    name: String,
+    master: bool,
+    smart: bool,
+    track_ids: Vec<u32>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LibraryView<'a> {
+    id: &'a str,
+    name: &'a str,
+    playlists: Vec<PlaylistView>,
+    tracks: Vec<TrackView<'a>>,
+}
+
+/// The whole library as one JSON string (see `commands::view`).
+#[tauri::command]
+pub fn library_view(id: String, state: State<'_, AppState>) -> Result<tauri::ipc::Response, String> {
+    let libs = state.libraries.lock().unwrap();
+    let lib = libs.list.iter().find(|l| l.id == id).ok_or("That library doesn't exist any more")?;
+    let missing: HashSet<&str> = lib.folders.iter().filter(|f| !library::folder_available(f)).map(String::as_str).collect();
+    let v = LibraryView {
+        id: &lib.id,
+        name: &lib.name,
+        playlists: vec![PlaylistView {
+            id: "all".into(),
+            name: lib.name.clone(),
+            master: true,
+            smart: false,
+            track_ids: lib.tracks.iter().map(|t| t.id).collect(),
+        }],
+        tracks: lib
+            .tracks
+            .iter()
+            .map(|t| TrackView {
+                id: t.id,
+                dbid: format!("lib:{}:{}", lib.id, t.id),
+                tags: &t.tags,
+                location: &t.path,
+                size: t.size,
+                rating: t.rating,
+                play_count: t.play_count,
+                media_type: 1,
+                added: t.added,
+                played: t.played,
+                modified: t.mtime,
+                art: 0,
+                has_cover: t.cover,
+                unavailable: lib.folder_of(&t.path).is_some_and(|f| missing.contains(f)),
+            })
+            .collect(),
+    };
+    serde_json::to_string(&v).map(tauri::ipc::Response::new).map_err(|e| e.to_string())
+}
+
+/// The file of a library song, from its `lib:<library>:<song>` id.
+pub fn track_file(app: &AppHandle, dbid: &str) -> Result<PathBuf, String> {
+    let mut parts = dbid.strip_prefix("lib:").ok_or("bad id")?.splitn(2, ':');
+    let (lib_id, tid) = (parts.next().ok_or("bad id")?, parts.next().ok_or("bad id")?.parse::<u32>().map_err(|_| "bad id")?);
+    let state = app.state::<AppState>();
+    let libs = state.libraries.lock().unwrap();
+    let lib = libs.list.iter().find(|l| l.id == lib_id).ok_or("That library doesn't exist any more")?;
+    let t = lib.track(tid).ok_or("That song isn't in the library any more")?;
+    let path = PathBuf::from(&t.path);
+    if !path.is_file() {
+        let folder = lib.folder_of(&t.path).unwrap_or("its folder");
+        return Err(if library::folder_available(folder) {
+            format!("The song's file is missing ({})", path.display())
+        } else {
+            format!("The song's drive isn't connected ({folder})")
+        });
+    }
+    Ok(path)
+}
+
+// ---- libart: /<library>-<song>-<px> → JPEG cover ----
+
+pub fn handle_art(app: &AppHandle, req: &Request<Vec<u8>>) -> HttpResponse<Vec<u8>> {
+    match render_art(app, req.uri().path()) {
+        Some(jpg) => HttpResponse::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, "image/jpeg")
+            .header(header::CACHE_CONTROL, "max-age=600")
+            .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
+            .body(jpg)
+            .unwrap(),
+        None => HttpResponse::builder().status(StatusCode::NOT_FOUND).body(Vec::new()).unwrap(),
+    }
+}
+
+fn render_art(app: &AppHandle, path: &str) -> Option<Vec<u8>> {
+    let mut parts = path.trim_start_matches('/').split('-');
+    let (lib, tid, px) = (parts.next()?, parts.next()?, parts.next()?.parse::<u32>().ok()?.clamp(16, 1200));
+    let file = track_file(app, &format!("lib:{lib}:{tid}")).ok()?;
+    let bytes = crate::tags::embedded_cover(&file).or_else(|| std::fs::read(library::folder_cover(file.parent()?)?).ok())?;
+    cover_jpeg(&bytes, px)
+}
+
+fn cover_jpeg(bytes: &[u8], px: u32) -> Option<Vec<u8>> {
+    let img = crate::cover::decode(bytes).ok()?;
+    let small = if img.width() > px || img.height() > px { img.thumbnail(px, px) } else { img };
+    let mut out = Vec::new();
+    let enc = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, 88);
+    small.to_rgb8().write_with_encoder(enc).ok()?;
+    Some(out)
+}

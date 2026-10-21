@@ -2,6 +2,7 @@
   import { store } from "./store.svelte";
   import Modal from "./Modal.svelte";
   import GetInfo from "./GetInfo.svelte";
+  import LibraryDialog from "./LibraryDialog.svelte";
   import { count } from "./format";
 
   const close = () => (store.dialog = null);
@@ -30,6 +31,17 @@
     {#snippet buttons()}
       <button onclick={close}>Cancel</button>
       <button class="danger" onclick={() => store.deletePlaylist(d.id)}>Delete Playlist</button>
+    {/snippet}
+  </Modal>
+{:else if store.dialog?.kind === "library"}
+  <LibraryDialog id={store.dialog.id} />
+{:else if store.dialog?.kind === "delete-library"}
+  {@const d = store.dialog}
+  <Modal title="Delete the library “{d.name}”?" onclose={close}>
+    <p>Chinotto forgets this library and its list of songs. Your music files and folders aren't touched.</p>
+    {#snippet buttons()}
+      <button onclick={close}>Cancel</button>
+      <button class="danger" onclick={() => store.deleteLibrary(d.id)}>Delete Library</button>
     {/snippet}
   </Modal>
 {:else if store.dialog?.kind === "report"}

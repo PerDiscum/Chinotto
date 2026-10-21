@@ -36,6 +36,33 @@
     }
   }
 
+  const isLib = (lib: string, id = "all") => store.source.kind === "library" && store.source.lib === lib && store.source.id === id;
+
+  function libraryMenu(e: MouseEvent, id: string, name: string) {
+    e.preventDefault();
+    const lib = store.libraries.find((l) => l.id === id);
+    const missing = lib?.folders.some((f) => !f.available) ?? false;
+    store.menu = {
+      x: e.clientX,
+      y: e.clientY,
+      items: [
+        { label: lib?.scanning ? "Scanning…" : "Scan Now", disabled: !!lib?.scanning, action: () => store.scanLibrary(id) },
+        { label: "Edit Library…", action: () => (store.dialog = { kind: "library", id }) },
+        { label: "Remove Unavailable Songs", disabled: !missing, action: () => store.removeUnavailable(id) },
+        { label: "", separator: true },
+        { label: "Delete Library…", danger: true, action: () => (store.dialog = { kind: "delete-library", id, name }) },
+      ],
+    };
+  }
+
+  function libTitle(l: (typeof store.libraries)[number]): string {
+    const off = l.folders.filter((f) => !f.available).length;
+    const p = store.scanProgress[l.id];
+    if (l.scanning && p?.total) return `Scanning: ${p.done} of ${p.total}`;
+    if (l.scanning) return "Scanning…";
+    return `${l.songs} songs${off ? `; ${off} ${off === 1 ? "folder" : "folders"} not connected` : ""}`;
+  }
+
   function focusSelect(node: HTMLInputElement) {
     node.focus();
     node.select();
@@ -43,6 +70,39 @@
 </script>
 
 <nav class="sources" aria-label="Sources">
+  {#if store.libraries.length}
+    <h2>Libraries</h2>
+    <ul class="libs">
+      {#each store.libraries as l (l.id)}
+        {@const open = !store.collapsed.includes(l.id)}
+        <li>
+          <div class="row device">
+            <button
+              class="disclose"
+              aria-label={open ? `Collapse ${l.name}` : `Expand ${l.name}`}
+              aria-expanded={open}
+              onclick={() => store.toggleCollapsed(l.id)}>{open ? "▾" : "▸"}</button
+            >
+            <button class="name" onclick={() => store.showLibrary(l.id)} oncontextmenu={(e) => libraryMenu(e, l.id, l.name)} title={libTitle(l)}>
+              <Icon name="library" />
+              <span>{l.name}</span>
+              {#if l.scanning}<span class="spinner" aria-label="Scanning"></span>{/if}
+              {#if l.folders.some((f) => !f.available)}<span class="off" aria-label="Some folders not connected">◌</span>{/if}
+            </button>
+          </div>
+          {#if open}
+            <ul class="nested">
+              <li>
+                <button class="row" class:active={isLib(l.id, "all")} onclick={() => store.showLibrary(l.id)}>
+                  <Icon name="music" /><span>Music</span>
+                </button>
+              </li>
+            </ul>
+          {/if}
+        </li>
+      {/each}
+    </ul>
+  {/if}
   <h2>Devices</h2>
   {#if store.devices.length === 0}
     <p class="hint">Connect an iPod and it shows up here.</p>
@@ -208,6 +268,29 @@
     font-size: 13px;
     user-select: text;
     -webkit-user-select: text;
+  }
+  .libs .device .name {
+    padding-left: 2px;
+  }
+  .disclose {
+    flex: none;
+    width: 14px;
+    height: 100%;
+    margin-left: 4px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--side-muted);
+    font-size: 10px;
+  }
+  .off {
+    flex: none;
+    margin-left: auto;
+    color: var(--side-muted);
+    font-size: 11px;
+  }
+  .libs + h2 {
+    margin-top: 14px;
   }
   .dev {
     flex: none;

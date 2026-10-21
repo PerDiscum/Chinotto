@@ -19,6 +19,7 @@
   const sourceName = $derived.by(() => {
     const s = store.source;
     if (s.kind === "device") return store.ipod?.name ?? "";
+    if (s.kind === "library") return `${store.libView?.view.name ?? "Library"} — Music`;
     if (s.kind === "playlist") {
       const p = store.ipod?.playlists.find((x) => x.id === s.id);
       return p?.master ? `${store.ipod?.name} — Music` : (p?.name ?? "");
@@ -33,7 +34,7 @@
       <button aria-label="Previous" title="Previous" disabled={!store.nowPlaying} onclick={() => store.previous()}>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h2v14H6zM20 5v14L9 12z" /></svg>
       </button>
-      <button class="main" aria-label={playing ? "Pause" : "Play"} title={playing ? "Pause (Space) · Stop (⌘.)" : "Play (Space)"} disabled={!store.ipod} onclick={() => store.togglePlay(visible)}>
+      <button class="main" aria-label={playing ? "Pause" : "Play"} title={playing ? "Pause (Space) · Stop (⌘.)" : "Play (Space)"} disabled={!store.index} onclick={() => store.togglePlay(visible)}>
         {#if playing}
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z" /></svg>
         {:else}
@@ -87,10 +88,14 @@
         />
         <span class="t">-{duration(Math.max(0, total - shown))}</span>
       </div>
-    {:else if store.ipod}
+    {:else if store.source.kind === "library" && store.scanProgress[store.source.lib]?.total}
+      {@const p = store.scanProgress[store.source.lib]}
+      <strong>Scanning {store.libView?.view.name}</strong>
+      <span class="sub">{count(p.done)} of {count(p.total)} new or changed files{p.current ? `: ${p.current}` : ""}</span>
+    {:else if store.ipod || store.source.kind === "library"}
       <strong>{sourceName}</strong>
       <span class="sub">
-        {#if store.source.kind === "device"}
+        {#if store.source.kind === "device" && store.ipod}
           {count(store.ipod.tracks.length)} songs on this iPod
         {:else}
           {count(visibleCount)} {visibleCount === 1 ? "song" : "songs"}, {longDuration(visibleMs)}
@@ -109,7 +114,7 @@
       aria-label="Search songs"
       bind:value={store.search}
       oninput={() => store.searchStarted()}
-      disabled={!store.ipod}
+      disabled={!store.ipod && store.source.kind !== "library"}
       spellcheck="false"
       autocomplete="off"
     />
