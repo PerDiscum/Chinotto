@@ -20,6 +20,8 @@ pub struct DeviceInfo {
     pub model_number: Option<String>,
     /// Picture key for the model, e.g. "ipod-nano-3g"; "generic" when unknown.
     pub icon: &'static str,
+    /// FireWire GUID or serial, for remembering settings per device.
+    pub identity: Option<String>,
     pub capacity: u64,
     pub free: u64,
     /// Added by hand with "Open iPod folder…" rather than found mounted.
@@ -68,6 +70,7 @@ pub fn describe(root: &Path, manual: bool) -> DeviceInfo {
         model: sys.model_name().map(str::to_string),
         model_number: sys.model_number.clone(),
         icon: sys.generation().map(|g| g.icon).unwrap_or("generic"),
+        identity: sys.identity(),
         capacity,
         free,
         manual,

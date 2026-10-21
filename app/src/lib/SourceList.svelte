@@ -56,7 +56,7 @@
             onclick={() => (isOpen(d.path) ? store.select({ kind: "device" }) : store.open(d.path))}
             title={d.path}
           >
-            {#if deviceImage(d.icon)}<img class="dev" src={deviceImage(d.icon)} alt="" />{:else}<Icon name="ipod" />{/if}
+            {#if deviceImage(store.iconFor(d))}<img class="dev" src={deviceImage(store.iconFor(d))} alt="" />{:else}<Icon name="ipod" />{/if}
             <span>{isOpen(d.path) ? store.ipod!.name : d.volume}</span>
             {#if store.opening === d.path}<span class="spinner" aria-label="Reading"></span>{/if}
           </button>

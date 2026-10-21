@@ -33,6 +33,8 @@ pub struct AppState {
 pub struct Settings {
     /// iPods (by FireWire GUID or serial) the user has allowed Chinotto to change.
     pub writable_ipods: Vec<String>,
+    /// Picture chosen by the user per device (identity → picture key).
+    pub device_icons: HashMap<String, String>,
 }
 
 /// An iPod's databases, read into memory. Read-only for now.
@@ -103,13 +105,31 @@ impl AppState {
         if allow {
             s.writable_ipods.push(identity.to_string());
         }
+        self.save_settings(&s)
+    }
+
+    pub fn device_icons(&self) -> HashMap<String, String> {
+        self.settings.lock().unwrap().device_icons.clone()
+    }
+
+    /// `None` goes back to the automatic picture.
+    pub fn set_device_icon(&self, identity: &str, icon: Option<String>) -> Result<(), String> {
+        let mut s = self.settings.lock().unwrap();
+        match icon {
+            Some(k) => s.device_icons.insert(identity.to_string(), k),
+            None => s.device_icons.remove(identity),
+        };
+        self.save_settings(&s)
+    }
+
+    fn save_settings(&self, s: &Settings) -> Result<(), String> {
         if let Some(path) = self.settings_path.lock().unwrap().as_ref() {
             if let Some(dir) = path.parent() {
                 std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
             }
             // Write a temporary file, then rename over the old one.
             let tmp = path.with_extension("json.tmp");
-            std::fs::write(&tmp, serde_json::to_vec_pretty(&*s).unwrap()).map_err(|e| e.to_string())?;
+            std::fs::write(&tmp, serde_json::to_vec_pretty(s).unwrap()).map_err(|e| e.to_string())?;
             std::fs::rename(&tmp, path).map_err(|e| e.to_string())?;
         }
         Ok(())

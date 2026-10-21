@@ -51,6 +51,8 @@ fn main() {
             write::image_preview,
             write::save_cover,
             write::paste_image,
+            commands::device_icons,
+            commands::set_device_icon,
         ])
         .setup(|app| {
             app.state::<AppState>().set_player(playback::start(app.handle()));

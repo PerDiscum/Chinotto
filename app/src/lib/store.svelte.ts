@@ -99,6 +99,8 @@ class Store {
   queue = $state.raw<string[]>([]);
   queuePos = $state(0);
   volume = $state(loadVolume());
+  /** Pictures chosen per device (identity → picture key). */
+  deviceIcons = $state<Record<string, string>>({});
   shuffle = $state(loadPref("chinotto.shuffle", ["on", "off"] as const, "off") === "on");
   repeat = $state<Repeat>(loadPref("chinotto.repeat", ["off", "all", "one"] as const, "off"));
   /** The queue in the list's own order (the queue itself is shuffled when shuffle is on). */
@@ -157,6 +159,7 @@ class Store {
       this.progress = p;
       if (p.total) this.busy = `Adding ${Math.min(p.done + 1, p.total)} of ${p.total}${p.current ? `: ${p.current}` : ""}`;
     });
+    this.deviceIcons = await api.deviceIcons().catch(() => ({}));
     const start = await api.startupFolder();
     this.devicesChanged(await api.listDevices());
     if (start && !this.ipod) await this.open(start);
@@ -283,6 +286,24 @@ class Store {
 
   /** An image file dropped on the window while Get Info is open. */
   infoImageDrop = $state<string | null>(null);
+
+  /** The picture to show for a device: the user's choice, else its model's. */
+  iconFor(d: { icon: string; identity?: string | null }): string {
+    return (d.identity && this.deviceIcons[d.identity]) || d.icon;
+  }
+
+  /** Choose a device's picture (null: automatic). */
+  async setDeviceIcon(identity: string, icon: string | null) {
+    try {
+      await api.setDeviceIcon(identity, icon);
+      const next = { ...this.deviceIcons };
+      if (icon) next[identity] = icon;
+      else delete next[identity];
+      this.deviceIcons = next;
+    } catch (e) {
+      this.error = String(e);
+    }
+  }
 
   /** Save a song's cover to a PNG file. */
   async saveCover(t: Track) {

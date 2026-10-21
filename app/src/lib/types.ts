@@ -7,6 +7,8 @@ export interface DeviceInfo {
   modelNumber?: string | null;
   /** Picture key for the model, e.g. "ipod-nano-3g"; "generic" when unknown. */
   icon: string;
+  /** FireWire GUID or serial, when the device reports one. */
+  identity?: string | null;
   capacity: number;
   free: number;
   manual: boolean;

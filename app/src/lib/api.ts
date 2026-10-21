@@ -103,3 +103,7 @@ export async function saveCover(imageId: number, name: string): Promise<boolean>
 }
 /** The clipboard's image, kept in a temporary file; returns its path. */
 export const pasteImage = () => invoke<string>("paste_image");
+
+// ---- Device pictures ----
+export const deviceIcons = () => invoke<Record<string, string>>("device_icons");
+export const setDeviceIcon = (identity: string, icon: string | null) => invoke<void>("set_device_icon", { identity, icon });

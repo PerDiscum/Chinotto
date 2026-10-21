@@ -92,6 +92,10 @@ Everything decided and learned so far, so work can continue in a new session.
   device). Zune: possible later via libmtp's MTP-Z support (needs the user's
   own key file, which can't be shipped); not promised.
 
+- **Icon chooser** (done, 0018): click the picture on the device page; the
+  choice is saved per device in settings.json (`deviceIcons`, identity → key);
+  "Use automatic" removes it.
+
 Order chosen: confirm editing on the nano → **playback** (done) → artwork (done) → icon chooser → shuffle/repeat → playlist reordering → column browser fixes and Format/Bitrate columns → media library.
 
 ## Status (2026-10-20)

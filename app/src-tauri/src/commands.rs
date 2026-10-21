@@ -250,3 +250,15 @@ pub fn startup_folder(state: State<'_, AppState>) -> Option<String> {
         None
     }
 }
+
+/// Pictures the user chose for devices (identity → picture key).
+#[tauri::command]
+pub fn device_icons(state: State<'_, AppState>) -> std::collections::HashMap<String, String> {
+    state.device_icons()
+}
+
+/// Choose a device's picture; `icon: null` goes back to the automatic one.
+#[tauri::command]
+pub fn set_device_icon(identity: String, icon: Option<String>, state: State<'_, AppState>) -> Result<(), String> {
+    state.set_device_icon(&identity, icon)
+}
