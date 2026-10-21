@@ -220,13 +220,16 @@
     border-color: var(--accent);
     background: var(--sel-quiet);
   }
-  @media (max-width: 760px) {
-    .top {
-      flex-direction: column-reverse;
-    }
-    .device {
-      height: 140px;
-      max-width: 100%;
+  /* Too narrow for the details and the picture side by side: hide the picture. */
+  .top {
+    container-type: inline-size;
+  }
+  .top > .summary {
+    min-width: 0;
+  }
+  @container (max-width: 600px) {
+    .picture {
+      display: none;
     }
   }
   h1 {

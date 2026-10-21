@@ -83,7 +83,10 @@ export type Source =
   | { kind: "playlist"; id: string };
 
 export type SortKey =
-  | "title" | "time" | "artist" | "album" | "genre" | "year" | "rating" | "plays" | "added" | "kind";
+  | "order" | "title" | "time" | "artist" | "album" | "genre" | "year" | "rating" | "plays" | "added" | "kind" | "format" | "bitrate";
+
+/** Columns the column browser can show, broadest first. */
+export type BrowseField = "genre" | "format" | "year" | "composer" | "artist" | "album";
 
 /** What every command that changes the iPod returns. */
 export interface WriteResult<T = unknown> {

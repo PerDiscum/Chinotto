@@ -96,6 +96,15 @@ Everything decided and learned so far, so work can continue in a new session.
   choice is saved per device in settings.json (`deviceIcons`, identity → key);
   "Use automatic" removes it.
 
+- **Done in 0019:** playlist reordering (drag within a playlist shown in its
+  own order, "#" column, unfiltered; sort is remembered per playlist and
+  playlists start in their own order); song-list Format and Bit Rate columns
+  and a column chooser (right-click the titles; hidden ones in localStorage);
+  browser column chooser (Genre, Format, Year, Composer, Artist, Album, shown
+  broadest first); device picture hides when the page is too narrow; new
+  welcome text. "Add Drive…" still only opens iPods until the MSC wizard
+  exists.
+
 Order chosen: confirm editing on the nano → **playback** (done) → artwork (done) → icon chooser → shuffle/repeat → playlist reordering → column browser fixes and Format/Bitrate columns → media library.
 
 ## Status (2026-10-20)

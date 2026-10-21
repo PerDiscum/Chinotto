@@ -201,7 +201,9 @@ pub fn list_devices(state: State<'_, AppState>) -> Vec<DeviceInfo> {
 pub fn add_folder(path: String, state: State<'_, AppState>) -> Result<DeviceInfo, String> {
     let p = PathBuf::from(&path);
     if !is_ipod_root(&p) {
-        return Err(format!("{path} isn't an iPod: there's no iPod_Control/iTunes/iTunesDB inside it."));
+        return Err(format!(
+            "{path} isn't an iPod (there's no iPod_Control/iTunes/iTunesDB inside it). Chinotto can only open iPods so far; other players are coming."
+        ));
     }
     state.add_manual_root(p.clone());
     Ok(devices::describe(&p, true))

@@ -2,7 +2,7 @@
 
 import * as api from "./api";
 import { TrackIndex } from "./library";
-import type { AddProgress, DeviceInfo, IpodView, SortKey, Source, Track, TrackChanges, WriteResult } from "./types";
+import type { AddProgress, BrowseField, DeviceInfo, IpodView, SortKey, Source, Track, TrackChanges, WriteResult } from "./types";
 
 export interface MenuItem {
   label: string;
@@ -46,6 +46,15 @@ function savePref(key: string, v: string) {
   }
 }
 
+function loadList(key: string, fallback: string[]): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(key) ?? "null");
+    return Array.isArray(v) && v.every((x) => typeof x === "string") ? v : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 /** Fisher–Yates shuffle of a copy. */
 function shuffled<T>(a: T[]): T[] {
   const r = a.slice();
@@ -72,11 +81,13 @@ class Store {
   search = $state("");
   showBrowser = $state(true);
   showArtwork = $state(true);
-  genre = $state<string | null>(null);
-  artist = $state<string | null>(null);
-  album = $state<string | null>(null);
-  sortKey = $state<SortKey>("artist");
-  sortDir = $state<1 | -1>(1);
+  /** Column browser: which columns show, and what's picked in each. */
+  browserFields = $state<BrowseField[]>(loadList("chinotto.browserFields", ["genre", "artist", "album"]) as BrowseField[]);
+  browserSel = $state<Partial<Record<BrowseField, string | null>>>({});
+  /** Song list columns that are hidden. */
+  hiddenColumns = $state<string[]>(loadList("chinotto.hiddenColumns", []));
+  /** Sorting per source (playlist id), like iTunes: playlists start in their own order. */
+  private sorts = $state<Record<string, { key: SortKey; dir: 1 | -1 }>>({});
   selected = $state.raw<Set<number>>(new Set());
   /** Last clicked track (anchor for shift-click ranges). */
   anchor = $state<number | null>(null);
@@ -89,7 +100,7 @@ class Store {
   /** Playlist whose name is being edited in the source list. */
   renaming = $state<string | null>(null);
   /** Songs being dragged inside the window (Chinotto's own drag, not the OS's). */
-  songDrag = $state<{ dbids: string[]; x: number; y: number; target: string | null } | null>(null);
+  songDrag = $state<{ dbids: string[]; x: number; y: number; target: string | null; insertAt?: number | null } | null>(null);
 
   // ---- Playback ----
   player = $state<api.PlayerStatus>({ state: "stopped", positionMs: 0, durationMs: null });
@@ -555,27 +566,83 @@ class Store {
   }
 
   resetBrowser() {
-    this.genre = this.artist = this.album = null;
+    this.browserSel = {};
   }
 
-  pickGenre(g: string | null) {
-    this.genre = g;
-    this.artist = this.album = null;
+  /** Pick in a browser column; the columns to its right go back to "All". */
+  pick(field: BrowseField, v: string | null) {
+    const i = this.browserFields.indexOf(field);
+    const next: Partial<Record<BrowseField, string | null>> = {};
+    for (const f of this.browserFields.slice(0, i)) next[f] = this.browserSel[f] ?? null;
+    next[field] = v;
+    this.browserSel = next;
   }
-  pickArtist(a: string | null) {
-    this.artist = a;
-    this.album = null;
+
+  /** True when the browser is narrowing the list. */
+  get browserFiltering(): boolean {
+    return this.showBrowser && Object.values(this.browserSel).some((v) => v !== null && v !== undefined);
   }
-  pickAlbum(a: string | null) {
-    this.album = a;
+
+  toggleBrowserField(f: BrowseField) {
+    const on = this.browserFields.includes(f);
+    if (on && this.browserFields.length === 1) return; // keep at least one
+    const all: BrowseField[] = ["genre", "format", "year", "composer", "artist", "album"];
+    this.browserFields = all.filter((x) => (x === f ? !on : this.browserFields.includes(x)));
+    this.resetBrowser();
+    savePref("chinotto.browserFields", JSON.stringify(this.browserFields));
+  }
+
+  toggleColumn(key: string) {
+    this.hiddenColumns = this.hiddenColumns.includes(key) ? this.hiddenColumns.filter((k) => k !== key) : [...this.hiddenColumns, key];
+    savePref("chinotto.hiddenColumns", JSON.stringify(this.hiddenColumns));
+    // Hiding the sorted column sorts by artist instead.
+    if (this.hiddenColumns.includes(this.sortKey)) this.setSort("artist", 1);
+  }
+
+  private get sortSlot(): string {
+    return this.source.kind === "playlist" ? this.source.id : "";
+  }
+
+  /** Whether the shown list is a playlist with an order of its own (not the whole library). */
+  get hasOwnOrder(): boolean {
+    const s = this.source;
+    return s.kind === "playlist" && !!this.ipod?.playlists.some((p) => p.id === s.id && !p.master);
+  }
+
+  get sortKey(): SortKey {
+    return this.sorts[this.sortSlot]?.key ?? (this.hasOwnOrder ? "order" : "artist");
+  }
+
+  get sortDir(): 1 | -1 {
+    return this.sorts[this.sortSlot]?.dir ?? 1;
+  }
+
+  private setSort(key: SortKey, dir: 1 | -1) {
+    this.sorts = { ...this.sorts, [this.sortSlot]: { key, dir } };
   }
 
   sortBy(key: SortKey) {
-    if (this.sortKey === key) this.sortDir = this.sortDir === 1 ? -1 : 1;
-    else {
-      this.sortKey = key;
-      this.sortDir = 1;
-    }
+    if (this.sortKey === key) this.setSort(key, this.sortDir === 1 ? -1 : 1);
+    else this.setSort(key, 1);
+  }
+
+  /** Songs can be dragged into a new order: an editable playlist, in its own order, unfiltered. */
+  get canReorder(): boolean {
+    return !!this.editablePlaylist && this.writable && this.sortKey === "order" && this.sortDir === 1 && !this.search && !this.browserFiltering;
+  }
+
+  /** Move the selected songs of the shown playlist to before position `at` (in the playlist). */
+  async moveSelected(at: number) {
+    const pl = this.editablePlaylist;
+    if (!pl || !this.index) return;
+    const tracks = this.index.get(pl.trackIds);
+    const moving = tracks.filter((t) => this.selected.has(t.id));
+    if (!moving.length) return;
+    const before = tracks.slice(0, at).filter((t) => !this.selected.has(t.id));
+    const after = tracks.slice(at).filter((t) => !this.selected.has(t.id));
+    const order = [...before, ...moving, ...after].map((t) => t.dbid);
+    if (order.every((d, i) => d === tracks[i].dbid)) return; // no change
+    await this.write("Saving…", (p) => api.setPlaylistTracks(p, pl.id, order));
   }
 
   /** Click handling for the song list: plain, Shift (range), Cmd/Ctrl (toggle). */

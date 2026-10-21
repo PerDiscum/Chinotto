@@ -1,22 +1,59 @@
 <script lang="ts">
   import { store, isMac } from "./store.svelte";
-  import { duration, stars, count } from "./format";
+  import { bitrate, duration, formatName, stars, count } from "./format";
   import type { SortKey, Track } from "./types";
 
   let { tracks }: { tracks: Track[] } = $props();
 
   const ROW = 20;
   const OVERSCAN = 8;
-  const columns: { key: SortKey; label: string; cls: string }[] = [
-    { key: "title", label: "Name", cls: "c-title" },
-    { key: "time", label: "Time", cls: "c-time" },
-    { key: "artist", label: "Artist", cls: "c-artist" },
-    { key: "album", label: "Album", cls: "c-album" },
-    { key: "genre", label: "Genre", cls: "c-genre" },
-    { key: "year", label: "Year", cls: "c-year" },
-    { key: "rating", label: "Rating", cls: "c-rating" },
-    { key: "plays", label: "Plays", cls: "c-plays" },
+  type Col = { key: SortKey; label: string; width: string; min: number; num?: boolean; fixed?: boolean };
+  const ALL: Col[] = [
+    { key: "order", label: "#", width: "38px", min: 38, num: true, fixed: true },
+    { key: "title", label: "Name", width: "minmax(180px, 2.4fr)", min: 180, fixed: true },
+    { key: "time", label: "Time", width: "52px", min: 52, num: true },
+    { key: "artist", label: "Artist", width: "minmax(120px, 1.5fr)", min: 120 },
+    { key: "album", label: "Album", width: "minmax(120px, 1.5fr)", min: 120 },
+    { key: "genre", label: "Genre", width: "minmax(80px, 0.9fr)", min: 80 },
+    { key: "year", label: "Year", width: "46px", min: 46, num: true },
+    { key: "format", label: "Format", width: "58px", min: 58 },
+    { key: "bitrate", label: "Bit Rate", width: "72px", min: 72, num: true },
+    { key: "rating", label: "Rating", width: "76px", min: 76 },
+    { key: "plays", label: "Plays", width: "50px", min: 50, num: true },
   ];
+  // "#" only where the list has an order of its own (a playlist).
+  const columns = $derived(ALL.filter((c) => (c.key === "order" ? store.hasOwnOrder : !store.hiddenColumns.includes(c.key))));
+  const template = $derived(columns.map((c) => c.width).join(" "));
+  const minWidth = $derived(columns.reduce((n, c) => n + c.min, 0));
+
+  /** Right-click the column titles: choose which columns show. */
+  function chooseColumns(e: MouseEvent) {
+    e.preventDefault();
+    store.menu = {
+      x: e.clientX,
+      y: e.clientY,
+      items: ALL.filter((c) => !c.fixed).map((c) => ({
+        label: `${store.hiddenColumns.includes(c.key) ? "\u2003" : "✓ "}${c.label}`,
+        action: () => store.toggleColumn(c.key),
+      })),
+    };
+  }
+
+  function cell(c: Col, t: Track, n: number): string {
+    switch (c.key) {
+      case "order": return String(n + 1);
+      case "time": return duration(t.lengthMs);
+      case "artist": return t.artist ?? "";
+      case "album": return t.album ?? "";
+      case "genre": return t.genre ?? "";
+      case "year": return t.year ? String(t.year) : "";
+      case "format": return formatName(t);
+      case "bitrate": return bitrate(t);
+      case "rating": return stars(t.rating);
+      case "plays": return t.playCount ? count(t.playCount) : "";
+      default: return "";
+    }
+  }
 
   let scroller: HTMLDivElement | undefined = $state();
   let scrollTop = $state(0);
@@ -26,9 +63,10 @@
   const last = $derived(Math.min(tracks.length, Math.ceil((scrollTop + viewport) / ROW) + OVERSCAN));
   const slice = $derived(tracks.slice(first, last));
 
-  // Back to the top when the list itself changes (new playlist, search, browser pick).
+  // Back to the top when a different list is shown (playlist, search, browser pick,
+  // sort), but not when the same list is saved (e.g. after reordering).
   $effect(() => {
-    void tracks;
+    void [store.source, store.search, store.browserSel, store.sortKey, store.sortDir, store.ipod?.path];
     if (scroller) scroller.scrollTop = 0;
   });
 
@@ -107,7 +145,20 @@
     };
   }
 
-  /** Press on a song and move: drag the selection onto a playlist in the source list. */
+  /** Where in the list a drop at screen height `y` would insert (row boundary), or null outside it. */
+  function insertionAt(x: number, y: number): number | null {
+    if (!scroller) return null;
+    const r = scroller.getBoundingClientRect();
+    if (x < r.left || x > r.right || y < r.top || y > r.bottom) return null;
+    // Scroll when near the top or bottom edge.
+    if (y < r.top + ROW + 16) scroller.scrollTop -= ROW;
+    else if (y > r.bottom - 16) scroller.scrollTop += ROW;
+    const pos = (y - r.top - ROW + scroller.scrollTop) / ROW; // minus the sticky header
+    return Math.max(0, Math.min(tracks.length, Math.round(pos)));
+  }
+
+  /** Press on a song and move: drag the selection onto a playlist in the source list,
+   *  or, in a playlist shown in its own order, to a new place in it. */
   function pressForDrag(e: MouseEvent, t: Track) {
     if (e.button !== 0 || !store.writable) return;
     const x0 = e.clientX, y0 = e.clientY;
@@ -118,7 +169,8 @@
         store.songDrag = { dbids: store.selectedTracks.map((x) => x.dbid), x: m.clientX, y: m.clientY, target: null };
       }
       const over = document.elementFromPoint(m.clientX, m.clientY)?.closest<HTMLElement>("[data-drop-playlist]");
-      store.songDrag = { ...store.songDrag, x: m.clientX, y: m.clientY, target: over?.dataset.dropPlaylist ?? null };
+      const insertAt = store.canReorder ? insertionAt(m.clientX, m.clientY) : null;
+      store.songDrag = { ...store.songDrag, x: m.clientX, y: m.clientY, target: over?.dataset.dropPlaylist ?? null, insertAt };
     };
     const up = () => {
       window.removeEventListener("mousemove", move);
@@ -126,6 +178,7 @@
       const d = store.songDrag;
       store.songDrag = null;
       if (d?.target) void store.addToPlaylist(d.target, d.dbids);
+      else if (d?.insertAt != null) void store.moveSelected(d.insertAt);
     };
     window.addEventListener("mousemove", move);
     window.addEventListener("mouseup", up);
@@ -144,16 +197,17 @@
   onscroll={(e) => (scrollTop = (e.currentTarget as HTMLElement).scrollTop)}
   onkeydown={keydown}
 >
-  <div class="head row" role="row">
+  <div class="head row" role="row" tabindex="-1" style:grid-template-columns={template} style:min-width="{minWidth}px" oncontextmenu={chooseColumns}>
     {#each columns as c (c.key)}
       <button
-        class="cell {c.cls}"
+        class="cell"
+        class:num={c.num}
         class:sorted={store.sortKey === c.key}
         role="columnheader"
         aria-sort={store.sortKey === c.key ? (store.sortDir === 1 ? "ascending" : "descending") : "none"}
         onclick={() => store.sortBy(c.key)}
       >
-        {c.label}
+        <span class="label">{c.label}</span>
         {#if store.sortKey === c.key}<span class="arrow">{store.sortDir === 1 ? "▲" : "▼"}</span>{/if}
       </button>
     {/each}
@@ -173,6 +227,8 @@
         aria-rowindex={n + 1}
         aria-selected={store.selected.has(t.id)}
         style:transform="translateY({n * ROW}px)"
+        style:grid-template-columns={template}
+        style:min-width="{minWidth}px"
         onmousedown={(e) => {
           // Keep a multi-selection when starting a drag or right-clicking inside it.
           if (isMac && e.ctrlKey) return; // that's a right-click
@@ -186,19 +242,24 @@
         oncontextmenu={(e) => contextmenu(e, t)}
 
       >
-        <span class="cell c-title">
-          {#if store.nowPlaying === t.dbid}<span class="playing" aria-label={store.player.state === "playing" ? "Playing" : "Paused"}>{store.player.state === "playing" ? "▶" : "❙❙"}</span>{/if}{dash(t.title)}
-        </span>
-        <span class="cell c-time num">{duration(t.lengthMs)}</span>
-        <span class="cell c-artist">{dash(t.artist)}</span>
-        <span class="cell c-album">{dash(t.album)}</span>
-        <span class="cell c-genre">{dash(t.genre)}</span>
-        <span class="cell c-year num">{t.year || ""}</span>
-        <span class="cell c-rating" aria-label="{t.rating} stars">{stars(t.rating)}</span>
-        <span class="cell c-plays num">{t.playCount ? count(t.playCount) : ""}</span>
+        {#each columns as c (c.key)}
+          {#if c.key === "title"}
+            <span class="cell">
+              {#if store.nowPlaying === t.dbid}<span class="playing" aria-label={store.player.state === "playing" ? "Playing" : "Paused"}>{store.player.state === "playing" ? "▶" : "❙❙"}</span>{/if}{dash(t.title)}
+            </span>
+          {:else if c.key === "rating"}
+            <span class="cell c-rating" aria-label="{t.rating} stars">{cell(c, t, n)}</span>
+          {:else}
+            <span class="cell" class:num={c.num} class:muted={c.key === "order"}>{cell(c, t, n)}</span>
+          {/if}
+        {/each}
       </div>
     {/each}
   </div>
+
+  {#if store.songDrag?.insertAt != null}
+    <div class="insert" style:top="{ROW + store.songDrag.insertAt * ROW - 1}px" style:min-width="{minWidth}px" aria-hidden="true"></div>
+  {/if}
 
   {#if tracks.length === 0}
     <p class="empty">
@@ -215,17 +276,14 @@
     background: var(--bg);
     font-size: 12px;
     outline: none;
-    --cols: minmax(180px, 2.4fr) 52px minmax(120px, 1.5fr) minmax(120px, 1.5fr) minmax(80px, 0.9fr) 46px 76px 50px;
   }
   .songs:focus-visible {
     box-shadow: inset 0 0 0 2px var(--accent);
   }
   .row {
     display: grid;
-    grid-template-columns: var(--cols);
     height: 20px;
     align-items: center;
-    min-width: 780px;
   }
   .head {
     position: sticky;
@@ -235,6 +293,9 @@
     border-bottom: 1px solid var(--edge);
   }
   .head .cell {
+    display: flex;
+    align-items: center;
+    gap: 4px;
     height: 100%;
     border: 0;
     border-right: 1px solid var(--edge);
@@ -254,13 +315,32 @@
     outline: 2px solid var(--accent);
     outline-offset: -2px;
   }
+  .head .cell .label {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .head .cell.num .label {
+    text-align: right;
+  }
   .arrow {
-    float: right;
+    flex: none;
     font-size: 8px;
-    line-height: 20px;
+  }
+  .muted {
+    color: var(--muted);
   }
   .body {
     position: relative;
+  }
+  .insert {
+    position: absolute;
+    left: 0;
+    right: 0;
+    z-index: 2;
+    height: 2px;
+    background: var(--accent);
+    pointer-events: none;
   }
   .body .row {
     position: absolute;

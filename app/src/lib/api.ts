@@ -14,7 +14,7 @@ export const onDevicesChanged = (f: (d: DeviceInfo[]) => void): Promise<Unlisten
   listen<DeviceInfo[]>("devices-changed", (e) => f(e.payload));
 
 export async function pickFolder(): Promise<string | null> {
-  const r = await open({ directory: true, multiple: false, title: "Choose the top folder of an iPod" });
+  const r = await open({ directory: true, multiple: false, title: "Choose the drive" });
   return typeof r === "string" ? r : null;
 }
 

@@ -4,9 +4,13 @@
 
 <div class="welcome">
   <div class="inner">
-    <h1>Connect an iPod</h1>
-    <p>Plug in a classic iPod and Chinotto opens it as soon as it mounts. You can also open a copy of an iPod's folder from your disk.</p>
-    <button onclick={() => store.openFolder()}>Open iPod folder…</button>
+    <h1>Ready? Plug in your digital audio player to begin!</h1>
+    <p>
+      If you’re using a classic, pre-iOS Apple iPod or an MTP device (such as a Creative Zen), it will show up here
+      automatically. If you are using an MSC device (such as most Sony Walkman and Sansa models), click below to add the
+      drive manually to Chinotto.
+    </p>
+    <button onclick={() => store.openFolder()}>Add Drive…</button>
   </div>
 </div>
 
@@ -19,7 +23,7 @@
     padding: 24px;
   }
   .inner {
-    max-width: 44ch;
+    max-width: 52ch;
   }
   h1 {
     margin: 0 0 8px;

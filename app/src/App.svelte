@@ -70,7 +70,7 @@
   // Source → search → column browser → sort.
   const searched = $derived(store.index ? store.index.search(store.sourceTracks, store.search) : []);
   const browsed = $derived(
-    store.showBrowser ? browse(searched, { genre: store.genre, artist: store.artist, album: store.album }) : null,
+    store.showBrowser ? browse(searched, store.browserFields, store.browserSel) : null,
   );
   const filtered = $derived(browsed ? browsed.tracks : searched);
   const visible = $derived(store.index ? store.index.sort(filtered, store.sortKey, store.sortDir) : []);

@@ -34,10 +34,30 @@ export const date = (unix?: number) =>
 
 export const isVideo = (t: Track) => (t.mediaType & (0x02 | 0x20 | 0x40)) !== 0;
 
+/** Short format name for a song: MP3, AAC, ALAC, WAV, AIFF… */
+export function formatName(t: Track): string {
+  const k = t.kind.toLowerCase();
+  const ext = (t.location ?? "").split(".").pop()?.toLowerCase() ?? "";
+  if (k.includes("lossless")) return "ALAC";
+  if (k.includes("mpeg audio") || ext === "mp3") return "MP3";
+  if (k.includes("wav") || ext === "wav") return "WAV";
+  if (k.includes("aiff") || ext === "aif" || ext === "aiff") return "AIFF";
+  if (k.includes("video") || ["m4v", "mp4", "mov"].includes(ext)) return "Video";
+  if (k.includes("aac") || k.includes("mpeg-4") || k.includes("audiobook") || ["m4a", "m4b", "m4p", "aac"].includes(ext)) {
+    // Apple Lossless isn't always labelled; its bit rate gives it away.
+    return t.bitrate > 400 && ext !== "m4p" ? "ALAC" : "AAC";
+  }
+  return t.kind || "Unknown";
+}
+
+export const bitrate = (t: Track) => (t.bitrate ? `${t.bitrate} kbps` : "");
+
 export const UNKNOWN_ARTIST = "Unknown Artist";
 export const UNKNOWN_ALBUM = "Unknown Album";
 export const UNKNOWN_GENRE = "Unknown Genre";
 export const COMPILATIONS = "Compilations";
+export const UNKNOWN_COMPOSER = "Unknown Composer";
+export const UNKNOWN_YEAR = "Unknown Year";
 
 /** The artist a track is filed under in the column browser (same grouping the iPod uses). */
 export const browseArtist = (t: Track) =>
@@ -51,3 +71,6 @@ export const stripThe = (s: string) => s.replace(/^the\s+/i, "");
 /** Accent- and case-insensitive text for searching. */
 export const fold = (s: string) =>
   s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+
+export const browseComposer = (t: Track) => t.composer || UNKNOWN_COMPOSER;
+export const browseYear = (t: Track) => (t.year ? String(t.year) : UNKNOWN_YEAR);

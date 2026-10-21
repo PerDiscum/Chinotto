@@ -2,8 +2,8 @@
 // Strings are ranked once with a locale-aware collator so later sorts only
 // compare integers (23k tracks sort in a few milliseconds).
 
-import type { SortKey, Track } from "./types";
-import { browseAlbum, browseArtist, browseGenre, fold, stripThe } from "./format";
+import type { BrowseField, SortKey, Track } from "./types";
+import { browseAlbum, browseArtist, browseComposer, browseGenre, browseYear, fold, formatName, stripThe } from "./format";
 
 export const collator = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
 
@@ -22,6 +22,7 @@ export class TrackIndex {
   private rAlbum: Uint32Array;
   private rGenre: Uint32Array;
   private rKind: Uint32Array;
+  private rFormat: Uint32Array;
   private haystack: string[];
 
   constructor(tracks: Track[]) {
@@ -35,6 +36,7 @@ export class TrackIndex {
     this.rAlbum = ranks(tracks.map((t) => t.sortAlbum ?? t.album ?? ""));
     this.rGenre = ranks(tracks.map((t) => t.genre ?? ""));
     this.rKind = ranks(tracks.map((t) => t.kind));
+    this.rFormat = ranks(tracks.map(formatName));
     this.haystack = tracks.map((t) =>
       fold([t.title, t.artist, t.albumArtist, t.album, t.composer, t.genre].filter(Boolean).join("\n")),
     );
@@ -59,7 +61,9 @@ export class TrackIndex {
     });
   }
 
+  /** `order` keeps the list's own order (a playlist's), reversed for -1. */
   sort(tracks: Track[], key: SortKey, dir: 1 | -1): Track[] {
+    if (key === "order") return dir === 1 ? tracks : [...tracks].reverse();
     const p = (t: Track) => this.pos.get(t.id)!;
     const albumOrder = (a: Track, b: Track) =>
       this.rAlbum[p(a)] - this.rAlbum[p(b)] || a.discNr - b.discNr || a.trackNr - b.trackNr || this.rTitle[p(a)] - this.rTitle[p(b)];
@@ -75,46 +79,71 @@ export class TrackIndex {
       plays: (a, b) => a.playCount - b.playCount || artistOrder(a, b),
       added: (a, b) => (a.added ?? 0) - (b.added ?? 0),
       kind: (a, b) => this.rKind[p(a)] - this.rKind[p(b)] || artistOrder(a, b),
+      format: (a, b) => this.rFormat[p(a)] - this.rFormat[p(b)] || artistOrder(a, b),
+      bitrate: (a, b) => a.bitrate - b.bitrate || artistOrder(a, b),
+      order: () => 0,
     };
     const cmp = primary[key];
     return [...tracks].sort((a, b) => dir * cmp(a, b));
   }
 }
 
-export interface BrowserColumns {
-  genres: string[];
-  artists: string[];
-  albums: string[];
+/** All browser columns, broadest first (the order they're shown in). */
+export const BROWSE_FIELDS: { field: BrowseField; title: string; plural: [string, string] }[] = [
+  { field: "genre", title: "Genre", plural: ["Genre", "Genres"] },
+  { field: "format", title: "Format", plural: ["Format", "Formats"] },
+  { field: "year", title: "Year", plural: ["Year", "Years"] },
+  { field: "composer", title: "Composer", plural: ["Composer", "Composers"] },
+  { field: "artist", title: "Artist", plural: ["Artist", "Artists"] },
+  { field: "album", title: "Album", plural: ["Album", "Albums"] },
+];
+
+const VALUE: Record<BrowseField, (t: Track) => string> = {
+  genre: browseGenre,
+  format: formatName,
+  year: browseYear,
+  composer: browseComposer,
+  artist: browseArtist,
+  album: browseAlbum,
+};
+
+/** How a value sorts in its column. */
+function sortKey(field: BrowseField, t: Track, v: string): string {
+  if (field === "artist") return t.compilation ? v : ((t.albumArtist ? t.sortAlbumArtist : t.sortArtist) ?? stripThe(v));
+  if (field === "album") return t.sortAlbum ?? v;
+  if (field === "composer") return t.sortComposer ?? v;
+  return v;
+}
+
+export interface BrowserColumn {
+  field: BrowseField;
+  items: string[];
 }
 
 /**
- * Column browser lists (Genre → Artist → Album), each narrowed by the
- * selections to its left, plus the tracks matching all three selections.
+ * Column browser lists, each narrowed by the selections to its left, plus the
+ * tracks matching every selection.
  */
 export function browse(
   tracks: Track[],
-  sel: { genre: string | null; artist: string | null; album: string | null },
-): { columns: BrowserColumns; tracks: Track[] } {
-  const genres = new Set<string>();
-  const artists = new Map<string, string>(); // name → sort key
-  const albums = new Map<string, string>();
+  fields: BrowseField[],
+  sel: Partial<Record<BrowseField, string | null>>,
+): { columns: BrowserColumn[]; tracks: Track[] } {
+  const maps = fields.map(() => new Map<string, string>()); // value → sort key
   const out: Track[] = [];
-  for (const t of tracks) {
-    const g = browseGenre(t);
-    genres.add(g);
-    if (sel.genre !== null && g !== sel.genre) continue;
-    const ar = browseArtist(t);
-    if (!artists.has(ar)) artists.set(ar, t.compilation ? ar : (t.albumArtist ? t.sortAlbumArtist : t.sortArtist) ?? stripThe(ar));
-    if (sel.artist !== null && ar !== sel.artist) continue;
-    const al = browseAlbum(t);
-    if (!albums.has(al)) albums.set(al, t.sortAlbum ?? al);
-    if (sel.album !== null && al !== sel.album) continue;
+  outer: for (const t of tracks) {
+    for (let i = 0; i < fields.length; i++) {
+      const f = fields[i];
+      const v = VALUE[f](t);
+      if (!maps[i].has(v)) maps[i].set(v, sortKey(f, t, v));
+      const want = sel[f] ?? null;
+      if (want !== null && v !== want) continue outer;
+    }
     out.push(t);
   }
-  const byKey = (m: Map<string, string>) =>
-    [...m.entries()].sort((a, b) => collator.compare(a[1], b[1])).map(([name]) => name);
-  return {
-    columns: { genres: [...genres].sort(collator.compare), artists: byKey(artists), albums: byKey(albums) },
-    tracks: out,
-  };
+  const columns = fields.map((field, i) => {
+    const items = [...maps[i].entries()].sort((a, b) => collator.compare(a[1], b[1])).map(([v]) => v);
+    return { field, items };
+  });
+  return { columns, tracks: out };
 }

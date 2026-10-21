@@ -1,15 +1,36 @@
 <script lang="ts">
   import { store } from "./store.svelte";
-  import type { BrowserColumns } from "./library";
+  import { BROWSE_FIELDS, type BrowserColumn } from "./library";
   import { count } from "./format";
 
-  let { columns }: { columns: BrowserColumns } = $props();
+  let { columns }: { columns: BrowserColumn[] } = $props();
 
-  const cols = $derived([
-    { title: "Genre", plural: ["Genre", "Genres"], items: columns.genres, value: store.genre, pick: (v: string | null) => store.pickGenre(v) },
-    { title: "Artist", plural: ["Artist", "Artists"], items: columns.artists, value: store.artist, pick: (v: string | null) => store.pickArtist(v) },
-    { title: "Album", plural: ["Album", "Albums"], items: columns.albums, value: store.album, pick: (v: string | null) => store.pickAlbum(v) },
-  ]);
+  const cols = $derived(
+    columns.map((c) => {
+      const meta = BROWSE_FIELDS.find((f) => f.field === c.field)!;
+      return {
+        title: meta.title,
+        plural: meta.plural,
+        items: c.items,
+        value: store.browserSel[c.field] ?? null,
+        pick: (v: string | null) => store.pick(c.field, v),
+      };
+    }),
+  );
+
+  /** Right-click a column title: choose which columns show. */
+  function chooseColumns(e: MouseEvent) {
+    e.preventDefault();
+    store.menu = {
+      x: e.clientX,
+      y: e.clientY,
+      items: BROWSE_FIELDS.map((f) => ({
+        label: `${store.browserFields.includes(f.field) ? "✓ " : "\u2003"}${f.title}`,
+        disabled: store.browserFields.includes(f.field) && store.browserFields.length === 1,
+        action: () => store.toggleBrowserField(f.field),
+      })),
+    };
+  }
 
   // Height of the browser, dragged with the bar under it (remembered).
   let height = $state(loadHeight());
@@ -65,7 +86,7 @@
 <div class="browser" style:height="{height}px">
   {#each cols as c, ci (c.title)}
     <section>
-      <h3>{c.title}</h3>
+      <h3 oncontextmenu={chooseColumns}>{c.title}</h3>
       <div class="list" bind:this={lists[ci]} role="listbox" tabindex="0" aria-label={c.title} onkeydown={(e) => keydown(e, c.items, c.value, c.pick)}>
         <button role="option" aria-selected={c.value === null} class:sel={c.value === null} onclick={() => c.pick(null)}>
           All ({count(c.items.length)} {c.items.length === 1 ? c.plural[0] : c.plural[1]})
@@ -83,7 +104,8 @@
 <style>
   .browser {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr);
     flex: none;
   }
