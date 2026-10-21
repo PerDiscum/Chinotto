@@ -54,6 +54,9 @@
       "deb": {
         "depends": [
           "udisks2"
+        ],
+        "recommends": [
+          "ffmpeg"
         ]
       }
     },

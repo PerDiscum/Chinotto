@@ -41,6 +41,8 @@ pub struct Settings {
     pub writable_ipods: Vec<String>,
     /// Picture chosen by the user per device (identity → picture key).
     pub device_icons: HashMap<String, String>,
+    /// How songs are converted for each device (identity → setting).
+    pub conversions: HashMap<String, crate::convert::Conversion>,
 }
 
 /// An iPod's databases, read into memory. Read-only for now.
@@ -125,6 +127,16 @@ impl AppState {
             Some(k) => s.device_icons.insert(identity.to_string(), k),
             None => s.device_icons.remove(identity),
         };
+        self.save_settings(&s)
+    }
+
+    pub fn conversion(&self, identity: &str) -> crate::convert::Conversion {
+        self.settings.lock().unwrap().conversions.get(identity).cloned().unwrap_or_default()
+    }
+
+    pub fn set_conversion(&self, identity: &str, c: crate::convert::Conversion) -> Result<(), String> {
+        let mut s = self.settings.lock().unwrap();
+        s.conversions.insert(identity.to_string(), c);
         self.save_settings(&s)
     }
 

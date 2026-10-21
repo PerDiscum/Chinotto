@@ -27,6 +27,8 @@ struct IpodView<'a> {
     identity: Option<String>,
     /// The user allowed Chinotto to change this iPod.
     writable: bool,
+    /// How songs are converted when copied to it.
+    conversion: crate::convert::Conversion,
     playlists: Vec<PlaylistView<'a>>,
     tracks: Vec<TrackView<'a>>,
 }
@@ -178,6 +180,7 @@ pub(crate) fn view(s: &Session, state: &AppState) -> Result<String, String> {
         db_version: s.db.version,
         generation: s.generation,
         has_artwork_db: s.art.is_some(),
+        conversion: identity.as_deref().map(|i| state.conversion(i)).unwrap_or_default(),
         identity,
         writable,
         playlists: s

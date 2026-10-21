@@ -4,7 +4,7 @@ import * as api from "./api";
 import { TrackIndex } from "./library";
 import { count } from "./format";
 import { t, tn } from "./i18n";
-import type { AddProgress, BrowseField, DeviceInfo, IpodView, LibrarySummary, LibraryView, ScanProgress, SortKey, Source, Track, TrackChanges, WriteResult } from "./types";
+import type { AddProgress, BrowseField, Conversion, DeviceInfo, IpodView, LibrarySummary, LibraryView, ScanProgress, SortKey, Source, Track, TrackChanges, WriteResult } from "./types";
 
 export interface MenuItem {
   label: string;
@@ -385,6 +385,15 @@ class Store {
     } finally {
       this.busy = null;
       this.progress = null;
+    }
+  }
+
+  async setConversion(c: Conversion) {
+    if (!this.ipod) return;
+    try {
+      this.applyView(await api.setConversion(this.ipod.path, c), this.selectedTracks.map((t) => t.dbid));
+    } catch (e) {
+      this.error = String(e);
     }
   }
 

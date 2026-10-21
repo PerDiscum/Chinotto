@@ -3,6 +3,7 @@
 
 mod artwork;
 mod commands;
+mod convert;
 mod cover;
 mod devices;
 mod export;
@@ -72,6 +73,7 @@ fn main() {
             write::paste_image,
             commands::device_icons,
             commands::system_locales,
+            write::set_conversion,
             export::export_name,
             export::export_songs,
             libcommands::list_libraries,

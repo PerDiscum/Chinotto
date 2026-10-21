@@ -8,7 +8,7 @@
 //! Formats: MP3, AAC (LC), Apple Lossless, WAV, AIFF, FLAC, Ogg Vorbis.
 //! (WMA and HE-AAC need FFmpeg; not handled here.)
 
-mod convert;
+pub mod convert;
 pub mod decode;
 
 use std::collections::VecDeque;

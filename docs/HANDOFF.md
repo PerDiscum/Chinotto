@@ -189,10 +189,15 @@ Everything decided and learned so far, so work can continue in a new session.
   renamed and deleted (`Database::any_playlist`); still not edited.
 - The web view's own right-click menu (Back, Reload…) is suppressed outside
   text fields.
-- **To do (requested 2026-10-21): conversion on transfer.** FLAC and ALAC
-  (and other formats the device can't play) transcoded to MP3 or AAC into a
-  temporary folder just before copying to the iPod/device, then deleted;
-  never added to the computer's library. Goes with the FFmpeg helper.
+- **Conversion on transfer (done, 0033):** `convert.rs`. FLAC/Ogg/Opus (and
+  ALAC if the device's setting says so, default yes) are decoded with
+  Symphonia and encoded into a temporary folder (`TempDir`, removed after the
+  iPod save), tags and cover copied over, then added as usual. Per-device
+  setting (settings.json `conversions`, device page): AAC 256 (default), AAC
+  128, MP3 320, MP3 192. MP3: LAME built in (mp3lame-encoder). AAC: macOS
+  `/usr/bin/afconvert` (constrained VBR, from a 24-bit WAV); Linux `ffmpeg`
+  from PATH (deb recommends ffmpeg). Rates above 48 kHz go to 44.1/48 kHz.
+  Opus isn't decodable by Symphonia: fails with a message until FFmpeg.
 - **To do, after conversion (requested 2026-10-21): Burn Playlist to Disc.**
   Right-click a playlist → Burn…: audio CD (decode to 16-bit/44.1 kHz WAV/AIFF
   in a temporary folder, warn past ~80 min, gap 2 s or none) or an MP3 data

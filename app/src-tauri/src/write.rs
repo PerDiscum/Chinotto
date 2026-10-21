@@ -173,13 +173,39 @@ pub async fn add_files(path: String, files: Vec<String>, playlist: Option<String
     blocking(app, move |app| {
         let files = expand(&files);
         let emitter = app.clone();
-        with_writer(&app, Path::new(&path), move |db| {
+        let state = app.state::<AppState>();
+        let conv = state
+            .session()
+            .filter(|s| s.root == Path::new(&path))
+            .and_then(|s| s.sysinfo.identity())
+            .map(|i| state.conversion(&i))
+            .unwrap_or_default();
+        // Converted copies live here until the iPod has its copy; then the folder goes.
+        let tmp = crate::convert::TempDir::new()?;
+        let tmp_dir = tmp.0.clone();
+        let result = with_writer(&app, Path::new(&path), move |db| {
             let mut res = AddResult { added: Vec::new(), skipped: Vec::new() };
             let mut added_files: Vec<(u64, PathBuf)> = Vec::new();
             let total = files.len();
             for (i, f) in files.iter().enumerate() {
                 let name = f.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
                 let _ = emitter.emit("add-progress", AddProgress { done: i, total, current: name.clone() });
+                // Songs the iPod can't play (or lossless ones, if so set) are converted first.
+                let converted;
+                let f = if crate::convert::needs_converting(f, &conv).is_some() {
+                    match crate::convert::convert(f, &tmp_dir, &conv, i) {
+                        Ok(c) => {
+                            converted = c;
+                            &converted
+                        }
+                        Err(e) => {
+                            res.skipped.push(format!("{name}: couldn't convert it ({e})"));
+                            continue;
+                        }
+                    }
+                } else {
+                    f
+                };
                 if tags::ipod_kind(f).is_none() {
                     // Silently skip cover images, playlists etc. inside folders; report audio we can't take.
                     if is_audio_ext(f) {
@@ -227,9 +253,21 @@ pub async fn add_files(path: String, files: Vec<String>, playlist: Option<String
                 return Err(res.skipped.join("\n"));
             }
             Ok(res)
-        })
+        });
+        drop(tmp);
+        result
     })
     .await
+}
+
+/// How songs are converted for this iPod (see convert.rs).
+#[tauri::command]
+pub fn set_conversion(path: String, conversion: crate::convert::Conversion, app: AppHandle) -> Result<Response, String> {
+    let state = app.state::<AppState>();
+    let session = state.session().filter(|s| s.root == Path::new(&path)).ok_or("That iPod isn't open")?;
+    let identity = session.sysinfo.identity().ok_or("This iPod doesn't report a FireWire ID or serial number")?;
+    state.set_conversion(&identity, conversion)?;
+    view(&session, &state).map(Response::new)
 }
 
 fn is_audio_ext(p: &Path) -> bool {

@@ -76,6 +76,8 @@ export interface IpodView {
   identity?: string | null;
   /** The user allowed Chinotto to change this iPod. */
   writable: boolean;
+  /** How songs are converted when copied to it. */
+  conversion: Conversion;
   playlists: Playlist[];
   tracks: Track[];
 }
@@ -159,4 +161,11 @@ export interface TrackChanges {
   bpm?: number | null;
   rating?: number;
   compilation?: boolean;
+}
+
+export interface Conversion {
+  /** "aac256", "aac128", "mp3_320" or "mp3_192". */
+  format: string;
+  /** Convert Apple Lossless too (it plays on iPods but is large). */
+  convertAlac: boolean;
 }
