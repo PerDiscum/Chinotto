@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t, tn } from "./i18n";
   import { store } from "./store.svelte";
   import { count, duration, longDuration } from "./format";
   import type { Track } from "./types";
@@ -14,18 +15,18 @@
   const shown = $derived(dragging ?? store.player.positionMs);
 
   const openingName = $derived(
-    store.opening ? (store.devices.find((d) => d.path === store.opening)?.volume ?? "iPod") : null,
+    store.opening ? (store.devices.find((d) => d.path === store.opening)?.volume ?? t("iPod")) : null,
   );
   const sourceName = $derived.by(() => {
     const s = store.source;
     if (s.kind === "device") return store.ipod?.name ?? "";
     if (s.kind === "library") {
       const pl = store.libView?.view.playlists.find((p) => p.id === s.id);
-      return pl && !pl.master ? pl.name : (store.libView?.view.name ?? "Library");
+      return pl && !pl.master ? pl.name : (store.libView?.view.name ?? t("Library"));
     }
     if (s.kind === "playlist") {
       const p = store.ipod?.playlists.find((x) => x.id === s.id);
-      return p?.master ? `${store.ipod?.name} — Music` : (p?.name ?? "");
+      return p?.master ? t("{name} — Music", { name: store.ipod?.name ?? "" }) : (p?.name ?? "");
     }
     return "";
   });
@@ -33,24 +34,24 @@
 
 <header class="toolbar" data-tauri-drag-region>
   <div class="controls">
-    <div class="transport" role="group" aria-label="Playback">
-      <button aria-label="Previous" title="Previous" disabled={!store.nowPlaying} onclick={() => store.previous()}>
+    <div class="transport" role="group" aria-label={t("Playback")}>
+      <button aria-label={t("Previous")} title={t("Previous")} disabled={!store.nowPlaying} onclick={() => store.previous()}>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h2v14H6zM20 5v14L9 12z" /></svg>
       </button>
-      <button class="main" aria-label={playing ? "Pause" : "Play"} title={playing ? "Pause (Space) · Stop (⌘.)" : "Play (Space)"} disabled={!store.index} onclick={() => store.togglePlay(visible)}>
+      <button class="main" aria-label={playing ? t("Pause") : t("Play")} title={playing ? t("Pause (Space) · Stop (⌘.)") : t("Play (Space)")} disabled={!store.index} onclick={() => store.togglePlay(visible)}>
         {#if playing}
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z" /></svg>
         {:else}
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
         {/if}
       </button>
-      <button aria-label="Next" title="Next" disabled={!store.hasNext} onclick={() => store.next()}>
+      <button aria-label={t("Next")} title={t("Next")} disabled={!store.hasNext} onclick={() => store.next()}>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 5h2v14h-2zM4 5v14l11-7z" /></svg>
       </button>
     </div>
-    <label class="volume" title="Volume">
+    <label class="volume" title={t("Volume")}>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" /></svg>
-      <input type="range" min="0" max="1" step="0.01" aria-label="Volume" value={store.volume} oninput={(e) => store.setVolume(Number(e.currentTarget.value))} />
+      <input type="range" min="0" max="1" step="0.01" aria-label={t("Volume")} value={store.volume} oninput={(e) => store.setVolume(Number(e.currentTarget.value))} />
     </label>
   </div>
 
@@ -62,16 +63,16 @@
           <span style:width="{(store.progress.done / store.progress.total) * 100}%"></span>
         </span>
       {:else}
-        <span class="sub">Don't unplug the iPod</span>
+        <span class="sub">{t("Don't unplug the iPod")}</span>
       {/if}
     {:else if openingName}
-      <strong>Reading {openingName}…</strong>
-      <span class="sub">Loading songs and playlists</span>
+      <strong>{t("Reading {name}…", { name: openingName ?? "" })}</strong>
+      <span class="sub">{t("Loading songs and playlists")}</span>
     {:else if store.ejecting}
-      <strong>Ejecting…</strong>
-      <span class="sub">Don't unplug yet</span>
+      <strong>{t("Ejecting…")}</strong>
+      <span class="sub">{t("Don't unplug yet")}</span>
     {:else if song}
-      <strong>{song.title ?? "Untitled"}</strong>
+      <strong>{song.title ?? t("Untitled")}</strong>
       <span class="sub">{[song.artist, song.album].filter(Boolean).join(" — ")}</span>
       <div class="seek">
         <span class="t">{duration(shown)}</span>
@@ -81,8 +82,8 @@
           max={Math.max(total, 1)}
           step="250"
           value={shown}
-          aria-label="Position in song"
-          aria-valuetext="{duration(shown)} of {duration(total)}"
+          aria-label={t("Position in song")}
+          aria-valuetext={t("{a} of {b}", { a: duration(shown), b: duration(total) })}
           oninput={(e) => (dragging = Number(e.currentTarget.value))}
           onchange={(e) => {
             void store.seek(Number(e.currentTarget.value));
@@ -93,28 +94,28 @@
       </div>
     {:else if store.source.kind === "library" && store.scanProgress[store.source.lib]?.total}
       {@const p = store.scanProgress[store.source.lib]}
-      <strong>Scanning {store.libView?.view.name}</strong>
-      <span class="sub">{count(p.done)} of {count(p.total)} new or changed files{p.current ? `: ${p.current}` : ""}</span>
+      <strong>{t("Scanning {name}", { name: store.libView?.view.name ?? "" })}</strong>
+      <span class="sub">{t("{done} of {total} new or changed files", { done: p.done, total: p.total })}{p.current ? `: ${p.current}` : ""}</span>
     {:else if store.ipod || store.source.kind === "library"}
       <strong>{sourceName}</strong>
       <span class="sub">
         {#if store.source.kind === "device" && store.ipod}
-          {count(store.ipod.tracks.length)} songs on this iPod
+          {tn(store.ipod.tracks.length, "{n} song on this iPod", "{n} songs on this iPod")}
         {:else}
-          {count(visibleCount)} {visibleCount === 1 ? "song" : "songs"}, {longDuration(visibleMs)}
+          {tn(visibleCount, "{n} song", "{n} songs")}, {longDuration(visibleMs)}
         {/if}
       </span>
     {:else}
-      <strong>Chinotto</strong>
-      <span class="sub">No iPod connected</span>
+      <strong>{t("Chinotto")}</strong>
+      <span class="sub">{t("No iPod connected")}</span>
     {/if}
   </div>
 
   <div class="search">
     <input
       type="search"
-      placeholder="Search"
-      aria-label="Search songs"
+      placeholder={t("Search")}
+      aria-label={t("Search songs")}
       bind:value={store.search}
       oninput={() => store.searchStarted()}
       disabled={!store.ipod && store.source.kind !== "library"}

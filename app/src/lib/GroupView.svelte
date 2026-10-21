@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from "./i18n";
   // Artists, Genres or Composers: names on the left; the picked name's albums,
   // each with its cover and songs, on the right.
   import { store, type MusicView } from "./store.svelte";
@@ -27,17 +28,16 @@
     if (list[n]) pick(list[n].name);
     queueMicrotask(() => (e.currentTarget as HTMLElement | null)?.querySelector(".on")?.scrollIntoView({ block: "nearest" }));
   }
-  const noun = $derived({ artist: "artists", genre: "genres", composer: "composers" }[by]);
 </script>
 
 <div class="split">
-  <div class="names" role="listbox" tabindex="0" aria-label={noun} onkeydown={key}>
+  <div class="names" role="listbox" tabindex="0" aria-label={by === "composer" ? t("Composers") : by === "genre" ? t("Genres") : t("Artists")} onkeydown={key}>
     {#each list as g (g.name)}
       <button role="option" aria-selected={picked === g} class:on={picked === g} onclick={() => pick(g.name)}>
         <span>{g.name}</span><span class="n">{count(g.tracks.length)}</span>
       </button>
     {:else}
-      <p class="empty">No {noun}{by === "composer" ? " (no songs have a composer)" : ""}.</p>
+      <p class="empty">{by === "composer" ? t("No composers (no songs have a composer).") : by === "genre" ? t("No genres.") : t("No artists.")}</p>
     {/each}
   </div>
   <div class="albums" bind:this={right}>
@@ -45,7 +45,7 @@
       <h1>{picked.name}</h1>
       {#each shown as a (a.key)}
         <section class="album">
-          <div class="cover"><Cover track={a.coverTrack} px={300} alt="Cover of {a.title}" /></div>
+          <div class="cover"><Cover track={a.coverTrack} px={300} alt={t("Cover of {name}", { name: a.title })} /></div>
           <div class="body">
             <h2>{a.title}</h2>
             <p class="meta">{by !== "artist" ? `${a.artist}${a.year ? " · " : ""}` : ""}{a.year || ""}</p>

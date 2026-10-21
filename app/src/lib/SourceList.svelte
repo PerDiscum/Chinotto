@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t, tn } from "./i18n";
   import { store } from "./store.svelte";
   import Icon from "./Icon.svelte";
   import { deviceImage } from "./deviceImages";
@@ -14,8 +15,8 @@
       x: e.clientX,
       y: e.clientY,
       items: [
-        { label: "Rename", disabled: ro, action: () => (store.renaming = id) },
-        { label: "Delete Playlist…", danger: true, disabled: ro, action: () => (store.dialog = { kind: "delete-playlist", id, name }) },
+        { label: t("Rename"), disabled: ro, action: () => (store.renaming = id) },
+        { label: t("Delete Playlist…"), danger: true, disabled: ro, action: () => (store.dialog = { kind: "delete-playlist", id, name }) },
       ],
     };
   }
@@ -46,12 +47,12 @@
       x: e.clientX,
       y: e.clientY,
       items: [
-        { label: lib?.scanning ? "Scanning…" : "Scan Now", disabled: !!lib?.scanning, action: () => store.scanLibrary(id) },
-        { label: "New Playlist", action: () => store.newLibraryPlaylist(id) },
-        { label: "Edit Library…", action: () => (store.dialog = { kind: "library", id }) },
-        { label: "Remove Unavailable Songs", disabled: !missing, action: () => store.removeUnavailable(id) },
+        { label: lib?.scanning ? t("Scanning…") : t("Scan Now"), disabled: !!lib?.scanning, action: () => store.scanLibrary(id) },
+        { label: t("New Playlist"), action: () => store.newLibraryPlaylist(id) },
+        { label: t("Edit Library…"), action: () => (store.dialog = { kind: "library", id }) },
+        { label: t("Remove Unavailable Songs"), disabled: !missing, action: () => store.removeUnavailable(id) },
         { label: "", separator: true },
-        { label: "Delete Library…", danger: true, action: () => (store.dialog = { kind: "delete-library", id, name }) },
+        { label: t("Delete Library…"), danger: true, action: () => (store.dialog = { kind: "delete-library", id, name }) },
       ],
     };
   }
@@ -62,8 +63,8 @@
       x: e.clientX,
       y: e.clientY,
       items: [
-        { label: "Rename", action: () => (store.renaming = scoped) },
-        { label: "Delete Playlist…", danger: true, action: () => (store.dialog = { kind: "delete-playlist", id: scoped, name }) },
+        { label: t("Rename"), action: () => (store.renaming = scoped) },
+        { label: t("Delete Playlist…"), danger: true, action: () => (store.dialog = { kind: "delete-playlist", id: scoped, name }) },
       ],
     };
   }
@@ -71,9 +72,10 @@
   function libTitle(l: (typeof store.libraries)[number]): string {
     const off = l.folders.filter((f) => !f.available).length;
     const p = store.scanProgress[l.id];
-    if (l.scanning && p?.total) return `Scanning: ${p.done} of ${p.total}`;
-    if (l.scanning) return "Scanning…";
-    return `${l.songs} songs${off ? `; ${off} ${off === 1 ? "folder" : "folders"} not connected` : ""}`;
+    if (l.scanning && p?.total) return t("Scanning: {done} of {total}", { done: p.done, total: p.total });
+    if (l.scanning) return t("Scanning…");
+    const songs = tn(l.songs, "{n} song", "{n} songs");
+    return off ? `${songs}; ${tn(off, "{n} folder not connected", "{n} folders not connected")}` : songs;
   }
 
   function focusSelect(node: HTMLInputElement) {
@@ -82,9 +84,9 @@
   }
 </script>
 
-<nav class="sources" aria-label="Sources">
+<nav class="sources" aria-label={t("Sources")}>
   {#if store.libraries.length}
-    <h2>Libraries</h2>
+    <h2>{t("Libraries")}</h2>
     <ul class="libs">
       {#each store.libraries as l (l.id)}
         {@const open = !store.collapsed.includes(l.id)}
@@ -93,15 +95,15 @@
           <div class="row device" class:active={isLib(l.id)}>
             <button
               class="disclose"
-              aria-label={open ? `Collapse ${l.name}` : `Expand ${l.name}`}
+              aria-label={open ? t("Collapse {name}", { name: l.name }) : t("Expand {name}", { name: l.name })}
               aria-expanded={open}
               onclick={() => store.toggleCollapsed(l.id)}>{open ? "▾" : "▸"}</button
             >
             <button class="name" onclick={() => store.showLibrary(l.id)} oncontextmenu={(e) => libraryMenu(e, l.id, l.name)}>
               <Icon name="library" />
               <span>{l.name}</span>
-              {#if l.scanning}<span class="spinner" aria-label="Scanning"></span>{/if}
-              {#if l.folders.some((f) => !f.available)}<span class="off" title={libTitle(l)} aria-label="Some folders not connected">◌</span>{/if}
+              {#if l.scanning}<span class="spinner" aria-label={t("Scanning")}></span>{/if}
+              {#if l.folders.some((f) => !f.available)}<span class="off" title={libTitle(l)} aria-label={t("Some folders not connected")}>◌</span>{/if}
             </button>
           </div>
           {#if open && pls.length}
@@ -115,7 +117,7 @@
                       <input
                         class="rename"
                         value={p.name}
-                        aria-label="Playlist name"
+                        aria-label={t("Playlist name")}
                         use:focusSelect
                         onkeydown={(e) => renameKey(e, scoped)}
                         onblur={(e) => store.renaming === scoped && store.renamePlaylist(scoped, e.currentTarget.value)}
@@ -142,9 +144,9 @@
       {/each}
     </ul>
   {/if}
-  <h2>Devices</h2>
+  <h2>{t("Devices")}</h2>
   {#if store.devices.length === 0}
-    <p class="hint">Connect an iPod and it shows up here.</p>
+    <p class="hint">{t("Connect an iPod and it shows up here.")}</p>
   {/if}
   <ul>
     {#each store.devices as d (d.path)}
@@ -157,10 +159,10 @@
           >
             {#if deviceImage(store.iconFor(d))}<img class="dev" src={deviceImage(store.iconFor(d))} alt="" />{:else}<Icon name="ipod" />{/if}
             <span>{isOpen(d.path) ? store.ipod!.name : d.volume}</span>
-            {#if store.opening === d.path}<span class="spinner" aria-label="Reading"></span>{/if}
+            {#if store.opening === d.path}<span class="spinner" aria-label={t("Reading")}></span>{/if}
           </button>
           {#if !d.manual}
-            <button class="eject" title="Eject {d.volume}" aria-label="Eject {d.volume}" disabled={!!store.ejecting} onclick={() => store.eject(d.path)}>
+            <button class="eject" title={t("Eject {name}", { name: d.volume })} aria-label={t("Eject {name}", { name: d.volume })} disabled={!!store.ejecting} onclick={() => store.eject(d.path)}>
               <Icon name="eject" size={13} />
             </button>
           {/if}
@@ -169,8 +171,8 @@
         {#if isOpen(d.path) && store.masterPlaylist}
           <ul class="nested">
             <li>
-              <button class="row" class:active={isPlaylist(store.masterPlaylist.id)} onclick={() => store.select({ kind: "playlist", id: store.masterPlaylist!.id })}>
-                <Icon name="music" /><span>Music</span>
+              <button class="row" class:drop={store.songDrag?.target === "ipod:music"} data-drop-playlist={store.ipod?.writable ? "ipod:music" : undefined} class:active={isPlaylist(store.masterPlaylist.id)} onclick={() => store.select({ kind: "playlist", id: store.masterPlaylist!.id })}>
+                <Icon name="music" /><span>{t("Music")}</span>
               </button>
             </li>
             {#each playlists as p (p.id)}
@@ -181,7 +183,7 @@
                     <input
                       class="rename"
                       value={p.name}
-                      aria-label="Playlist name"
+                      aria-label={t("Playlist name")}
                       use:focusSelect
                       onkeydown={(e) => renameKey(e, p.id)}
                       onblur={(e) => store.renaming === p.id && store.renamePlaylist(p.id, e.currentTarget.value)}

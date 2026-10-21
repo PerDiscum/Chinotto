@@ -1,20 +1,19 @@
 <script lang="ts">
+  import { t, tn } from "./i18n";
   import { store } from "./store.svelte";
 </script>
 
 <div class="welcome">
   <div class="inner">
-    <h1>Ready? Plug in your digital audio player to begin!</h1>
+    <h1>{t("Ready? Plug in your digital audio player to begin!")}</h1>
     <p>
-      If you’re using a classic, pre-iOS Apple iPod or an MTP device (such as a Creative Zen), it will show up here
-      automatically. If you are using an MSC device (such as most Sony Walkman and Sansa models), click below to add the
-      drive manually to Chinotto.
+      {t("If you’re using a classic, pre-iOS Apple iPod or an MTP device (such as a Creative Zen), it will show up here automatically. If you are using an MSC device (such as most Sony Walkman and Sansa models), click below to add the drive manually to Chinotto.")}
     </p>
     <div class="buttons">
-      <button onclick={() => store.openFolder()}>Add Drive…</button>
-      <button class="quiet" onclick={() => (store.dialog = { kind: "library", id: null })}>New Library…</button>
+      <button onclick={() => store.openFolder()}>{t("Add Drive…")}</button>
+      <button class="quiet" onclick={() => (store.dialog = { kind: "library", id: null })}>{t("New Library…")}</button>
     </div>
-    <p class="small">A library holds the music on your computer: choose its folders and Chinotto lists what's in them, without changing your files.</p>
+    <p class="small">{t("A library holds the music on your computer: choose its folders and Chinotto lists what's in them, without changing your files.")}</p>
   </div>
 </div>
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t, tn } from "./i18n";
   import { untrack } from "svelte";
   import { store } from "./store.svelte";
   import Modal from "./Modal.svelte";
@@ -140,9 +141,9 @@
   }
 
   const LABELS: Record<string, string> = {
-    title: "Name", artist: "Artist", albumArtist: "Album Artist", album: "Album", genre: "Genre", composer: "Composer",
-    comment: "Comments", grouping: "Grouping", year: "Year", trackNr: "Track", trackCount: "of", discNr: "Disc", discCount: "of",
-    sortTitle: "Sort Name", sortArtist: "Sort Artist", sortAlbum: "Sort Album", sortAlbumArtist: "Sort Album Artist", sortComposer: "Sort Composer",
+    title: t("Name"), artist: t("Artist"), albumArtist: t("Album Artist"), album: t("Album"), genre: t("Genre"), composer: t("Composer"),
+    comment: t("Comments"), grouping: t("Grouping"), year: t("Year"), trackNr: t("Track"), trackCount: t("of"), discNr: t("Disc"), discCount: t("of"),
+    sortTitle: t("Sort Name"), sortArtist: t("Sort Artist"), sortAlbum: t("Sort Album"), sortAlbumArtist: t("Sort Album Artist"), sortComposer: t("Sort Composer"),
   };
   const SORT_PAIRS: [TextKey, TextKey][] = [
     ["title", "sortTitle"], ["artist", "sortArtist"], ["albumArtist", "sortAlbumArtist"], ["album", "sortAlbum"], ["composer", "sortComposer"],
@@ -152,7 +153,7 @@
   const totalMs = tracks.reduce((a, t) => a + t.lengthMs, 0);
   const totalSize = tracks.reduce((a, t) => a + t.size, 0);
   const cover = untrack(() => store.coverUrl(first, 128));
-  const heading = many ? `${count(tracks.length)} songs` : first?.title || "Untitled";
+  const heading = many ? tn(tracks.length, "{n} song", "{n} songs") : first?.title || t("Untitled");
 </script>
 
 <svelte:window onkeydown={pasteKey} />
@@ -164,7 +165,7 @@
       type="text"
       bind:value={text[k]}
       oninput={() => touch(k)}
-      placeholder={mixed(k, initialText) ? "Mixed" : ""}
+      placeholder={mixed(k, initialText) ? t("Mixed") : ""}
       disabled={readOnly}
       spellcheck="false"
       autocomplete="off"
@@ -177,7 +178,7 @@
     class="num"
     type="text"
     inputmode="numeric"
-    aria-label={k === "trackCount" ? "Track count" : k === "discCount" ? "Disc count" : LABELS[k]}
+    aria-label={k === "trackCount" ? t("Track count") : k === "discCount" ? t("Disc count") : LABELS[k]}
     bind:value={num[k]}
     oninput={() => touch(k)}
     placeholder={mixed(k, initialNum) ? "–" : ""}
@@ -186,7 +187,7 @@
   />
 {/snippet}
 
-<Modal title="Get Info" onclose={close} width={600}>
+<Modal title={t("Get Info")} onclose={close} width={600}>
   <div class="info" role="presentation" onkeydown={keydown}>
     <header>
       <div class="thumb">{#if cover && !many}<img src={cover} alt="" />{/if}</div>
@@ -198,7 +199,7 @@
     </header>
 
     <div class="tabs" role="tablist">
-      {#each [["info", "Info"], ["sorting", "Sorting"], ["artwork", "Artwork"], ["details", "Details"]] as [id, label] (id)}
+      {#each [["info", t("Info")], ["sorting", t("Sorting")], ["artwork", t("Artwork")], ["details", t("Details")]] as [id, label] (id)}
         <button role="tab" aria-selected={tab === id} class:on={tab === id} onclick={() => (tab = id as typeof tab)}>{label}</button>
       {/each}
     </div>
@@ -213,26 +214,26 @@
         {@render field("composer")}
         {@render field("grouping")}
         <div class="row">
-          <label class="f"><span>Year</span>{@render numField("year")}</label>
-          <div class="f"><span>Track</span>{@render numField("trackNr")}<em>of</em>{@render numField("trackCount")}</div>
-          <div class="f"><span>Disc</span>{@render numField("discNr")}<em>of</em>{@render numField("discCount")}</div>
+          <label class="f"><span>{t("Year")}</span>{@render numField("year")}</label>
+          <div class="f"><span>{t("Track")}</span>{@render numField("trackNr")}<em>{t("of")}</em>{@render numField("trackCount")}</div>
+          <div class="f"><span>{t("Disc")}</span>{@render numField("discNr")}<em>{t("of")}</em>{@render numField("discCount")}</div>
         </div>
         <div class="row">
           <div class="f">
-            <span>Rating</span>
-            <div class="stars" role="radiogroup" aria-label="Rating">
+            <span>{t("Rating")}</span>
+            <div class="stars" role="radiogroup" aria-label={t("Rating")}>
               {#each [1, 2, 3, 4, 5] as n (n)}
                 <button
                   type="button"
                   role="radio"
                   aria-checked={rating === n}
-                  aria-label="{n} {n === 1 ? 'star' : 'stars'}"
+                  aria-label={tn(n, "{n} star", "{n} stars")}
                   class:lit={n <= rating && (!many || initialRating !== undefined || dirty.has("rating"))}
                   disabled={readOnly}
                   onclick={() => setRating(n)}>★</button
                 >
               {/each}
-              {#if many && initialRating === undefined && !dirty.has("rating")}<em>Mixed</em>{/if}
+              {#if many && initialRating === undefined && !dirty.has("rating")}<em>{t("Mixed")}</em>{/if}
             </div>
           </div>
           <label class="check">
@@ -243,27 +244,27 @@
               onchange={() => touch("compilation")}
               disabled={readOnly}
             />
-            Part of a compilation
+            {t("Part of a compilation")}
           </label>
         </div>
         <label class="f wide">
-          <span>Comments</span>
-          <textarea rows="2" bind:value={text.comment} oninput={() => touch("comment")} placeholder={mixed("comment", initialText) ? "Mixed" : ""} disabled={readOnly}></textarea>
+          <span>{t("Comments")}</span>
+          <textarea rows="2" bind:value={text.comment} oninput={() => touch("comment")} placeholder={mixed("comment", initialText) ? t("Mixed") : ""} disabled={readOnly}></textarea>
         </label>
       </div>
     {:else if tab === "sorting"}
-      <p class="hint">{store.source.kind === "library" ? "Chinotto and iPods sort" : "The iPod sorts"} by these instead of the names when they're filled in (for example “Beatles” for “The Beatles”).</p>
+      <p class="hint">{store.source.kind === "library" ? t("Chinotto and iPods sort by these instead of the names when they're filled in (for example “Beatles” for “The Beatles”).") : t("The iPod sorts by these instead of the names when they're filled in (for example “Beatles” for “The Beatles”).")}</p>
       <div class="sortgrid">
         {#each SORT_PAIRS as [name, sort] (sort)}
           {#if !(many && name === "title")}
             <span class="sname">{LABELS[name]}</span>
-            <span class="sval">{mixed(name, initialText) ? "Mixed" : text[name] || "—"}</span>
+            <span class="sval">{mixed(name, initialText) ? t("Mixed") : text[name] || "—"}</span>
             <input
               type="text"
               aria-label={LABELS[sort]}
               bind:value={text[sort]}
               oninput={() => touch(sort)}
-              placeholder={mixed(sort, initialText) ? "Mixed" : ""}
+              placeholder={mixed(sort, initialText) ? t("Mixed") : ""}
               disabled={readOnly}
               spellcheck="false"
               autocomplete="off"
@@ -273,36 +274,36 @@
       </div>
     {:else if tab === "artwork"}
       <div class="artwork">
-        <div class="big" role="img" aria-label="Cover" oncontextmenu={(e) => {
+        <div class="big" role="img" aria-label={t("Cover")} oncontextmenu={(e) => {
           e.preventDefault();
-          const t = tracks[0];
-          if (!t?.art || artwork) return;
-          store.menu = { x: e.clientX, y: e.clientY, items: [{ label: "Save Cover As…", action: () => store.saveCover(t) }] };
+          const t0 = tracks[0];
+          if (!t0?.art || artwork) return;
+          store.menu = { x: e.clientX, y: e.clientY, items: [{ label: t("Save Cover As…"), action: () => store.saveCover(t0) }] };
         }}>
           {#if artwork === "remove"}
-            <p>No artwork</p>
+            <p>{t("No artwork")}</p>
           {:else if artwork}
-            <img src={artwork.preview} alt="New cover" />
+            <img src={artwork.preview} alt={t("New cover")} />
           {:else if sameCover && covers[0]}
-            <img src={covers[0]} alt="Current cover" />
+            <img src={covers[0]} alt={t("Current cover")} />
           {:else}
-            <p>{many && !sameCover ? "Mixed" : "No artwork"}</p>
+            <p>{many && !sameCover ? t("Mixed") : t("No artwork")}</p>
           {/if}
         </div>
         <div class="side">
           {#if artwork && artwork !== "remove"}
-            <p class="hint">New cover, {artwork.size}. It's saved {store.source.kind === "library" ? "into the song files" : "to the iPod"} when you press OK; images larger than 600 px on the shorter side are shrunk to that.</p>
+            <p class="hint">{store.source.kind === "library" ? t("New cover, {size}. It's saved into the song files when you press OK; images larger than 600 px on the shorter side are shrunk to that.", { size: artwork.size }) : t("New cover, {size}. It's saved to the iPod when you press OK; images larger than 600 px on the shorter side are shrunk to that.", { size: artwork.size })}</p>
           {:else if artwork === "remove"}
-            <p class="hint">The cover is taken off when you press OK.</p>
+            <p class="hint">{t("The cover is taken off when you press OK.")}</p>
           {:else}
-            <p class="hint">Choose an image, paste one, or drop one on this window{many ? ` to use it for all ${tracks.length} songs` : ""}.</p>
+            <p class="hint">{many ? t("Choose an image, paste one, or drop one on this window to use it for all {n} songs.", { n: tracks.length }) : t("Choose an image, paste one, or drop one on this window.")}</p>
           {/if}
           {#if !readOnly}
             <div class="artbuttons">
-              <button onclick={chooseImage}>Choose Image…</button>
-              <button onclick={pasteImage} title="Use the image on the clipboard (⌘V)">Paste</button>
-              <button onclick={() => (artwork = "remove")} disabled={artwork === "remove" || (!artwork && covers.every((c) => !c))}>Remove</button>
-              {#if artwork}<button onclick={() => (artwork = null)}>Undo</button>{/if}
+              <button onclick={chooseImage}>{t("Choose Image…")}</button>
+              <button onclick={pasteImage} title={t("Use the image on the clipboard (⌘V)")}>{t("Paste")}</button>
+              <button onclick={() => (artwork = "remove")} disabled={artwork === "remove" || (!artwork && covers.every((c) => !c))}>{t("Remove")}</button>
+              {#if artwork}<button onclick={() => (artwork = null)}>{t("Undo")}</button>{/if}
             </div>
           {/if}
           {#if artProblem}<p class="problem" role="alert">{artProblem}</p>{/if}
@@ -311,19 +312,19 @@
     {:else}
       <dl class="details">
         {#if many}
-          <dt>Songs</dt><dd>{count(tracks.length)}</dd>
-          <dt>Total time</dt><dd>{duration(totalMs)}</dd>
-          <dt>Total size</dt><dd>{bytes(totalSize)}</dd>
+          <dt>{t("Songs")}</dt><dd>{count(tracks.length)}</dd>
+          <dt>{t("Total time")}</dt><dd>{duration(totalMs)}</dd>
+          <dt>{t("Total size")}</dt><dd>{bytes(totalSize)}</dd>
         {:else}
-          <dt>Kind</dt><dd>{first.kind}</dd>
-          <dt>Size</dt><dd>{bytes(first.size)}</dd>
-          <dt>Bit rate</dt><dd>{first.bitrate ? `${first.bitrate} kbps` : "—"}</dd>
-          <dt>Sample rate</dt><dd>{first.sampleRate ? `${(first.sampleRate / 1000).toFixed(1)} kHz` : "—"}</dd>
-          <dt>Plays</dt><dd>{count(first.playCount)}</dd>
-          <dt>Last played</dt><dd>{date(first.played) || "—"}</dd>
-          <dt>Date added</dt><dd>{date(first.added) || "—"}</dd>
-          <dt>Modified</dt><dd>{date(first.modified) || "—"}</dd>
-          <dt>Where</dt><dd class="loc">{first.location ?? "—"}</dd>
+          <dt>{t("Kind")}</dt><dd>{first.kind}</dd>
+          <dt>{t("Size")}</dt><dd>{bytes(first.size)}</dd>
+          <dt>{t("Bit rate")}</dt><dd>{first.bitrate ? `${first.bitrate} kbps` : "—"}</dd>
+          <dt>{t("Sample rate")}</dt><dd>{first.sampleRate ? `${(first.sampleRate / 1000).toFixed(1)} kHz` : "—"}</dd>
+          <dt>{t("Plays")}</dt><dd>{count(first.playCount)}</dd>
+          <dt>{t("Last played")}</dt><dd>{date(first.played) || "—"}</dd>
+          <dt>{t("Date added")}</dt><dd>{date(first.added) || "—"}</dd>
+          <dt>{t("Modified")}</dt><dd>{date(first.modified) || "—"}</dd>
+          <dt>{t("Where")}</dt><dd class="loc">{first.location ?? "—"}</dd>
         {/if}
       </dl>
     {/if}
@@ -332,11 +333,11 @@
 
   {#snippet buttons()}
     {#if readOnly}
-      <span class="left">{store.source.kind === "library" ? "Read-only: Chinotto doesn't change your music files." : "Read-only: turn on “Allow changes” on the iPod's page to edit."}</span>
-      <button class="primary" onclick={close}>Done</button>
+      <span class="left">{t("Read-only: turn on “Allow changes” on the iPod's page to edit.")}</span>
+      <button class="primary" onclick={close}>{t("Done")}</button>
     {:else}
-      <button onclick={close} disabled={saving}>Cancel</button>
-      <button class="primary" onclick={save} disabled={saving}>{saving ? "Saving…" : "OK"}</button>
+      <button onclick={close} disabled={saving}>{t("Cancel")}</button>
+      <button class="primary" onclick={save} disabled={saving}>{saving ? t("Saving…") : t("OK")}</button>
     {/if}
   {/snippet}
 </Modal>

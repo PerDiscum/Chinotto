@@ -3,7 +3,8 @@
 // compare integers (23k tracks sort in a few milliseconds).
 
 import type { BrowseField, SortKey, Track } from "./types";
-import { browseAlbum, browseArtist, browseComposer, browseGenre, browseYear, COMPILATIONS, fold, formatName, stripThe, UNKNOWN_ALBUM, UNKNOWN_ARTIST } from "./format";
+import { browseAlbum, browseArtist, browseComposer, browseGenre, browseYear, COMPILATIONS, fold, formatName, stripThe, UNKNOWN_ALBUM, UNKNOWN_ARTIST, VARIOUS } from "./format";
+import { t } from "./i18n";
 
 export const collator = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
 
@@ -105,12 +106,12 @@ export class TrackIndex {
 
 /** All browser columns, broadest first (the order they're shown in). */
 export const BROWSE_FIELDS: { field: BrowseField; title: string; plural: [string, string] }[] = [
-  { field: "genre", title: "Genre", plural: ["Genre", "Genres"] },
-  { field: "format", title: "Format", plural: ["Format", "Formats"] },
-  { field: "year", title: "Year", plural: ["Year", "Years"] },
-  { field: "composer", title: "Composer", plural: ["Composer", "Composers"] },
-  { field: "artist", title: "Artist", plural: ["Artist", "Artists"] },
-  { field: "album", title: "Album", plural: ["Album", "Albums"] },
+  { field: "genre", title: t("Genre"), plural: [t("Genre"), t("Genres")] },
+  { field: "format", title: t("Format"), plural: [t("Format"), t("Formats")] },
+  { field: "year", title: t("Year"), plural: [t("Year"), t("Years")] },
+  { field: "composer", title: t("Composer"), plural: [t("Composer"), t("Composers")] },
+  { field: "artist", title: t("Artist"), plural: [t("Artist"), t("Artists")] },
+  { field: "album", title: t("Album"), plural: [t("Album"), t("Albums")] },
 ];
 
 const VALUE: Record<BrowseField, (t: Track) => string> = {
@@ -202,7 +203,7 @@ export function albums(tracks: Track[]): Album[] {
       a = {
         key,
         title: t.album || UNKNOWN_ALBUM,
-        artist: t.compilation ? "Various Artists" : t.albumArtist || t.artist || UNKNOWN_ARTIST,
+        artist: t.compilation ? VARIOUS : t.albumArtist || t.artist || UNKNOWN_ARTIST,
         year: 0,
         compilation: t.compilation,
         tracks: [],

@@ -167,6 +167,19 @@ Everything decided and learned so far, so work can continue in a new session.
   files are never deleted.
 - Scans merge with changes made meanwhile (ratings, plays, removals, newer tags).
 
+## Translations and copying to the iPod (0028)
+
+- `app/src/lib/i18n.ts`: `t("English", {vars})`, `tn(n, one, other)`.
+  English text is the key; `src/locales/<lang>.json` maps it (empty = English).
+  `npm run strings` (scripts/strings.mjs) collects every t()/tn() text into
+  en.json and adds new keys to the other files. See docs/TRANSLATING.md.
+  The language is chosen in main.ts before App loads (system locales from the
+  `system_locales` command via sys-locale; macOS also needs CFBundleLocalizations),
+  so module-level t() calls are fine. Rust messages are still English.
+- Library songs dragged onto the iPod's Music or one of its playlists (or
+  "Copy to <iPod>" in the song menu) are copied with add_files; songs already
+  there (same name/artist/album/length within 2 s) aren't copied again.
+
 Order chosen: confirm editing on the nano → **playback** (done) → artwork (done) → icon chooser → shuffle/repeat → playlist reordering → column browser fixes and Format/Bitrate columns → media library.
 
 ## Status (2026-10-20)

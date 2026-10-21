@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t, tn } from "./i18n";
   // Albums as a grid of covers. Clicking one opens its songs in a band under
   // its row (as in iTunes 11); clicking it again, the ×, or Escape closes it.
   import { store } from "./store.svelte";
@@ -7,7 +8,7 @@
   import Cover from "./Cover.svelte";
   import AlbumTracks from "./AlbumTracks.svelte";
 
-  let { albums, empty = "No albums" }: { albums: Album[]; empty?: string } = $props();
+  let { albums, empty = t("No albums") }: { albums: Album[]; empty?: string } = $props();
 
   const TILE = 150;
   const GAP = 22;
@@ -63,21 +64,21 @@
       {/each}
     </div>
     {#if open && row.includes(open)}
-      <section class="panel" aria-label="{open.title} by {open.artist}" style:--pointer="{GAP + openCol * (TILE + GAP) + TILE / 2}px">
-        <button class="close" aria-label="Close" onclick={() => (store.openAlbum = null)}>×</button>
+      <section class="panel" aria-label={t("{album} by {artist}", { album: open.title, artist: open.artist })} style:--pointer="{GAP + openCol * (TILE + GAP) + TILE / 2}px">
+        <button class="close" aria-label={t("Close")} onclick={() => (store.openAlbum = null)}>×</button>
         <div class="info">
           <header>
             <h2>{open.title}</h2>
             <p class="by">{open.artist}{open.year ? ` (${open.year})` : ""}</p>
             <div class="actions">
-              <button onclick={() => playAlbum(open, false)} title="Play the album">▶ Play</button>
-              <button onclick={() => playAlbum(open, true)} title="Shuffle the album">⤮ Shuffle</button>
-              <span class="meta">{count(open.tracks.length)} {open.tracks.length === 1 ? "song" : "songs"}, {longDuration(total(open))}</span>
+              <button onclick={() => playAlbum(open, false)} title={t("Play the album")}>{t("▶ Play")}</button>
+              <button onclick={() => playAlbum(open, true)} title={t("Shuffle the album")}>{t("⤮ Shuffle")}</button>
+              <span class="meta">{tn(open.tracks.length, "{n} song", "{n} songs")}, {longDuration(total(open))}</span>
             </div>
           </header>
           <AlbumTracks tracks={open.tracks} />
         </div>
-        <div class="big"><Cover track={open.coverTrack} px={600} alt="Cover of {open.title}" /></div>
+        <div class="big"><Cover track={open.coverTrack} px={600} alt={t("Cover of {name}", { name: open.title })} /></div>
       </section>
     {/if}
   {/each}

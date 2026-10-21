@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t, tn } from "./i18n";
   import { store } from "./store.svelte";
   import Modal from "./Modal.svelte";
   import GetInfo from "./GetInfo.svelte";
@@ -6,7 +7,7 @@
   import { count } from "./format";
 
   const close = () => (store.dialog = null);
-  const ipodName = $derived(store.ipod?.name ?? "the iPod");
+  const ipodName = $derived(store.ipod?.name ?? t("the iPod"));
 </script>
 
 {#if store.dialog?.kind === "info"}
@@ -14,47 +15,45 @@
 {:else if store.dialog?.kind === "delete-songs"}
   {@const ids = store.dialog.ids}
   {@const n = ids.length}
-  <Modal title="Delete {n === 1 ? 'this song' : `${count(n)} songs`} from {ipodName}?" onclose={close}>
+  <Modal title={tn(n, "Delete this song from {name}?", "Delete {n} songs from {name}?", { name: ipodName })} onclose={close}>
     <p>
-      {n === 1 ? "It" : "They"}'ll be removed from the iPod and from all its playlists, and the music
-      {n === 1 ? "file" : "files"} deleted from the iPod. Your own copies elsewhere aren't touched.
+      {tn(n, "It'll be removed from the iPod and from all its playlists, and the music file deleted from the iPod. Your own copies elsewhere aren't touched.", "They'll be removed from the iPod and from all its playlists, and the music files deleted from the iPod. Your own copies elsewhere aren't touched.")}
     </p>
     {#snippet buttons()}
-      <button onclick={close}>Cancel</button>
-      <button class="danger" onclick={() => store.deleteSongs(ids)}>Delete {n === 1 ? "Song" : "Songs"}</button>
+      <button onclick={close}>{t("Cancel")}</button>
+      <button class="danger" onclick={() => store.deleteSongs(ids)}>{tn(n, "Delete Song", "Delete Songs")}</button>
     {/snippet}
   </Modal>
 {:else if store.dialog?.kind === "delete-playlist"}
   {@const d = store.dialog}
-  <Modal title="Delete the playlist “{d.name}”?" onclose={close}>
-    <p>Its songs stay {d.id.startsWith("lib:") ? "in the library" : "on the iPod"}.</p>
+  <Modal title={t("Delete the playlist “{name}”?", { name: d.name })} onclose={close}>
+    <p>{d.id.startsWith("lib:") ? t("Its songs stay in the library.") : t("Its songs stay on the iPod.")}</p>
     {#snippet buttons()}
-      <button onclick={close}>Cancel</button>
-      <button class="danger" onclick={() => store.deletePlaylist(d.id)}>Delete Playlist</button>
+      <button onclick={close}>{t("Cancel")}</button>
+      <button class="danger" onclick={() => store.deletePlaylist(d.id)}>{t("Delete Playlist")}</button>
     {/snippet}
   </Modal>
 {:else if store.dialog?.kind === "library"}
   <LibraryDialog id={store.dialog.id} />
 {:else if store.dialog?.kind === "delete-library"}
   {@const d = store.dialog}
-  <Modal title="Delete the library “{d.name}”?" onclose={close}>
-    <p>Chinotto forgets this library and its list of songs. Your music files and folders aren't touched.</p>
+  <Modal title={t("Delete the library “{name}”?", { name: d.name })} onclose={close}>
+    <p>{t("Chinotto forgets this library and its list of songs. Your music files and folders aren't touched.")}</p>
     {#snippet buttons()}
-      <button onclick={close}>Cancel</button>
-      <button class="danger" onclick={() => store.deleteLibrary(d.id)}>Delete Library</button>
+      <button onclick={close}>{t("Cancel")}</button>
+      <button class="danger" onclick={() => store.deleteLibrary(d.id)}>{t("Delete Library")}</button>
     {/snippet}
   </Modal>
 {:else if store.dialog?.kind === "remove-from-library"}
   {@const ids = store.dialog.ids}
   {@const n = ids.length}
-  <Modal title="Remove {n === 1 ? 'this song' : `${count(n)} songs`} from the library?" onclose={close}>
+  <Modal title={tn(n, "Remove this song from the library?", "Remove {n} songs from the library?")} onclose={close}>
     <p>
-      {n === 1 ? "It" : "They"}'ll be taken out of this library and its playlists, and won't come back at the next scan.
-      The music {n === 1 ? "file stays" : "files stay"} where {n === 1 ? "it is" : "they are"}: nothing is deleted.
+      {tn(n, "It'll be taken out of this library and its playlists, and won't come back at the next scan. The music file stays where it is: nothing is deleted.", "They'll be taken out of this library and its playlists, and won't come back at the next scan. The music files stay where they are: nothing is deleted.")}
     </p>
     {#snippet buttons()}
-      <button onclick={close}>Cancel</button>
-      <button class="danger" onclick={() => store.removeFromLibrary(ids)}>Remove</button>
+      <button onclick={close}>{t("Cancel")}</button>
+      <button class="danger" onclick={() => store.removeFromLibrary(ids)}>{t("Remove")}</button>
     {/snippet}
   </Modal>
 {:else if store.dialog?.kind === "report"}
@@ -64,7 +63,7 @@
       {#each d.lines as line, i (i)}<li>{line}</li>{/each}
     </ul>
     {#snippet buttons()}
-      <button class="primary" onclick={close}>OK</button>
+      <button class="primary" onclick={close}>{t("OK")}</button>
     {/snippet}
   </Modal>
 {/if}

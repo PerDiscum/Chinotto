@@ -1,4 +1,5 @@
 import type { Track } from "./types";
+import { lang, t, tn } from "./i18n";
 
 const nf = new Intl.NumberFormat();
 export const count = (n: number) => nf.format(n);
@@ -14,10 +15,11 @@ export function duration(ms: number): string {
 /** Total time the way iTunes' status bar says it: "65.7 days", "3.2 hours". */
 export function longDuration(ms: number): string {
   const hours = ms / 3_600_000;
-  if (hours >= 24) return `${(hours / 24).toFixed(1)} days`;
-  if (hours >= 1) return `${hours.toFixed(1)} hours`;
+  const one = (n: number) => new Intl.NumberFormat(lang, { maximumFractionDigits: 1, minimumFractionDigits: 1 }).format(n);
+  if (hours >= 24) return t("{x} days", { x: one(hours / 24) });
+  if (hours >= 1) return t("{x} hours", { x: one(hours) });
   const m = Math.round(ms / 60000);
-  return `${m} ${m === 1 ? "minute" : "minutes"}`;
+  return tn(m, "{n} minute", "{n} minutes");
 }
 
 export function bytes(n: number): string {
@@ -25,7 +27,7 @@ export function bytes(n: number): string {
   if (n >= 1e9) return `${(n / 1e9).toFixed(1)} GB`;
   if (n >= 1e6) return `${(n / 1e6).toFixed(1)} MB`;
   if (n >= 1e3) return `${Math.round(n / 1e3)} KB`;
-  return `${n} bytes`;
+  return t("{n} bytes", { n });
 }
 
 export const stars = (r: number) => "★".repeat(r);
@@ -57,12 +59,13 @@ export function formatName(t: Track): string {
 
 export const bitrate = (t: Track) => (t.bitrate ? `${t.bitrate} kbps` : "");
 
-export const UNKNOWN_ARTIST = "Unknown Artist";
-export const UNKNOWN_ALBUM = "Unknown Album";
-export const UNKNOWN_GENRE = "Unknown Genre";
-export const COMPILATIONS = "Compilations";
-export const UNKNOWN_COMPOSER = "Unknown Composer";
-export const UNKNOWN_YEAR = "Unknown Year";
+export const UNKNOWN_ARTIST = t("Unknown Artist");
+export const UNKNOWN_ALBUM = t("Unknown Album");
+export const UNKNOWN_GENRE = t("Unknown Genre");
+export const COMPILATIONS = t("Compilations");
+export const VARIOUS = t("Various Artists");
+export const UNKNOWN_COMPOSER = t("Unknown Composer");
+export const UNKNOWN_YEAR = t("Unknown Year");
 
 /** The artist a track is filed under in the column browser (same grouping the iPod uses). */
 export const browseArtist = (t: Track) =>

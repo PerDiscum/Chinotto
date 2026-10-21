@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t, tn } from "./i18n";
   import { store, isMac } from "./store.svelte";
   import { bitrate, duration, formatName, stars, count } from "./format";
   import type { SortKey, Track } from "./types";
@@ -11,16 +12,16 @@
   type Col = { key: SortKey; label: string; width: string; min: number; num?: boolean; fixed?: boolean };
   const ALL: Col[] = [
     { key: "order", label: "#", width: "38px", min: 38, num: true, fixed: true },
-    { key: "title", label: "Name", width: "minmax(180px, 2.4fr)", min: 180, fixed: true },
-    { key: "time", label: "Time", width: "52px", min: 52, num: true },
-    { key: "artist", label: "Artist", width: "minmax(120px, 1.5fr)", min: 120 },
-    { key: "album", label: "Album", width: "minmax(120px, 1.5fr)", min: 120 },
-    { key: "genre", label: "Genre", width: "minmax(80px, 0.9fr)", min: 80 },
-    { key: "year", label: "Year", width: "46px", min: 46, num: true },
-    { key: "format", label: "Format", width: "58px", min: 58 },
-    { key: "bitrate", label: "Bit Rate", width: "72px", min: 72, num: true },
-    { key: "rating", label: "Rating", width: "76px", min: 76 },
-    { key: "plays", label: "Plays", width: "50px", min: 50, num: true },
+    { key: "title", label: t("Name"), width: "minmax(180px, 2.4fr)", min: 180, fixed: true },
+    { key: "time", label: t("Time"), width: "52px", min: 52, num: true },
+    { key: "artist", label: t("Artist"), width: "minmax(120px, 1.5fr)", min: 120 },
+    { key: "album", label: t("Album"), width: "minmax(120px, 1.5fr)", min: 120 },
+    { key: "genre", label: t("Genre"), width: "minmax(80px, 0.9fr)", min: 80 },
+    { key: "year", label: t("Year"), width: "46px", min: 46, num: true },
+    { key: "format", label: t("Format"), width: "58px", min: 58 },
+    { key: "bitrate", label: t("Bit Rate"), width: "72px", min: 72, num: true },
+    { key: "rating", label: t("Rating"), width: "76px", min: 76 },
+    { key: "plays", label: t("Plays"), width: "50px", min: 50, num: true },
   ];
   // "#" only where the list has an order of its own (a playlist).
   const columns = $derived(ALL.filter((c) => (c.key === "order" ? store.hasOwnOrder : !store.hiddenColumns.includes(c.key))));
@@ -111,6 +112,8 @@
     if (i >= 0) void store.playList(tracks, i);
   }
 
+  const notAvailable = t("Not available: its drive isn't connected");
+  const starsLabel = (n: number) => tn(n, "{n} star", "{n} stars");
   const contextmenu = (e: MouseEvent, t: Track) => songMenu(e, t, tracks);
 
   /** Where in the list a drop at screen height `y` would insert (row boundary), or null outside it. */
@@ -132,7 +135,7 @@
   class="songs"
   role="grid"
   tabindex="0"
-  aria-label="Songs"
+  aria-label={t("Songs")}
   aria-rowcount={tracks.length}
   aria-multiselectable="true"
   bind:this={scroller}
@@ -166,7 +169,7 @@
         class:odd={n % 2 === 1}
         class:sel={store.selected.has(t.id)}
         class:unavailable={t.unavailable}
-        title={t.unavailable ? "Not available: its drive isn't connected" : undefined}
+        title={t.unavailable ? notAvailable : undefined}
         role="row"
         tabindex="-1"
         aria-rowindex={n + 1}
@@ -193,7 +196,7 @@
               {#if store.nowPlaying === t.dbid}<span class="playing" aria-label={store.player.state === "playing" ? "Playing" : "Paused"}>{store.player.state === "playing" ? "▶" : "❙❙"}</span>{/if}{dash(t.title)}
             </span>
           {:else if c.key === "rating"}
-            <span class="cell c-rating" aria-label="{t.rating} stars">{cell(c, t, n)}</span>
+            <span class="cell c-rating" aria-label={starsLabel(t.rating)}>{cell(c, t, n)}</span>
           {:else}
             <span class="cell" class:num={c.num} class:muted={c.key === "order"}>{cell(c, t, n)}</span>
           {/if}
@@ -208,7 +211,7 @@
 
   {#if tracks.length === 0}
     <p class="empty">
-      {#if store.search}No songs match “{store.search}”.{:else}This playlist is empty.{/if}
+      {#if store.search}{t("No songs match “{q}”.", { q: store.search })}{:else}{t("This playlist is empty.")}{/if}
     </p>
   {/if}
 </div>

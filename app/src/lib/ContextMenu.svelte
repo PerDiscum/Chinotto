@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t, tn } from "./i18n";
   import { store, type MenuItem } from "./store.svelte";
 
   const menu = $derived(store.menu);
@@ -61,7 +62,7 @@
               {#each item.submenu as s, j (j)}
                 <button role="menuitem" disabled={s.disabled} onclick={() => run(s)}>{s.label}</button>
               {:else}
-                <button role="menuitem" disabled>No playlists</button>
+                <button role="menuitem" disabled>{t("No playlists")}</button>
               {/each}
             </div>
           {/if}

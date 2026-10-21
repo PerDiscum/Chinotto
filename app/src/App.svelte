@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t, tn } from "./lib/i18n";
   import { onMount } from "svelte";
   import { store } from "./lib/store.svelte";
   import { albums, browse } from "./lib/library";
@@ -95,24 +96,24 @@
     {#if store.showArtwork && (store.ipod || store.source.kind === "library")}<ArtworkPane />{/if}
     <div class="side-tools">
       <button
-        title="New library or open an iPod folder"
-        aria-label="New library or open an iPod folder"
+        title={t("New library or open an iPod folder")}
+        aria-label={t("New library or open an iPod folder")}
         onclick={(e) => {
           const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
           store.menu = {
             x: r.left,
             y: r.top - 64,
             items: [
-              { label: "New Library…", action: () => (store.dialog = { kind: "library", id: null }) },
-              { label: "Open iPod Folder…", action: () => store.openFolder() },
+              { label: t("New Library…"), action: () => (store.dialog = { kind: "library", id: null }) },
+              { label: t("Open iPod Folder…"), action: () => store.openFolder() },
             ],
           };
         }}><Icon name="folder" /></button
       >
       {#if store.ipod && store.source.kind !== "library"}
         <button
-          title={store.writable ? "Add songs to the iPod… (also: drop files or folders on the window)" : "Allow changes on the iPod's page to add songs"}
-          aria-label="Add songs to the iPod"
+          title={store.writable ? t("Add songs to the iPod… (also: drop files or folders on the window)") : t("Allow changes on the iPod's page to add songs")}
+          aria-label={t("Add songs to the iPod")}
           disabled={!store.writable || !!store.busy}
           onclick={(e) => {
             const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -120,38 +121,38 @@
               x: r.left,
               y: r.top - 64,
               items: [
-                { label: "Add Files…", action: () => store.pickAndAddFiles() },
-                { label: "Add Folder…", action: () => store.pickAndAddFolder() },
+                { label: t("Add Files…"), action: () => store.pickAndAddFiles() },
+                { label: t("Add Folder…"), action: () => store.pickAndAddFolder() },
               ],
             };
           }}><Icon name="add" /></button
         >
         <button
-          title={store.writable ? "New playlist" : "Allow changes on the iPod's page to make playlists"}
-          aria-label="New playlist"
+          title={store.writable ? t("New playlist") : t("Allow changes on the iPod's page to make playlists")}
+          aria-label={t("New playlist")}
           disabled={!store.writable || !!store.busy}
           onclick={() => store.newPlaylist(false)}><Icon name="newlist" /></button
         >
       {:else if store.source.kind === "library"}
-        <button title="New playlist in this library" aria-label="New playlist" disabled={!!store.busy} onclick={() => store.newPlaylist(false)}
+        <button title={t("New playlist in this library")} aria-label={t("New playlist")} disabled={!!store.busy} onclick={() => store.newPlaylist(false)}
           ><Icon name="newlist" /></button
         >
       {/if}
         <button
-          title={store.shuffle ? "Shuffle is on" : "Shuffle is off"}
-          aria-label="Shuffle"
+          title={store.shuffle ? t("Shuffle is on") : t("Shuffle is off")}
+          aria-label={t("Shuffle")}
           aria-pressed={store.shuffle}
           onclick={() => store.setShuffle(!store.shuffle)}><Icon name="shuffle" /></button
         >
         <button
-          title={store.repeat === "off" ? "Repeat is off" : store.repeat === "all" ? "Repeat all" : "Repeat one"}
-          aria-label="Repeat: {store.repeat === 'off' ? 'off' : store.repeat === 'all' ? 'all' : 'one'}"
+          title={store.repeat === "off" ? t("Repeat is off") : store.repeat === "all" ? t("Repeat all") : t("Repeat one")}
+          aria-label={store.repeat === "off" ? t("Repeat is off") : store.repeat === "all" ? t("Repeat all") : t("Repeat one")}
           aria-pressed={store.repeat !== "off"}
           onclick={() => store.cycleRepeat()}><Icon name={store.repeat === "one" ? "repeat-one" : "repeat"} /></button
         >
       <span class="spacer"></span>
-      <button title={store.showBrowser ? "Hide column browser" : "Show column browser"} aria-pressed={store.showBrowser} onclick={() => (store.showBrowser = !store.showBrowser)}><Icon name="columns" /></button>
-      <button title={store.showArtwork ? "Hide artwork" : "Show artwork"} aria-pressed={store.showArtwork} onclick={() => (store.showArtwork = !store.showArtwork)}><Icon name="artwork" /></button>
+      <button title={store.showBrowser ? t("Hide column browser") : t("Show column browser")} aria-pressed={store.showBrowser} onclick={() => (store.showBrowser = !store.showBrowser)}><Icon name="columns" /></button>
+      <button title={store.showArtwork ? t("Hide artwork") : t("Show artwork")} aria-pressed={store.showArtwork} onclick={() => (store.showArtwork = !store.showArtwork)}><Icon name="artwork" /></button>
     </div>
   </aside>
 
@@ -159,7 +160,7 @@
     {#if store.error}
       <div class="error" role="alert">
         <span>{store.error}</span>
-        <button onclick={() => (store.error = null)}>Dismiss</button>
+        <button onclick={() => (store.error = null)}>{t("Dismiss")}</button>
       </div>
     {/if}
 
@@ -170,9 +171,9 @@
     {:else}
       {#if store.hasViews}<ViewTabs />{/if}
       {#if store.view === "albums"}
-        <AlbumGrid albums={albumList} empty={store.search ? `No albums match “${store.search}”.` : "No albums"} />
+        <AlbumGrid albums={albumList} empty={store.search ? t("No albums match “{q}”.", { q: store.search }) : t("No albums")} />
       {:else if store.view === "compilations"}
-        <AlbumGrid albums={albumList.filter((a) => a.compilation)} empty="No compilations (albums with the Compilation tag)." />
+        <AlbumGrid albums={albumList.filter((a) => a.compilation)} empty={t("No compilations (albums with the Compilation tag).")} />
       {:else if store.view === "artists" || store.view === "genres" || store.view === "composers"}
         <GroupView tracks={searched} by={store.view === "artists" ? "artist" : store.view === "genres" ? "genre" : "composer"} view={store.view} />
       {:else}
@@ -185,15 +186,17 @@
   {#if fileDrag}
     <div class="dropzone" aria-hidden="true">
       <p>
-        {#if store.writable}Drop to add to {store.ipod?.name}{store.editablePlaylist ? ` and “${store.editablePlaylist.name}”` : ""}
-        {:else}Turn on “Allow changes” on the iPod's page to add songs{/if}
+        {#if store.writable}{store.editablePlaylist
+            ? t("Drop to add to {name} and “{playlist}”", { name: store.ipod?.name ?? "", playlist: store.editablePlaylist.name })
+            : t("Drop to add to {name}", { name: store.ipod?.name ?? "" })}
+        {:else}{t("Turn on “Allow changes” on the iPod's page to add songs")}{/if}
       </p>
     </div>
   {/if}
 
   {#if store.songDrag}
     <div class="songdrag" style:left="{store.songDrag.x + 12}px" style:top="{store.songDrag.y + 8}px" aria-hidden="true">
-      {store.songDrag.dbids.length === 1 ? "1 song" : `${store.songDrag.dbids.length} songs`}
+      {tn(store.songDrag.dbids.length, "{n} song", "{n} songs")}
     </div>
   {/if}
 
@@ -202,7 +205,7 @@
 
   <footer class="status">
     {#if (store.ipod && store.source.kind === "playlist") || store.source.kind === "library"}
-      {count(visible.length)} {visible.length === 1 ? "song" : "songs"}, {longDuration(totals.ms)}, {bytes(totals.size)}{#if store.selected.size > 1}; {count(store.selected.size)} selected{/if}
+      {tn(visible.length, "{n} song", "{n} songs")}, {longDuration(totals.ms)}, {bytes(totals.size)}{#if store.selected.size > 1}; {t("{n} selected", { n: store.selected.size })}{/if}
     {/if}
   </footer>
 </div>

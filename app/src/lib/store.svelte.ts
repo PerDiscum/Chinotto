@@ -3,6 +3,7 @@
 import * as api from "./api";
 import { TrackIndex } from "./library";
 import { count } from "./format";
+import { t, tn } from "./i18n";
 import type { AddProgress, BrowseField, DeviceInfo, IpodView, LibrarySummary, LibraryView, ScanProgress, SortKey, Source, Track, TrackChanges, WriteResult } from "./types";
 
 export interface MenuItem {
@@ -219,7 +220,7 @@ class Store {
     void api.playerVolume(this.volume);
     await api.onAddProgress((p) => {
       this.progress = p;
-      if (p.total) this.busy = `Adding ${Math.min(p.done + 1, p.total)} of ${p.total}${p.current ? `: ${p.current}` : ""}`;
+      if (p.total) this.busy = t("Adding {done} of {total}", { done: Math.min(p.done + 1, p.total), total: p.total }) + (p.current ? `: ${p.current}` : "");
     });
     this.deviceIcons = await api.deviceIcons().catch(() => ({}));
     await api.onLibrariesChanged((l) => (this.libraries = l));
@@ -298,7 +299,7 @@ class Store {
       await api.eject(path);
       this.devices = this.devices.filter((d) => d.path !== path);
     } catch (e) {
-      this.error = `Couldn't eject: ${e}`;
+      this.error = t("Couldn't eject: {error}", { error: String(e) });
     } finally {
       this.ejecting = null;
     }
@@ -354,11 +355,11 @@ class Store {
     const s = this.source;
     if (s.kind === "library") {
       if (!Object.keys(changes).length && !artwork) return true;
-      this.busy = ids.length > 1 ? `Saving ${count(ids.length)} songs…` : "Saving…";
+      this.busy = ids.length > 1 ? tn(ids.length, "Saving…", "Saving {n} songs…") : t("Saving…");
       try {
         const cover = artwork === "remove" ? "" : artwork ? artwork.set : null;
         const problems = await api.libEditTracks(s.lib, ids.map(libSongId), changes, cover);
-        if (problems.length) this.dialog = { kind: "report", title: `${count(problems.length)} ${problems.length === 1 ? "file" : "files"} couldn't be changed`, lines: problems };
+        if (problems.length) this.dialog = { kind: "report", title: tn(problems.length, "{n} file couldn't be changed", "{n} files couldn't be changed"), lines: problems };
         return !problems.length;
       } catch (e) {
         this.error = String(e);
@@ -367,9 +368,9 @@ class Store {
         this.busy = null;
       }
     }
-    if (Object.keys(changes).length && (await this.write("Saving…", (p) => api.editTracks(p, ids, changes))) === null) return false;
-    if (artwork === "remove") return (await this.write("Removing artwork…", (p) => api.removeArtwork(p, ids))) !== null;
-    if (artwork) return (await this.write("Adding artwork…", (p) => api.setArtwork(p, ids, artwork.set))) !== null;
+    if (Object.keys(changes).length && (await this.write(t("Saving…"), (p) => api.editTracks(p, ids, changes))) === null) return false;
+    if (artwork === "remove") return (await this.write(t("Removing artwork…"), (p) => api.removeArtwork(p, ids))) !== null;
+    if (artwork) return (await this.write(t("Adding artwork…"), (p) => api.setArtwork(p, ids, artwork.set))) !== null;
     return true;
   }
 
@@ -479,7 +480,7 @@ class Store {
   async removeUnavailable(id: string) {
     try {
       const n = await api.removeUnavailable(id);
-      this.dialog = { kind: "report", title: n ? `Removed ${count(n)} unavailable ${n === 1 ? "song" : "songs"}` : "No unavailable songs", lines: [] };
+      this.dialog = { kind: "report", title: n ? tn(n, "Removed {n} unavailable song", "Removed {n} unavailable songs") : t("No unavailable songs"), lines: [] };
     } catch (e) {
       this.error = String(e);
     }
@@ -524,7 +525,7 @@ class Store {
       return;
     }
     if (this.source.kind === "library") await this.saveInfo(ids, {}, { set: image });
-    else await this.write("Adding artwork…", (p) => api.setArtwork(p, ids, image));
+    else await this.write(t("Adding artwork…"), (p) => api.setArtwork(p, ids, image));
   }
 
   /** Delete key / menu: in a playlist, take songs out of it; elsewhere, delete from the iPod (asks first). */
@@ -539,7 +540,7 @@ class Store {
   async deleteSongs(ids: string[]) {
     this.dialog = null;
     const n = ids.length;
-    const ok = await this.write(`Deleting ${n} ${n === 1 ? "song" : "songs"}…`, (p) => api.deleteTracks(p, ids));
+    const ok = await this.write(tn(n, "Deleting {n} song…", "Deleting {n} songs…"), (p) => api.deleteTracks(p, ids));
     if (ok !== null) this.selected = new Set();
   }
 
@@ -578,7 +579,7 @@ class Store {
     }
     const drop = new Set(this.dbidsOf(trackIds));
     const rest = this.playlistDbids(id).filter((d) => !drop.has(d));
-    const ok = await this.write("Saving…", (p) => api.setPlaylistTracks(p, id, rest));
+    const ok = await this.write(t("Saving…"), (p) => api.setPlaylistTracks(p, id, rest));
     if (ok !== null) this.selected = new Set();
   }
 
@@ -594,18 +595,24 @@ class Store {
       if (fresh.length) await this.libChange(() => api.libSetPlaylistTracks(t.lib, t.pl.id, [...t.pl.trackIds, ...fresh]));
       return;
     }
+    // Library songs onto the iPod ("ipod:music", or one of its playlists): copy them over.
+    if (dbids.some((d) => d.startsWith("lib:"))) {
+      await this.copyToIpod(dbids.filter((d) => d.startsWith("lib:")), id === "ipod:music" ? null : id);
+      return;
+    }
+    if (id === "ipod:music") return;
     const have = this.playlistDbids(id);
     const present = new Set(have);
     const add = dbids.filter((d) => !d.startsWith("lib:") && !present.has(d));
     if (!add.length) return;
-    await this.write("Saving…", (p) => api.setPlaylistTracks(p, id, [...have, ...add]));
+    await this.write(t("Saving…"), (p) => api.setPlaylistTracks(p, id, [...have, ...add]));
   }
 
   async newPlaylist(fromSelection: boolean) {
     const s = this.source;
     if (s.kind === "library") {
       const ids = fromSelection ? this.selectedTracks.map((t) => t.id) : [];
-      const pid = await this.libChange(() => api.libCreatePlaylist(s.lib, "untitled playlist", ids));
+      const pid = await this.libChange(() => api.libCreatePlaylist(s.lib, t("untitled playlist"), ids));
       if (pid) {
         await this.loadLibrary(s.lib);
         this.select({ kind: "library", lib: s.lib, id: pid });
@@ -614,7 +621,7 @@ class Store {
       return;
     }
     const ids = fromSelection ? this.selectedTracks.map((t) => t.dbid) : [];
-    const r = await this.write("Saving…", (p) => api.createPlaylist(p, "untitled playlist", ids));
+    const r = await this.write(t("Saving…"), (p) => api.createPlaylist(p, t("untitled playlist"), ids));
     if (r) {
       this.select({ kind: "playlist", id: r.extra.id });
       this.renaming = r.extra.id;
@@ -631,7 +638,7 @@ class Store {
     }
     const pl = this.ipod?.playlists.find((p) => p.id === id);
     if (!pl || !clean || clean === pl.name) return;
-    await this.write("Saving…", (p) => api.renamePlaylist(p, id, clean));
+    await this.write(t("Saving…"), (p) => api.renamePlaylist(p, id, clean));
   }
 
   async deletePlaylist(id: string) {
@@ -643,7 +650,7 @@ class Store {
       await this.libChange(() => api.libDeletePlaylist(t.lib, t.pl.id));
       return;
     }
-    await this.write("Deleting playlist…", (p) => api.deletePlaylist(p, id));
+    await this.write(t("Deleting playlist…"), (p) => api.deletePlaylist(p, id));
   }
 
   /** Take songs out of a library (files stay where they are). */
@@ -659,13 +666,13 @@ class Store {
   async addFiles(paths: string[]) {
     if (!paths.length || !this.writable) return;
     const pl = this.editablePlaylist?.id ?? null;
-    const res = await this.write("Adding songs…", (p) => api.addFiles(p, paths, pl));
+    const res = await this.write(t("Adding songs…"), (p) => api.addFiles(p, paths, pl));
     if (!res) return;
     const r = res.extra;
     if (r.skipped.length) {
       this.dialog = {
         kind: "report",
-        title: `Added ${r.added.length} ${r.added.length === 1 ? "song" : "songs"}; ${r.skipped.length} not added`,
+        title: tn(r.added.length, "Added {n} song; {skipped} not added", "Added {n} songs; {skipped} not added", { skipped: r.skipped.length }),
         lines: r.skipped,
       };
     }
@@ -674,6 +681,54 @@ class Store {
     this.resetBrowser();
     const byDbid = new Map(this.ipod!.tracks.map((t) => [t.dbid, t.id]));
     this.selected = new Set(r.added.map((d) => byDbid.get(d)).filter((x): x is number => x !== undefined));
+  }
+
+  /**
+   * Copy library songs onto the open iPod (into one of its playlists too, if
+   * given). Songs the iPod already has (same name, artist, album and length)
+   * aren't copied again; formats the iPod can't play are reported.
+   */
+  async copyToIpod(dbids: string[], playlist: string | null) {
+    if (!this.ipod?.writable) return;
+    const songs = dbids.map((d) => this.trackByDbid(d)).filter((t): t is Track => !!t && !!t.location && !t.unavailable);
+    const same = (a: Track, b: Track) =>
+      (a.title ?? "") === (b.title ?? "") && (a.artist ?? "") === (b.artist ?? "") && (a.album ?? "") === (b.album ?? "") && Math.abs(a.lengthMs - b.lengthMs) < 2000;
+    const onIpod = new Map<string, Track[]>();
+    for (const t of this.ipod.tracks) {
+      const k = (t.title ?? "").toLowerCase();
+      onIpod.set(k, [...(onIpod.get(k) ?? []), t]);
+    }
+    const already: Track[] = [];
+    const files: string[] = [];
+    for (const t of songs) {
+      const match = onIpod.get((t.title ?? "").toLowerCase())?.find((x) => same(x, t));
+      if (match) already.push(match);
+      else files.push(t.location!);
+    }
+    let added: string[] = [];
+    const skipped: string[] = [];
+    if (files.length) {
+      const res = await this.write(tn(files.length, "Copying {n} song to {name}…", "Copying {n} songs to {name}…", { name: this.ipod.name }), (p) => api.addFiles(p, files, playlist));
+      if (!res) return;
+      added = res.extra.added;
+      skipped.push(...res.extra.skipped);
+    }
+    // Songs already there still go into the playlist.
+    if (playlist && already.length) await this.addToPlaylist(playlist, already.map((t) => t.dbid));
+    const lines = [...skipped];
+    if (already.length) lines.push(tn(already.length, "{n} song already on the iPod, not copied again.", "{n} songs already on the iPod, not copied again."));
+    if (skipped.length || (already.length && !added.length)) {
+      this.dialog = { kind: "report", title: tn(added.length, "Copied {n} song to {name}", "Copied {n} songs to {name}", { name: this.ipod?.name ?? t("the iPod") }), lines };
+    }
+  }
+
+  /** A song by dbid, from the iPod or any loaded library. */
+  trackByDbid(d: string): Track | null {
+    if (d.startsWith("lib:")) {
+      const [, lib, id] = d.split(":");
+      return this.libViews[lib]?.index.byId.get(Number(id)) ?? null;
+    }
+    return this.ipod?.tracks.find((t) => t.dbid === d) ?? null;
   }
 
   async pickAndAddFiles() {
@@ -741,7 +796,7 @@ class Store {
     this.advancing = true;
     try {
       await api.playTrack(dbid);
-      if (skipped) this.error = `Skipped ${skipped} ${skipped === 1 ? "song" : "songs"} whose file couldn't be played.`;
+      if (skipped) this.error = tn(skipped, "Skipped {n} song whose file couldn't be played.", "Skipped {n} songs whose file couldn't be played.");
     } catch (e) {
       // Like iTunes: skip a song that can't be played (e.g. its file is missing) and go on,
       // but give up after a few in a row.
@@ -925,7 +980,7 @@ class Store {
     if (order.every((d, i) => d === tracks[i].dbid)) return; // no change
     const s = this.source;
     if (s.kind === "library") await this.libChange(() => api.libSetPlaylistTracks(s.lib, pl.id, order.map(libSongId)));
-    else await this.write("Saving…", (p) => api.setPlaylistTracks(p, pl.id, order));
+    else await this.write(t("Saving…"), (p) => api.setPlaylistTracks(p, pl.id, order));
   }
 
   /** Click handling for the song list: plain, Shift (range), Cmd/Ctrl (toggle). */

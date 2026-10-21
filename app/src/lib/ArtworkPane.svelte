@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t, tn } from "./i18n";
   import { store } from "./store.svelte";
 
   // Like iTunes: the playing song's cover, or the selected song's when you choose.
@@ -20,9 +21,9 @@
       x: e.clientX,
       y: e.clientY,
       items: [
-        { label: "Save Cover As…", disabled: !track?.art || failed, action: () => track && store.saveCover(track) },
+        { label: t("Save Cover As…"), disabled: !track?.art || failed, action: () => track && store.saveCover(track) },
         {
-          label: n > 1 ? `Paste Cover to ${n} Selected Songs` : "Paste Cover to Selected Song",
+          label: tn(n, "Paste Cover to Selected Song", "Paste Cover to {n} Selected Songs"),
           disabled: !n || !store.writable || !!store.busy || store.source.kind === "library",
           action: () => store.pasteCover(targets),
         },
@@ -31,21 +32,21 @@
   }
 </script>
 
-<figure class="art" aria-label="Artwork of the selected song">
+<figure class="art" aria-label={t("Artwork of the selected song")}>
   <figcaption>
     {#if store.playingTrack}
-      <button onclick={() => (mode = mode === "playing" ? "selected" : "playing")} title="Switch between the playing and the selected song">
-        {showingPlaying ? "Now playing" : "Selected song"} <span aria-hidden="true">⇄</span>
+      <button onclick={() => (mode = mode === "playing" ? "selected" : "playing")} title={t("Switch between the playing and the selected song")}>
+        {showingPlaying ? t("Now playing") : t("Selected song")} <span aria-hidden="true">⇄</span>
       </button>
     {:else}
-      {track ? "Selected song" : "Nothing selected"}
+      {track ? t("Selected song") : t("Nothing selected")}
     {/if}
   </figcaption>
-  <div class="frame" role="img" aria-label="Cover" oncontextmenu={contextmenu}>
+  <div class="frame" role="img" aria-label={t("Cover")} oncontextmenu={contextmenu}>
     {#if src && !failed}
-      <img {src} alt="Cover of {track?.album ?? track?.title ?? 'the selected song'}" onerror={() => (failed = true)} />
+      <img {src} alt={t("Cover of {name}", { name: track?.album ?? track?.title ?? "" })} onerror={() => (failed = true)} />
     {:else}
-      <p>{track ? (src && failed ? "Cover file missing" : "No artwork") : "Select a song to see its cover"}</p>
+      <p>{track ? (src && failed ? t("Cover file missing") : t("No artwork")) : t("Select a song to see its cover")}</p>
     {/if}
   </div>
 </figure>

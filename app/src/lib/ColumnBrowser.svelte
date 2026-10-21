@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t, tn } from "./i18n";
   import { store } from "./store.svelte";
   import { BROWSE_FIELDS, type BrowserColumn } from "./library";
   import { count } from "./format";
@@ -89,7 +90,7 @@
       <h3 oncontextmenu={chooseColumns}>{c.title}</h3>
       <div class="list" bind:this={lists[ci]} role="listbox" tabindex="0" aria-label={c.title} onkeydown={(e) => keydown(e, c.items, c.value, c.pick)}>
         <button role="option" aria-selected={c.value === null} class:sel={c.value === null} onclick={() => c.pick(null)}>
-          All ({count(c.items.length)} {c.items.length === 1 ? c.plural[0] : c.plural[1]})
+          {t("All ({n} {what})", { n: c.items.length, what: c.items.length === 1 ? c.plural[0] : c.plural[1] })}
         </button>
         {#each c.items as item (item)}
           <button role="option" aria-selected={c.value === item} class:sel={c.value === item} onclick={() => c.pick(item)}>{item}</button>
@@ -99,7 +100,7 @@
   {/each}
 </div>
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div class="resize" role="separator" aria-orientation="horizontal" aria-label="Resize the column browser" onmousedown={startResize}></div>
+<div class="resize" role="separator" aria-orientation="horizontal" aria-label={t("Resize the column browser")} onmousedown={startResize}></div>
 
 <style>
   .browser {

@@ -59,6 +59,7 @@ fn main() {
             write::save_cover,
             write::paste_image,
             commands::device_icons,
+            commands::system_locales,
             libcommands::list_libraries,
             libcommands::create_library,
             libcommands::update_library,

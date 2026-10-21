@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t, tn } from "./i18n";
   import { store } from "./store.svelte";
   import { bytes, count, isVideo, longDuration } from "./format";
   import { deviceImage, PICTURES } from "./deviceImages";
@@ -16,10 +17,10 @@
     return { audio, video, other: Math.max(0, used - audio - video), free: ipod.device.free, cap, ms };
   });
   const segs = $derived([
-    { label: "Audio", value: stats.audio, cls: "audio" },
-    { label: "Video", value: stats.video, cls: "video" },
-    { label: "Other", value: stats.other, cls: "other" },
-    { label: "Free", value: stats.free, cls: "free" },
+    { label: t("Audio"), value: stats.audio, cls: "audio" },
+    { label: t("Video"), value: stats.video, cls: "video" },
+    { label: t("Other"), value: stats.other, cls: "other" },
+    { label: t("Free"), value: stats.free, cls: "free" },
   ].filter((s) => s.value > 0 || s.cls === "free"));
   const pct = (v: number) => (stats.cap ? (v / stats.cap) * 100 : 0);
   const identity = $derived(ipod.identity ?? ipod.device.identity ?? null);
@@ -44,16 +45,16 @@
   <section class="summary">
     <h1>{ipod.name}</h1>
     <dl>
-      <dt>Model</dt><dd>{ipod.device.model ?? "iPod"}{#if ipod.device.modelNumber}{" "}<span class="muted">({ipod.device.modelNumber})</span>{/if}</dd>
-      {#if stats.cap}<dt>Capacity</dt><dd>{bytes(stats.cap)}</dd>{/if}
-      {#if ipod.serial}<dt>Serial number</dt><dd>{ipod.serial}</dd>{/if}
-      <dt>Contents</dt><dd>{count(ipod.tracks.length)} songs, {longDuration(stats.ms)}, {count(userPlaylists)} playlists</dd>
-      <dt>Database</dt><dd>version {ipod.dbVersion.toString(16)}{ipod.hasArtworkDb ? ", with artwork" : ", no artwork"}</dd>
-      <dt>Location</dt><dd class="path">{ipod.path}</dd>
+      <dt>{t("Model")}</dt><dd>{ipod.device.model ?? "iPod"}{#if ipod.device.modelNumber}{" "}<span class="muted">({ipod.device.modelNumber})</span>{/if}</dd>
+      {#if stats.cap}<dt>{t("Capacity")}</dt><dd>{bytes(stats.cap)}</dd>{/if}
+      {#if ipod.serial}<dt>{t("Serial number")}</dt><dd>{ipod.serial}</dd>{/if}
+      <dt>{t("Contents")}</dt><dd>{tn(ipod.tracks.length, "{n} song", "{n} songs")}, {longDuration(stats.ms)}, {tn(userPlaylists, "{n} playlist", "{n} playlists")}</dd>
+      <dt>{t("Database")}</dt><dd>{ipod.hasArtworkDb ? t("version {v}, with artwork", { v: ipod.dbVersion.toString(16) }) : t("version {v}, no artwork", { v: ipod.dbVersion.toString(16) })}</dd>
+      <dt>{t("Location")}</dt><dd class="path">{ipod.path}</dd>
     </dl>
     <div class="actions">
       {#if !ipod.device.manual}
-        <button onclick={() => store.eject(ipod.path)} disabled={!!store.ejecting}>Eject</button>
+        <button onclick={() => store.eject(ipod.path)} disabled={!!store.ejecting}>{t("Eject")}</button>
       {/if}
     </div>
   </section>
@@ -63,14 +64,14 @@
       onclick={() => (choosing = !choosing)}
       disabled={!identity}
       aria-expanded={choosing}
-      title={identity ? "Choose a picture for this iPod" : "This iPod doesn't report a FireWire ID or serial number, so a picture can't be remembered for it"}
+      title={identity ? t("Choose a picture for this iPod") : t("This iPod doesn't report a FireWire ID or serial number, so a picture can't be remembered for it")}
     >
       <img src={deviceImage(shown)} alt={ipod.device.model ?? "iPod"} />
     </button>
     {#if choosing}
-      <div class="chooser" role="dialog" aria-label="Choose a picture">
+      <div class="chooser" role="dialog" aria-label={t("Choose a picture")}>
         <button class="auto" class:on={!chosen} onclick={() => pick(null)}>
-          Use automatic{#if ipod.device.model}{" "}<span class="muted">({ipod.device.model})</span>{/if}
+          {t("Use automatic")}{#if ipod.device.model}{" "}<span class="muted">({ipod.device.model})</span>{/if}
         </button>
         <div class="grid">
           {#each PICTURES as p (p.key)}
@@ -86,20 +87,18 @@
   <section class="summary">
     <div class="changes">
       {#if !ipod.identity}
-        <p class="note">This iPod doesn't report a FireWire ID or serial number, so Chinotto keeps it read-only.</p>
+        <p class="note">{t("This iPod doesn't report a FireWire ID or serial number, so Chinotto keeps it read-only.")}</p>
       {:else}
         <label class="switch">
           <input type="checkbox" role="switch" checked={ipod.writable} onchange={(e) => store.allowChanges(e.currentTarget.checked)} disabled={!!store.busy} />
           <span class="track" aria-hidden="true"><span class="knob"></span></span>
-          Allow changes to this iPod
+          {t("Allow changes to this iPod")}
         </label>
         <p class="note">
           {#if ipod.writable}
-            Chinotto can edit, add and delete songs and change playlists on this iPod. Before every save it copies the
-            iPod's database to <code>iPod_Control/iTunes/Chinotto Backups</code> and keeps the newest 10.
+            {t("Chinotto can edit, add and delete songs and change playlists on this iPod. Before every save it copies the iPod's database to {folder} and keeps the newest 10.", { folder: "iPod_Control/iTunes/Chinotto Backups" })}
           {:else}
-            Chinotto only reads this iPod. Turn this on to edit songs, add or delete them and change playlists. The setting is
-            remembered for this iPod only.
+            {t("Chinotto only reads this iPod. Turn this on to edit songs, add or delete them and change playlists. The setting is remembered for this iPod only.")}
           {/if}
         </p>
       {/if}
@@ -107,7 +106,7 @@
   </section>
 
   {#if stats.cap}
-    <section class="capacity" aria-label="Capacity">
+    <section class="capacity" aria-label={t("Capacity")}>
       <div class="bar" role="img" aria-label={segs.map((s) => `${s.label} ${bytes(s.value)}`).join(", ")}>
         {#each segs as s (s.cls)}
           <span class={s.cls} style:width="{pct(s.value)}%"></span>
@@ -326,9 +325,6 @@
     .switch .knob {
       transition: none;
     }
-  }
-  code {
-    font-size: 11px;
   }
   .note {
     margin: 10px 0 0;

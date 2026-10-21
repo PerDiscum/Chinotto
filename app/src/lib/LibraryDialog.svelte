@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t, tn } from "./i18n";
   import { untrack } from "svelte";
   import { store } from "./store.svelte";
   import Modal from "./Modal.svelte";
@@ -7,7 +8,7 @@
   let { id }: { id: string | null } = $props();
 
   const existing = untrack(() => (id ? store.libraries.find((l) => l.id === id) : undefined));
-  let name = $state(existing?.name ?? (store.libraries.length ? "" : "Music"));
+  let name = $state(existing?.name ?? (store.libraries.length ? "" : t("Music")));
   let folders = $state<string[]>(existing?.folders.map((f) => f.path) ?? []);
   const available = (p: string) => existing?.folders.find((f) => f.path === p)?.available ?? true;
   let saving = $state(false);
@@ -28,37 +29,36 @@
   const close = () => (store.dialog = null);
 </script>
 
-<Modal title={id ? "Edit Library" : "New Library"} onclose={close} width={520}>
+<Modal title={id ? t("Edit Library") : t("New Library")} onclose={close} width={520}>
   <div class="form">
     <label>
-      <span>Name</span>
-      <input bind:value={name} placeholder="e.g. Lossless Archive" onkeydown={(e) => e.key === "Enter" && save()} />
+      <span>{t("Name")}</span>
+      <input bind:value={name} placeholder={t("e.g. Lossless Archive")} onkeydown={(e) => e.key === "Enter" && save()} />
     </label>
     <div class="folders">
-      <span>Music folders</span>
+      <span>{t("Music folders")}</span>
       {#if folders.length}
         <ul>
           {#each folders as f (f)}
             <li class:off={!available(f)}>
               <span class="path" title={f}>{f}</span>
-              {#if !available(f)}<span class="note">not connected</span>{/if}
-              <button class="remove" aria-label="Take {f} out of the library" onclick={() => (folders = folders.filter((x) => x !== f))}>×</button>
+              {#if !available(f)}<span class="note">{t("not connected")}</span>{/if}
+              <button class="remove" aria-label={t("Take {name} out of the library", { name: f })} onclick={() => (folders = folders.filter((x) => x !== f))}>×</button>
             </li>
           {/each}
         </ul>
       {:else}
-        <p class="empty">No folders yet.</p>
+        <p class="empty">{t("No folders yet.")}</p>
       {/if}
-      <button onclick={addFolders}>Add Folder…</button>
+      <button onclick={addFolders}>{t("Add Folder…")}</button>
     </div>
     <p class="hint">
-      Chinotto lists the music in these folders and keeps the list up to date (every hour, or with Scan Now). Your music
-      files are never changed. Songs on a drive that isn't connected stay in the library until it's back.
+      {t("Chinotto lists the music in these folders and keeps the list up to date (every hour, or with Scan Now). Your music files are never changed. Songs on a drive that isn't connected stay in the library until it's back.")}
     </p>
   </div>
   {#snippet buttons()}
-    <button onclick={close}>Cancel</button>
-    <button class="primary" onclick={save} disabled={!name.trim() || !folders.length || saving}>{id ? "OK" : "Create Library"}</button>
+    <button onclick={close}>{t("Cancel")}</button>
+    <button class="primary" onclick={save} disabled={!name.trim() || !folders.length || saving}>{id ? t("OK") : t("Create Library")}</button>
   {/snippet}
 </Modal>
 

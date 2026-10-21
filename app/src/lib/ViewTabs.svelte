@@ -1,17 +1,18 @@
 <script lang="ts">
+  import { t, tn } from "./i18n";
   import { store, type MusicView } from "./store.svelte";
 
   const TABS: [MusicView, string][] = [
-    ["songs", "Songs"],
-    ["albums", "Albums"],
-    ["artists", "Artists"],
-    ["genres", "Genres"],
-    ["composers", "Composers"],
-    ["compilations", "Compilations"],
+    ["songs", t("Songs")],
+    ["albums", t("Albums")],
+    ["artists", t("Artists")],
+    ["genres", t("Genres")],
+    ["composers", t("Composers")],
+    ["compilations", t("Compilations")],
   ];
 </script>
 
-<div class="tabs" role="tablist" aria-label="View">
+<div class="tabs" role="tablist" aria-label={t("View")}>
   {#each TABS as [v, label] (v)}
     <button role="tab" aria-selected={store.view === v} class:on={store.view === v} onclick={() => store.setView(v)}>{label}</button>
   {/each}

@@ -3,6 +3,7 @@
 
 import { store } from "./store.svelte";
 import type { Track } from "./types";
+import { t, tn } from "./i18n";
 
 const plain = { shiftKey: false, metaKey: false, ctrlKey: false };
 
@@ -13,12 +14,12 @@ export function playSelected(tracks: Track[]) {
 }
 
 /** Right-click on a song of `tracks`. */
-export function songMenu(e: MouseEvent, t: Track, tracks: Track[]) {
+export function songMenu(e: MouseEvent, track: Track, tracks: Track[]) {
   e.preventDefault();
   // Right-clicking outside the selection selects that song.
-  if (!store.selected.has(t.id)) store.clickTrack(t.id, tracks, plain);
+  if (!store.selected.has(track.id)) store.clickTrack(track.id, tracks, plain);
   const n = store.selected.size;
-  const songs = n === 1 ? "Song" : `${n} Songs`;
+  
   const ro = !store.writable;
   const pl = store.editablePlaylist;
   const dbids = store.selectedTracks.map((x) => x.dbid);
@@ -32,24 +33,36 @@ export function songMenu(e: MouseEvent, t: Track, tracks: Track[]) {
     x: e.clientX,
     y: e.clientY,
     items: [
-      { label: "Play", action: () => playSelected(tracks) },
-      { label: "Get Info", action: () => (store.dialog = { kind: "info" }) },
+      { label: t("Play"), action: () => playSelected(tracks) },
+      { label: t("Get Info"), action: () => (store.dialog = { kind: "info" }) },
       { label: "", separator: true },
       {
-        label: "Add to Playlist",
+        label: t("Add to Playlist"),
         disabled: ro || !targets.length,
         submenu: targets.map((p) => ({ label: p.name, action: () => store.addToPlaylist(p.id, dbids) })),
       },
-      { label: "New Playlist from Selection", disabled: ro, action: () => store.newPlaylist(true) },
+      { label: t("New Playlist from Selection"), disabled: ro, action: () => store.newPlaylist(true) },
       { label: "", separator: true },
-      ...(pl ? [{ label: `Remove from “${pl.name}”`, disabled: ro, action: () => store.removeFromPlaylist(pl.id, [...store.selected]) }] : []),
+      ...(pl ? [{ label: t("Remove from “{name}”", { name: pl.name }), disabled: ro, action: () => store.removeFromPlaylist(pl.id, [...store.selected]) }] : []),
+      ...(!onIpod && store.ipod
+        ? [
+            {
+              label: t("Copy to {name}", { name: store.ipod.name }),
+              disabled: !store.ipod.writable,
+              submenu: [
+                { label: t("Music"), action: () => store.copyToIpod(dbids, null) },
+                ...store.ipod.playlists.filter((p) => !p.master && !p.smart).map((p) => ({ label: p.name, action: () => store.copyToIpod(dbids, p.id) })),
+              ],
+            },
+          ]
+        : []),
       ...(!onIpod
-        ? [{ label: `Remove ${songs} from Library…`, action: () => (store.dialog = { kind: "remove-from-library", ids: [...store.selected] }) }]
+        ? [{ label: tn(n, "Remove Song from Library…", "Remove {n} Songs from Library…"), action: () => (store.dialog = { kind: "remove-from-library", ids: [...store.selected] }) }]
         : []),
       ...(onIpod
         ? [
             {
-              label: `Delete ${songs} from iPod…`,
+              label: tn(n, "Delete Song from iPod…", "Delete {n} Songs from iPod…"),
               danger: true,
               disabled: ro,
               action: () => (store.dialog = { kind: "delete-songs", ids: dbids }),

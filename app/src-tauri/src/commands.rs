@@ -264,3 +264,9 @@ pub fn device_icons(state: State<'_, AppState>) -> std::collections::HashMap<Str
 pub fn set_device_icon(identity: String, icon: Option<String>, state: State<'_, AppState>) -> Result<(), String> {
     state.set_device_icon(&identity, icon)
 }
+
+/// The system's preferred languages, e.g. ["de-DE", "en-US"] (for choosing the app's language).
+#[tauri::command]
+pub fn system_locales() -> Vec<String> {
+    sys_locale::get_locales().collect()
+}
