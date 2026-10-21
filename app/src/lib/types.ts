@@ -153,7 +153,9 @@ export type Source =
   /** A library's songs ("all") or one of its playlists. */
   | { kind: "library"; lib: string; id: string }
   /** Songs opened from outside the libraries (never added to one). */
-  | { kind: "scratch" };
+  | { kind: "scratch" }
+  /** The page of a player that shows up as a drive (MSC). */
+  | { kind: "player"; path: string };
 
 export interface LibrarySummary {
   id: string;
@@ -233,4 +235,18 @@ export interface Conversion {
   format: string;
   /** Convert Apple Lossless too (it plays on iPods but is large). */
   convertAlac: boolean;
+}
+
+/** A player's page settings (see msc.rs). */
+export interface PlayerState {
+  writable: boolean;
+  conversion: Conversion;
+  plays: string[];
+  aac: boolean;
+}
+
+export interface CopyResult {
+  added: number;
+  already: number;
+  skipped: string[];
 }

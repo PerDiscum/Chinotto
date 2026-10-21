@@ -35,7 +35,7 @@ impl Default for Conversion {
 }
 
 impl Conversion {
-    fn target(&self) -> (bool, u32) {
+    pub(crate) fn target(&self) -> (bool, u32) {
         match self.format.as_str() {
             "aac128" => (true, 128),
             "mp3_320" => (false, 320),
@@ -58,7 +58,7 @@ pub fn needs_converting(path: &Path, conv: &Conversion) -> Option<&'static str> 
 }
 
 /// An .m4a holding Apple Lossless (it has a bit depth; AAC doesn't).
-fn is_alac(path: &Path) -> bool {
+pub(crate) fn is_alac(path: &Path) -> bool {
     use lofty::prelude::*;
     lofty::read_from_path(path).is_ok_and(|f| f.properties().bit_depth().is_some())
 }

@@ -98,6 +98,11 @@
       {@const p = store.scanProgress[store.source.lib]}
       <strong>{t("Scanning {name}", { name: store.libView?.view.name ?? "" })}</strong>
       <span class="sub">{t("{done} of {total} new or changed files", { done: p.done, total: p.total })}{p.current ? `: ${p.current}` : ""}</span>
+    {:else if store.source.kind === "player"}
+      {@const path = store.source.path}
+      {@const d = store.devices.find((x) => x.path === path)}
+      <strong>{d?.volume ?? ""}</strong>
+      <span class="sub">{tn(store.libViews[d?.library ?? ""]?.view.tracks.length ?? 0, "{n} song on this player", "{n} songs on this player")}</span>
     {:else if store.ipod || store.source.kind === "library" || store.source.kind === "scratch"}
       <strong>{sourceName}</strong>
       <span class="sub">

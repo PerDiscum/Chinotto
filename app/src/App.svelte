@@ -12,6 +12,7 @@
   import ColumnBrowser from "./lib/ColumnBrowser.svelte";
   import SongList from "./lib/SongList.svelte";
   import DevicePage from "./lib/DevicePage.svelte";
+  import PlayerPage from "./lib/PlayerPage.svelte";
   import ArtworkPane from "./lib/ArtworkPane.svelte";
   import Welcome from "./lib/Welcome.svelte";
   import Icon from "./lib/Icon.svelte";
@@ -181,7 +182,9 @@
       </div>
     {/if}
 
-    {#if store.source.kind !== "library" && store.source.kind !== "scratch" && !store.ipod}
+    {#if store.source.kind === "player"}
+      <PlayerPage path={store.source.path} />
+    {:else if store.source.kind !== "library" && store.source.kind !== "scratch" && !store.ipod}
       <Welcome />
     {:else if store.source.kind === "device"}
       <DevicePage />

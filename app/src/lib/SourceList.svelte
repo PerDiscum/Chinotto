@@ -169,7 +169,9 @@
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
           class="row device"
-          class:active={(isOpen(d.path) && store.source.kind === "device") || (!!d.library && isLib(d.library))}
+          class:active={(isOpen(d.path) && store.source.kind === "device") || (store.source.kind === "player" && store.source.path === d.path)}
+          class:drop={store.songDrag?.target === `player:${d.path}`}
+          data-drop-playlist={d.library ? `player:${d.path}` : undefined}
           oncontextmenu={(e) => {
             e.preventDefault();
             const lib = d.library;
@@ -189,7 +191,7 @@
         >
           <button
             class="name"
-            onclick={() => (d.library ? store.showLibrary(d.library) : isOpen(d.path) ? store.select({ kind: "device" }) : store.open(d.path))}
+            onclick={() => (d.library ? store.select({ kind: "player", path: d.path }) : isOpen(d.path) ? store.select({ kind: "device" }) : store.open(d.path))}
             title={d.path}
           >
             {#if deviceImage(store.iconFor(d))}<img class="dev" src={deviceImage(store.iconFor(d))} alt="" />{:else}<Icon name="ipod" />{/if}
@@ -208,7 +210,7 @@
           {@const lib = d.library}
           <ul class="nested">
             <li>
-              <button class="row" class:active={isLib(lib)} onclick={() => store.showLibrary(lib)}>
+              <button class="row" class:active={isLib(lib)} class:drop={store.songDrag?.target === `player:${d.path}`} onclick={() => store.showLibrary(lib)}>
                 <Icon name="music" /><span>{t("Music")}</span>
               </button>
             </li>

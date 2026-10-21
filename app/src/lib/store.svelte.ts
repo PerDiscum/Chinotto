@@ -26,7 +26,8 @@ export type Dialog =
   /** Set up an iPod with no database, or (rebuild) replace a lost or broken one. */
   | { kind: "setup"; path: string; rebuild: boolean }
   /** Set up (or change the settings of) a player that shows up as a drive. */
-  | { kind: "msc"; path: string };
+  | { kind: "msc"; path: string }
+  | { kind: "delete-player-songs"; path: string; ids: number[] };
 
 function loadVolume(): number {
   try {
@@ -306,6 +307,7 @@ class Store {
     // The player being shown was unplugged.
     const s = this.source;
     if (s.kind === "library" && this.isDeviceLibrary(s.lib) && !list.some((d) => d.library === s.lib)) this.select({ kind: "none" });
+    if (s.kind === "player" && !list.some((d) => d.path === s.path)) this.select({ kind: "none" });
     // The open iPod was unplugged.
     if (this.ipod && !list.some((d) => d.path === this.ipod!.path)) this.forget();
     // Open a newly plugged-in iPod when nothing else is open.
@@ -391,6 +393,74 @@ class Store {
     } finally {
       this.busy = null;
       this.progress = null;
+    }
+  }
+
+  /** Players' page settings (Allow changes, conversion), by path. */
+  playerStates = $state<Record<string, import("./types").PlayerState>>({});
+
+  async loadPlayerState(path: string) {
+    try {
+      this.playerStates = { ...this.playerStates, [path]: await api.mscState(path) };
+    } catch (e) {
+      this.error = String(e);
+    }
+  }
+
+  async setPlayerAllow(path: string, allow: boolean) {
+    try {
+      this.playerStates = { ...this.playerStates, [path]: await api.mscAllow(path, allow) };
+    } catch (e) {
+      this.error = String(e);
+    }
+  }
+
+  async setPlayerConversion(path: string, c: Conversion) {
+    try {
+      this.playerStates = { ...this.playerStates, [path]: await api.mscSetConversion(path, c) };
+    } catch (e) {
+      this.error = String(e);
+    }
+  }
+
+  /** The player (MSC) whose songs a library lists. */
+  playerOf(lib: string): DeviceInfo | undefined {
+    return this.devices.find((d) => d.library === lib);
+  }
+
+  /** Copy songs (dbids) and/or files onto a player. */
+  async copyToPlayer(path: string, dbids: string[], files: string[] = []) {
+    if (this.busy || (!dbids.length && !files.length)) return;
+    const d = this.devices.find((x) => x.path === path);
+    const n = dbids.length + files.length;
+    this.busy = tn(n, "Copying {n} song to {name}…", "Copying {n} songs to {name}…", { name: d?.volume ?? "" });
+    this.error = null;
+    try {
+      const r = await api.mscAdd(path, dbids, files);
+      const lines = [...r.skipped];
+      if (r.already) lines.unshift(tn(r.already, "{n} song was already on the player.", "{n} songs were already on the player."));
+      if (r.skipped.length) this.dialog = { kind: "report", title: tn(r.added, "{n} song copied", "{n} songs copied"), lines };
+    } catch (e) {
+      this.error = String(e);
+    } finally {
+      this.busy = null;
+      this.progress = null;
+    }
+  }
+
+  async pickAndCopyToPlayer(path: string) {
+    const files = await api.pickMusicFiles();
+    if (files.length) await this.copyToPlayer(path, [], files);
+  }
+
+  async deleteFromPlayer(path: string, ids: number[]) {
+    this.dialog = null;
+    try {
+      const problems = await api.mscDelete(path, ids);
+      this.selected = new Set();
+      if (problems.length) this.dialog = { kind: "report", title: tn(problems.length, "{n} file couldn't be deleted", "{n} files couldn't be deleted"), lines: problems };
+    } catch (e) {
+      this.error = String(e);
     }
   }
 
@@ -748,6 +818,8 @@ class Store {
 
   /** Add songs to a playlist: an iPod playlist id, or "lib:<library>:<playlist>". */
   async addToPlaylist(id: string, dbids: string[]) {
+    // Dropped on a player: copy the songs onto it.
+    if (id.startsWith("player:")) return this.copyToPlayer(id.slice(7), dbids.filter((d) => d.startsWith("lib:") || d.startsWith("scratch:")));
     if (id.startsWith("lib:")) {
       const t = this.libPlaylist(id);
       if (!t) return;

@@ -14,7 +14,7 @@
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 use crate::library::{LibPlaylist, Library};
 use crate::state::AppState;
@@ -60,24 +60,39 @@ pub struct Profile {
     pub music_folder: &'static str,
     pub playlist_folder: &'static str,
     pub playlist_format: &'static str,
+    /// What it plays: file extensions, plus "aac" and "alac" for the two kinds of .m4a.
+    pub plays: &'static [&'static str],
+    /// Its tags must be ID3v2.3 for covers to show.
+    pub id3v23: bool,
 }
 
 /// Known players and where they keep things. "Other" fits most players.
 pub fn profiles() -> Vec<Profile> {
-    let p = |key, name, icon, music_folder, playlist_folder, playlist_format| Profile {
+    let p = |key, name, icon, music_folder, playlist_folder, playlist_format, plays, id3v23| Profile {
         key,
         name,
         icon,
         music_folder,
         playlist_folder,
         playlist_format,
+        plays,
+        id3v23,
     };
     vec![
-        p("sony-nwz", "Sony Walkman NWZ (E, S, A series…)", "sony-nwz", "MUSIC", "MUSIC", "m3u8"),
-        p("sony-nwa", "Sony Walkman NW-A (A10, A20…)", "sony-a10", "MUSIC", "MUSIC", "m3u8"),
-        p("sansa-e200", "SanDisk Sansa e200", "sansa-e200", "Music", "Music", "m3u"),
-        p("sansa-clip", "SanDisk Sansa Clip / Fuze", "sansa-clip", "Music", "Music", "m3u"),
-        p("other", "Other player", "generic", "Music", "Playlists", "m3u8"),
+        p("sony-nwz", "Sony Walkman NWZ (E, S, A series…)", "sony-nwz", "MUSIC", "MUSIC", "m3u8", &["mp3", "aac", "wma", "wav"], true),
+        p(
+            "sony-nwa",
+            "Sony Walkman NW-A (A10, A20…)",
+            "sony-a10",
+            "MUSIC",
+            "MUSIC",
+            "m3u8",
+            &["mp3", "aac", "alac", "flac", "wma", "wav", "aiff", "aif"],
+            true,
+        ),
+        p("sansa-e200", "SanDisk Sansa e200", "sansa-e200", "Music", "Music", "m3u", &["mp3", "wma", "wav"], false),
+        p("sansa-clip", "SanDisk Sansa Clip / Fuze", "sansa-clip", "Music", "Music", "m3u", &["mp3", "wma", "wav", "flac", "ogg"], false),
+        p("other", "Other player", "generic", "Music", "Playlists", "m3u8", &["mp3", "aac", "wav"], false),
     ]
 }
 
@@ -283,6 +298,257 @@ fn resolve(entry: &str, base: &Path, root: Option<&Path>) -> Option<PathBuf> {
     Some(out)
 }
 
+// ---- Changing a player: allow changes, conversion, copying, deleting ----
+
+/// The player at `path`, its settings and its model.
+fn player(path: &str) -> Result<(PathBuf, MscConfig, Profile), String> {
+    let root = PathBuf::from(path);
+    let cfg = read_config(&root).ok_or("That player isn't set up (or isn't plugged in)")?;
+    let profile = profiles().into_iter().find(|p| p.key == cfg.model).unwrap_or_else(|| profiles().pop().unwrap());
+    Ok((root, cfg, profile))
+}
+
+fn identity(cfg: &MscConfig) -> String {
+    format!("msc:{}", cfg.id)
+}
+
+/// The conversion for this player: AAC only if it plays AAC (else MP3 320).
+fn conversion_for(app: &AppHandle, cfg: &MscConfig, profile: &Profile) -> crate::convert::Conversion {
+    let mut c = app.state::<AppState>().conversion(&identity(cfg));
+    if c.target().0 && !profile.plays.contains(&"aac") {
+        c.format = "mp3_320".into();
+    }
+    c
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayerState {
+    writable: bool,
+    conversion: crate::convert::Conversion,
+    /// The formats it plays, for the page ("MP3, AAC, WMA, WAV").
+    plays: Vec<&'static str>,
+    aac: bool,
+}
+
+#[tauri::command]
+pub fn msc_state(path: String, app: AppHandle) -> Result<PlayerState, String> {
+    let (_, cfg, profile) = player(&path)?;
+    let state = app.state::<AppState>();
+    Ok(PlayerState {
+        writable: state.is_writable(&identity(&cfg)),
+        conversion: conversion_for(&app, &cfg, &profile),
+        plays: profile.plays.to_vec(),
+        aac: profile.plays.contains(&"aac"),
+    })
+}
+
+#[tauri::command]
+pub fn msc_allow(path: String, allow: bool, app: AppHandle) -> Result<PlayerState, String> {
+    let (_, cfg, _) = player(&path)?;
+    app.state::<AppState>().set_writable(&identity(&cfg), allow)?;
+    msc_state(path, app)
+}
+
+#[tauri::command]
+pub fn msc_set_conversion(path: String, conversion: crate::convert::Conversion, app: AppHandle) -> Result<PlayerState, String> {
+    let (_, cfg, _) = player(&path)?;
+    app.state::<AppState>().set_conversion(&identity(&cfg), conversion)?;
+    msc_state(path, app)
+}
+
+/// Why `file` must be converted for this player, if it must.
+fn needs_converting(file: &Path, profile: &Profile, conv: &crate::convert::Conversion) -> bool {
+    let ext = file.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+    let kind = match ext.as_str() {
+        "m4a" | "mp4" | "m4b" => {
+            if crate::convert::is_alac(file) {
+                "alac"
+            } else {
+                "aac"
+            }
+        }
+        "oga" => "ogg",
+        e => e,
+    };
+    !profile.plays.contains(&kind) || (kind == "alac" && conv.convert_alac)
+}
+
+/// Characters FAT drives (and Windows) don't allow, and names they choke on.
+fn fat_name(s: &str, max: usize) -> String {
+    let c: String = s.chars().map(|c| if "/\\:*?\"<>|".contains(c) || c.is_control() { '_' } else { c }).collect();
+    let c: String = c.trim().trim_end_matches('.').chars().take(max).collect();
+    let c = c.trim().to_string();
+    if c.is_empty() {
+        "Unknown".into()
+    } else {
+        c
+    }
+}
+
+/// Where a song goes on the player: <music>/<Artist>/<Album>/<NN Title>.<ext>.
+fn place(music: &Path, info: &chinotto_gpod::TrackInfo, file: &Path) -> PathBuf {
+    let ext = file.extension().and_then(|e| e.to_str()).unwrap_or("mp3").to_ascii_lowercase();
+    let artist = if info.compilation {
+        "Compilations".to_string()
+    } else {
+        info.album_artist.clone().or_else(|| info.artist.clone()).unwrap_or_else(|| "Unknown Artist".into())
+    };
+    let album = info.album.clone().unwrap_or_else(|| "Unknown Album".into());
+    let title = info.title.clone().unwrap_or_else(|| file.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default());
+    let nr = match (info.disc_nr, info.track_nr) {
+        (d, t) if d > 1 && t > 0 => format!("{d}-{t:02} "),
+        (_, t) if t > 0 => format!("{t:02} "),
+        _ => String::new(),
+    };
+    music.join(fat_name(&artist, 64)).join(fat_name(&album, 64)).join(format!("{}.{ext}", fat_name(&format!("{nr}{title}"), 80)))
+}
+
+#[derive(Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct CopyResult {
+    added: usize,
+    /// Already on the player (same place, same size).
+    already: usize,
+    skipped: Vec<String>,
+}
+
+/// Copy songs (library or Scratch songs by dbid, and/or files and folders)
+/// onto the player, converting what it can't play.
+#[tauri::command]
+pub async fn msc_add(path: String, dbids: Vec<String>, files: Vec<String>, app: AppHandle) -> Result<CopyResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let (root, cfg, profile) = player(&path)?;
+        let state = app.state::<AppState>();
+        if !state.is_writable(&identity(&cfg)) {
+            return Err("Changes to this player are switched off. Turn on “Allow changes” on its page first.".into());
+        }
+        let conv = conversion_for(&app, &cfg, &profile);
+        let music = root.join(&cfg.music_folder);
+        let mut res = CopyResult::default();
+        let mut sources: Vec<PathBuf> = Vec::new();
+        for d in &dbids {
+            let f = if d.starts_with("scratch:") { crate::scratch::track_file(&app, d) } else { crate::libcommands::track_file(&app, d) };
+            match f {
+                Ok(f) => sources.push(f),
+                Err(e) => res.skipped.push(e),
+            }
+        }
+        sources.extend(crate::write::expand(&files).into_iter().filter(|f| crate::tags::library_kind(f).is_some()));
+        let tmp = crate::convert::TempDir::new()?;
+        let total = sources.len();
+        for (i, src) in sources.iter().enumerate() {
+            let name = src.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            let _ = app.emit("add-progress", crate::write::AddProgress { done: i, total, current: name.clone() });
+            let converted;
+            let f = if needs_converting(src, &profile, &conv) {
+                match crate::convert::convert(src, &tmp.0, &conv, i) {
+                    Ok(c) => {
+                        converted = c;
+                        &converted
+                    }
+                    Err(e) => {
+                        res.skipped.push(format!("{name}: couldn't convert it ({e})"));
+                        continue;
+                    }
+                }
+            } else {
+                src
+            };
+            let info = crate::tags::read(f).unwrap_or_default();
+            let mut dest = place(&music, &info, f);
+            let size = std::fs::metadata(f).map(|m| m.len()).unwrap_or(0);
+            if dest.exists() {
+                // The same song copied before (the place comes from its tags).
+                if std::fs::metadata(&dest).map(|m| m.len()).unwrap_or(0) == size || f != src {
+                    res.already += 1;
+                    continue;
+                }
+                let stem = dest.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+                let ext = dest.extension().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+                let mut n = 2;
+                while dest.exists() {
+                    dest = dest.with_file_name(format!("{stem} ({n}).{ext}"));
+                    n += 1;
+                }
+            }
+            if let Err(e) = copy_in(f, &dest, profile.id3v23) {
+                res.skipped.push(format!("{name}: {e}"));
+                continue;
+            }
+            res.added += 1;
+        }
+        let _ = app.emit("add-progress", crate::write::AddProgress { done: total, total, current: String::new() });
+        drop(tmp);
+        crate::libcommands::start_scan(&app, &cfg.library_id());
+        Ok(res)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Copy `from` to `to` through a hidden part file, so a half-copied song
+/// never has its real name.
+fn copy_in(from: &Path, to: &Path, id3v23: bool) -> Result<(), String> {
+    let dir = to.parent().ok_or("bad place")?;
+    std::fs::create_dir_all(dir).map_err(|e| format!("couldn't create {} ({e})", dir.display()))?;
+    let part = dir.join(format!(".{}.part", to.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()));
+    std::fs::copy(from, &part).map_err(|e| {
+        let _ = std::fs::remove_file(&part);
+        if e.raw_os_error() == Some(28) {
+            "the player is full".to_string()
+        } else {
+            format!("couldn't copy it ({e})")
+        }
+    })?;
+    if id3v23 && to.extension().is_some_and(|e| e.eq_ignore_ascii_case("mp3")) {
+        // Not fatal: the song plays either way.
+        let _ = crate::tagwrite::resave_id3v23(&part);
+    }
+    std::fs::rename(&part, to).map_err(|e| {
+        let _ = std::fs::remove_file(&part);
+        format!("couldn't finish copying it ({e})")
+    })
+}
+
+/// Delete songs (the player library's song ids) from the player. Only files
+/// inside its music folder are touched; folders left empty go too.
+#[tauri::command]
+pub fn msc_delete(path: String, ids: Vec<u32>, app: AppHandle) -> Result<Vec<String>, String> {
+    let (root, cfg, _) = player(&path)?;
+    let state = app.state::<AppState>();
+    if !state.is_writable(&identity(&cfg)) {
+        return Err("Changes to this player are switched off. Turn on “Allow changes” on its page first.".into());
+    }
+    let music = root.join(&cfg.music_folder);
+    let files: Vec<PathBuf> = {
+        let libs = state.libraries.lock().unwrap();
+        let lib = libs.list.iter().find(|l| l.id == cfg.library_id()).ok_or("The player's songs aren't listed yet")?;
+        ids.iter().filter_map(|id| lib.track(*id)).map(|t| PathBuf::from(&t.path)).collect()
+    };
+    let mut problems = Vec::new();
+    for f in files {
+        if !f.starts_with(&music) {
+            problems.push(format!("{}: not in the player's music folder, so left alone", f.display()));
+            continue;
+        }
+        if let Err(e) = std::fs::remove_file(&f) {
+            problems.push(format!("{}: {e}", f.display()));
+            continue;
+        }
+        // Tidy up folders the song leaves empty (never the music folder itself).
+        let mut dir = f.parent().map(Path::to_path_buf);
+        while let Some(d) = dir {
+            if d == music || !d.starts_with(&music) || std::fs::remove_dir(&d).is_err() {
+                break;
+            }
+            dir = d.parent().map(Path::to_path_buf);
+        }
+    }
+    crate::libcommands::start_scan(&app, &cfg.library_id());
+    Ok(problems)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -300,6 +566,57 @@ mod tests {
         assert_eq!(resolve("E:\\MUSIC\\x.mp3", base, Some(root)).unwrap(), Path::new("/media/W/MUSIC/x.mp3"));
         assert_eq!(resolve("../b.mp3", base, Some(root)).unwrap(), Path::new("/media/W/b.mp3"));
         assert_eq!(resolve("http://radio", base, Some(root)), None);
+    }
+
+    #[test]
+    fn places_songs_by_artist_and_album() {
+        let info = chinotto_gpod::TrackInfo {
+            title: Some("Sour Times: Live?".into()),
+            artist: Some("Portishead".into()),
+            album: Some("Dummy".into()),
+            track_nr: 2,
+            ..Default::default()
+        };
+        let p = place(Path::new("/W/MUSIC"), &info, Path::new("/x/a.MP3"));
+        assert_eq!(p, Path::new("/W/MUSIC/Portishead/Dummy/02 Sour Times_ Live_.mp3"));
+        let comp = chinotto_gpod::TrackInfo { compilation: true, album: Some("Trainspotting".into()), ..Default::default() };
+        assert_eq!(
+            place(Path::new("/W"), &comp, Path::new("/x/Born Slippy.flac")),
+            Path::new("/W/Compilations/Trainspotting/Born Slippy.flac")
+        );
+        let nwz = profiles().into_iter().find(|p| p.key == "sony-nwz").unwrap();
+        let conv = crate::convert::Conversion::default();
+        assert!(needs_converting(Path::new("a.flac"), &nwz, &conv));
+        assert!(!needs_converting(Path::new("a.mp3"), &nwz, &conv));
+    }
+
+    /// An MP3 copied for a Walkman has an ID3v2.3 tag, cover kept.
+    #[test]
+    fn copies_with_id3v23() {
+        let Some(src) = std::env::var_os("CHINOTTO_TEST_AUDIO").map(PathBuf::from) else { return };
+        let dir = std::env::temp_dir().join(format!("chinotto-msc-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let from = dir.join("in.mp3");
+        std::fs::copy(src.join("sine-440-3s.mp3"), &from).unwrap();
+        let png = {
+            let img = image::RgbImage::from_pixel(8, 8, image::Rgb([1, 2, 3]));
+            let mut v = Vec::new();
+            image::DynamicImage::ImageRgb8(img).write_to(&mut std::io::Cursor::new(&mut v), image::ImageFormat::Png).unwrap();
+            v
+        };
+        crate::tagwrite::write(
+            &from,
+            &[chinotto_gpod::Field::Title(Some("T".into()))],
+            Some(&crate::tagwrite::CoverChange::Set(png, lofty::picture::MimeType::Png)),
+        )
+        .unwrap();
+        let to = dir.join("A/B/01 T.mp3");
+        copy_in(&from, &to, true).unwrap();
+        let head = std::fs::read(&to).unwrap();
+        assert_eq!((&head[..3], head[3]), (&b"ID3"[..], 3));
+        assert!(crate::tags::embedded_cover(&to).is_some());
+        assert_eq!(std::fs::read_dir(to.parent().unwrap()).unwrap().count(), 1, "no part file left");
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

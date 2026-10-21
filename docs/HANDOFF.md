@@ -239,6 +239,27 @@ Everything decided and learned so far, so work can continue in a new session.
 
 Order chosen: confirm editing on the nano → **playback** (done) → artwork (done) → icon chooser → shuffle/repeat → playlist reordering → column browser fixes and Format/Bitrate columns → media library.
 
+## MSC players, step 2: player page, copying, deleting (patch 0047)
+
+- PlayerPage (source `{kind: "player", path}`; clicking the player in the
+  sidebar): model, capacity bar, contents, formats it plays, Eject, Player
+  Settings…, Scan Now, Add Songs…; Allow changes and conversion, stored in
+  Settings under identity `msc:<id>` (same as iPods use).
+- Copying (msc_add): drag library/Scratch songs or albums onto the player in
+  the sidebar (`data-drop-playlist="player:<path>"`), right-click → Copy to
+  <player>, or Add Songs…. Converted when the profile's `plays` lacks the
+  format (FLAC on an NWZ…; ALAC optional); AAC targets fall back to MP3 320
+  for players without AAC. Placed at <music>/<Album Artist or
+  Compilations>/<Album>/<NN Title>.ext (FAT-safe names), through a hidden
+  .part file; same place + same size = already there. Sony profiles get
+  ID3v2.3 tags on MP3s (`tagwrite::resave_id3v23`). Then a rescan.
+- Deleting (msc_delete): right-click a player song → Delete from <player>…
+  (confirm); only files inside its music folder; empty folders removed.
+- Playlists on players: read-only (M3U/PLS files); the NWZ-E344 needs .pla,
+  which are empty placeholders backed by its MTP database → wait for MTP.
+- Not yet: tag editing on players (would need the ID3v2.3 rule), Sansa e200
+  cover size rule.
+
 ## MSC players, step 1: reading (patch 0046)
 
 - Add Drive… (Welcome / Open Device…) on a drive that isn't an iPod opens

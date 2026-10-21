@@ -13,6 +13,13 @@ export function playSelected(tracks: Track[]) {
   if (i >= 0) void store.playList(tracks, i);
 }
 
+/** "Copy to <player>" for each player set up as a drive (not the one shown). */
+function playerCopies(dbids: string[], shownLib: string | null) {
+  return store.devices
+    .filter((d) => d.kind === "msc" && d.library !== shownLib)
+    .map((d) => ({ label: t("Copy to {name}", { name: d.volume }), action: () => store.copyToPlayer(d.path, dbids) }));
+}
+
 /** Right-click on a song of `tracks`. */
 export function songMenu(e: MouseEvent, track: Track, tracks: Track[]) {
   e.preventDefault();
@@ -24,6 +31,8 @@ export function songMenu(e: MouseEvent, track: Track, tracks: Track[]) {
   const dbids = store.selectedTracks.map((x) => x.dbid);
   const src = store.source;
   const onIpod = src.kind !== "library" && src.kind !== "scratch";
+  // Songs on a player set up as a drive.
+  const player = src.kind === "library" ? store.playerOf(src.lib) : undefined;
   if (src.kind === "scratch") {
     // Opened from outside the libraries: play, look, save, copy to the iPod, or take off the list.
     store.menu = {
@@ -36,6 +45,7 @@ export function songMenu(e: MouseEvent, track: Track, tracks: Track[]) {
         ...(store.ipod
           ? [{ label: t("Copy to {name}", { name: store.ipod.name }), disabled: !store.ipod.writable, action: () => store.copyToIpod(dbids, null) }]
           : []),
+        ...playerCopies(dbids, null),
         { label: "", separator: true },
         { label: t("Remove from Scratch"), action: () => store.removeFromScratch([...store.selected]) },
       ],
@@ -54,13 +64,18 @@ export function songMenu(e: MouseEvent, track: Track, tracks: Track[]) {
       { label: t("Song Details"), action: () => (store.dialog = { kind: "info" }) },
       { label: n > 1 ? t("Save As Zip…") : t("Save As…"), action: () => store.exportSongs(store.selectedTracks) },
       { label: "", separator: true },
-      {
-        label: t("Add to Playlist"),
-        disabled: ro || !targets.length,
-        submenu: targets.map((p) => ({ label: p.name, action: () => store.addToPlaylist(p.id, dbids) })),
-      },
-      { label: t("New Playlist from Selection"), disabled: ro, action: () => store.newPlaylist(true) },
-      { label: "", separator: true },
+      // A player's playlists aren't changed here (they need MTP).
+      ...(player
+        ? []
+        : [
+            {
+              label: t("Add to Playlist"),
+              disabled: ro || !targets.length,
+              submenu: targets.map((p) => ({ label: p.name, action: () => store.addToPlaylist(p.id, dbids) })),
+            },
+            { label: t("New Playlist from Selection"), disabled: ro, action: () => store.newPlaylist(true) },
+            { label: "", separator: true },
+          ]),
       ...(pl ? [{ label: t("Remove from “{name}”", { name: pl.name }), disabled: ro, action: () => store.removeFromPlaylist(pl.id, [...store.selected]) }] : []),
       ...(!onIpod && store.ipod
         ? [
@@ -74,7 +89,17 @@ export function songMenu(e: MouseEvent, track: Track, tracks: Track[]) {
             },
           ]
         : []),
-      ...(!onIpod
+      ...(!onIpod ? playerCopies(dbids, src.kind === "library" ? src.lib : null) : []),
+      ...(!onIpod && player
+        ? [
+            {
+              label: tn(n, "Delete Song from {name}…", "Delete {n} Songs from {name}…", { name: player.volume }),
+              danger: true,
+              action: () => (store.dialog = { kind: "delete-player-songs", path: player.path, ids: [...store.selected] }),
+            },
+          ]
+        : []),
+      ...(!onIpod && !player
         ? [{ label: tn(n, "Remove Song from Library…", "Remove {n} Songs from Library…"), action: () => (store.dialog = { kind: "remove-from-library", ids: [...store.selected] }) }]
         : []),
       ...(onIpod

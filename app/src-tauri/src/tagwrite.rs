@@ -178,6 +178,15 @@ pub fn write(path: &Path, fields: &[Field], cover: Option<&CoverChange>) -> Resu
     }
 }
 
+/// Rewrite an MP3's tag as ID3v2.3 (in place): many players, Sony Walkmans
+/// among them, only show covers from v2.3 tags.
+pub fn resave_id3v23(path: &Path) -> Result<(), String> {
+    let opts = ParseOptions::new();
+    let mut f = lofty::mpeg::MpegFile::read_from(&mut File::open(path).map_err(err)?, opts).map_err(err)?;
+    let Some(tag) = f.remove_id3v2() else { return Ok(()) };
+    tag.save_to_path(path, WriteOptions::default().use_id3v23(true)).map_err(err)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

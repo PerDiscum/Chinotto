@@ -62,6 +62,17 @@
       <button class="danger" onclick={() => store.removeFromLibrary(ids)}>{t("Remove")}</button>
     {/snippet}
   </Modal>
+{:else if store.dialog?.kind === "delete-player-songs"}
+  {@const d = store.dialog}
+  {@const n = d.ids.length}
+  {@const name = store.devices.find((x) => x.path === d.path)?.volume ?? ""}
+  <Modal title={tn(n, "Delete this song from {name}?", "Delete {n} songs from {name}?", { name })} onclose={close}>
+    <p>{tn(n, "Its music file is deleted from the player. Your own copies elsewhere aren't touched.", "Their music files are deleted from the player. Your own copies elsewhere aren't touched.")}</p>
+    {#snippet buttons()}
+      <button onclick={close}>{t("Cancel")}</button>
+      <button class="danger" onclick={() => store.deleteFromPlayer(d.path, d.ids)}>{tn(n, "Delete Song", "Delete Songs")}</button>
+    {/snippet}
+  </Modal>
 {:else if store.dialog?.kind === "report"}
   {@const d = store.dialog}
   <Modal title={d.title} onclose={close} width={540}>

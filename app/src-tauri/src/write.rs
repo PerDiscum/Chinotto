@@ -150,7 +150,7 @@ struct AddResult {
 }
 
 /// Every audio file in `paths`, looking inside folders.
-fn expand(paths: &[String]) -> Vec<PathBuf> {
+pub(crate) fn expand(paths: &[String]) -> Vec<PathBuf> {
     let mut out = Vec::new();
     let mut stack: Vec<PathBuf> = paths.iter().rev().map(PathBuf::from).collect();
     while let Some(p) = stack.pop() {
