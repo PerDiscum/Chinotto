@@ -118,8 +118,12 @@
 
   // Back to the top when a different list is shown (playlist, search, browser pick,
   // sort), but not when the same list is saved (e.g. after reordering).
+  // Only real changes count: a refreshed iPod (after copying songs to it)
+  // or an equal-but-new source object keeps the place in the list.
+  const ipodPath = $derived(store.ipod?.path);
+  const sourceKey = $derived(JSON.stringify(store.source));
   $effect(() => {
-    void [store.source, store.search, store.browserSel, store.sortKey, store.sortDir, store.ipod?.path];
+    void [sourceKey, store.search, store.browserSel, store.sortKey, store.sortDir, ipodPath];
     if (scroller) scroller.scrollTop = 0;
   });
 

@@ -88,9 +88,18 @@ export function handleKey(e: KeyboardEvent): boolean {
 /** The macOS menu bar, with Chinotto's commands and their shortcuts. */
 export async function installMenu() {
   if (!isMac) return;
-  const { Menu, Submenu, PredefinedMenuItem, CheckMenuItem } = await import("@tauri-apps/api/menu");
+  const { Menu, Submenu, PredefinedMenuItem, CheckMenuItem, MenuItem } = await import("@tauri-apps/api/menu");
   const sep = { item: "Separator" as const };
-  const item = (text: string, action: () => unknown, accelerator?: string) => ({ text, accelerator, action: () => void action() });
+  // Items that only make sense sometimes are greyed out the rest of the time.
+  const when: [{ setEnabled(on: boolean): Promise<void> }, () => boolean][] = [];
+  const item = async (text: string, action: () => unknown, accelerator?: string, enabled?: () => boolean) => {
+    const it = await MenuItem.new({ text, accelerator, action: () => void action() });
+    if (enabled) when.push([it, enabled]);
+    return it;
+  };
+  const selected = () => store.selected.size > 0;
+  const playing = () => !!store.nowPlaying;
+  const views = () => store.hasViews;
   const shuffle = await CheckMenuItem.new({ text: t("Shuffle"), checked: store.shuffle, action: () => run.shuffle() });
   const app = await Submenu.new({
     text: "Chinotto",
@@ -109,17 +118,17 @@ export async function installMenu() {
   const file = await Submenu.new({
     text: t("File"),
     items: [
-      item(t("New Playlist"), run.newPlaylist, "CmdOrCtrl+N"),
-      item(t("New Library…"), run.newLibrary, "CmdOrCtrl+Alt+N"),
+      await item(t("New Playlist"), run.newPlaylist, "CmdOrCtrl+N", () => store.writable),
+      await item(t("New Library…"), run.newLibrary, "CmdOrCtrl+Alt+N"),
       sep,
-      item(t("Open File…"), run.openFile, "CmdOrCtrl+O"),
-      item(t("Open Device…"), run.openDevice),
-      item(t("Add Songs to iPod…"), run.addToIpod, "CmdOrCtrl+Shift+O"),
+      await item(t("Open File…"), run.openFile, "CmdOrCtrl+O"),
+      await item(t("Open Device…"), run.openDevice),
+      await item(t("Add Songs to iPod…"), run.addToIpod, "CmdOrCtrl+Shift+O", () => !!store.ipod?.writable),
       sep,
-      item(t("Song Details"), run.songDetails, "CmdOrCtrl+I"),
-      item(t("Save As…"), run.saveAs, "CmdOrCtrl+Shift+S"),
+      await item(t("Song Details"), run.songDetails, "CmdOrCtrl+I", selected),
+      await item(t("Save As…"), run.saveAs, "CmdOrCtrl+Shift+S", selected),
       sep,
-      item(t("Eject iPod"), run.eject, "CmdOrCtrl+E"),
+      await item(t("Eject iPod"), run.eject, "CmdOrCtrl+E", () => !!store.ipod && !store.ipod.device.manual),
       { item: "CloseWindow" },
     ],
   });
@@ -134,23 +143,23 @@ export async function installMenu() {
       { item: "Paste" },
       { item: "SelectAll" },
       sep,
-      item(t("Find"), run.find, "CmdOrCtrl+F"),
+      await item(t("Find"), run.find, "CmdOrCtrl+F"),
     ],
   });
   const view = await Submenu.new({
     text: t("View"),
     items: [
-      item(t("Songs"), () => run.view(0), "CmdOrCtrl+1"),
-      item(t("Albums"), () => run.view(1), "CmdOrCtrl+2"),
-      item(t("Artists"), () => run.view(2), "CmdOrCtrl+3"),
-      item(t("Genres"), () => run.view(3), "CmdOrCtrl+4"),
-      item(t("Composers"), () => run.view(4), "CmdOrCtrl+5"),
-      item(t("Compilations"), () => run.view(5), "CmdOrCtrl+6"),
+      await item(t("Songs"), () => run.view(0), "CmdOrCtrl+1", views),
+      await item(t("Albums"), () => run.view(1), "CmdOrCtrl+2", views),
+      await item(t("Artists"), () => run.view(2), "CmdOrCtrl+3", views),
+      await item(t("Genres"), () => run.view(3), "CmdOrCtrl+4", views),
+      await item(t("Composers"), () => run.view(4), "CmdOrCtrl+5", views),
+      await item(t("Compilations"), () => run.view(5), "CmdOrCtrl+6", views),
       sep,
-      item(t("Show or Hide Column Browser"), run.toggleBrowser, "CmdOrCtrl+B"),
-      item(t("Show or Hide Artwork"), run.toggleArtwork, "CmdOrCtrl+G"),
+      await item(t("Show or Hide Column Browser"), run.toggleBrowser, "CmdOrCtrl+B"),
+      await item(t("Show or Hide Artwork"), run.toggleArtwork, "CmdOrCtrl+G"),
       sep,
-      item(t("Show Playing Song"), run.showPlaying, "CmdOrCtrl+L"),
+      await item(t("Show Playing Song"), run.showPlaying, "CmdOrCtrl+L", playing),
       sep,
       { item: "Fullscreen" },
     ],
@@ -158,26 +167,31 @@ export async function installMenu() {
   const controls = await Submenu.new({
     text: t("Controls"),
     items: [
-      item(t("Play / Pause (Space)"), run.playPause),
-      item(t("Stop"), run.stop, "CmdOrCtrl+."),
-      item(t("Next"), run.next, "CmdOrCtrl+Right"),
-      item(t("Previous"), run.previous, "CmdOrCtrl+Left"),
+      await item(t("Play / Pause (Space)"), run.playPause, undefined, () => !!store.index),
+      await item(t("Stop"), run.stop, "CmdOrCtrl+.", playing),
+      await item(t("Next"), run.next, "CmdOrCtrl+Right", () => store.hasNext),
+      await item(t("Previous"), run.previous, "CmdOrCtrl+Left", playing),
       sep,
-      item(t("Volume Up"), run.volumeUp, "CmdOrCtrl+Up"),
-      item(t("Volume Down"), run.volumeDown, "CmdOrCtrl+Down"),
+      await item(t("Volume Up"), run.volumeUp, "CmdOrCtrl+Up"),
+      await item(t("Volume Down"), run.volumeDown, "CmdOrCtrl+Down"),
       sep,
       shuffle,
-      item(t("Repeat: Off, All, One"), run.repeat),
+      await item(t("Repeat: Off, All, One"), run.repeat),
     ],
   });
   const windowMenu = await Submenu.new({ text: t("Window"), items: [{ item: "Minimize" }, { item: "Maximize" }, sep, { item: "BringAllToFront" }] });
   const menu = await Menu.new({ items: [app, file, edit, view, controls, windowMenu] });
   await menu.setAsAppMenu();
   await windowMenu.setAsWindowsMenuForNSApp();
-  // Keep the Shuffle tick in step with the button.
+  // Keep the Shuffle tick in step with the button, and grey out what can't be done.
   $effect.root(() => {
     $effect(() => {
       void shuffle.setChecked(store.shuffle);
     });
+    for (const [it, ok] of when) {
+      $effect(() => {
+        void it.setEnabled(ok());
+      });
+    }
   });
 }
