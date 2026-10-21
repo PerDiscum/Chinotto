@@ -353,14 +353,21 @@ class Store {
 
   // ---- Changing the iPod ----
 
-  /** Show a freshly re-read iPod, keeping the selection and current playlist. */
-  private applyView(view: IpodView, keep: string[] = [], anchor: string | null = null) {
+  /** Show a freshly re-read iPod, keeping the selection (as it is now, not
+   *  when the change started) and the current playlist. A selection in a
+   *  library or the Scratch list isn't the iPod's and is left alone. */
+  private applyView(view: IpodView) {
+    const onIpod = this.source.kind === "playlist" || this.source.kind === "device";
+    const keep = onIpod ? this.selectedTracks.map((t) => t.dbid) : [];
+    const anchor = onIpod && this.anchor !== null ? (this.index?.byId.get(this.anchor)?.dbid ?? null) : null;
     const index = new TrackIndex(view.tracks);
     const byDbid = new Map(view.tracks.map((t) => [t.dbid, t.id]));
     this.ipodIndex = index;
     this.ipod = view;
-    this.selected = new Set(keep.map((d) => byDbid.get(d)).filter((x): x is number => x !== undefined));
-    this.anchor = anchor !== null ? (byDbid.get(anchor) ?? null) : null;
+    if (onIpod) {
+      this.selected = new Set(keep.map((d) => byDbid.get(d)).filter((x): x is number => x !== undefined));
+      this.anchor = anchor !== null ? (byDbid.get(anchor) ?? null) : null;
+    }
     const s = this.source;
     if (s.kind === "playlist" && !view.playlists.some((p) => p.id === s.id)) {
       const master = view.playlists.find((p) => p.master);
@@ -371,13 +378,11 @@ class Store {
   /** Run one change against the open iPod. Returns `{ extra }` (the command's extra result), or null on failure. */
   private async write<T>(label: string, run: (path: string) => Promise<WriteResult<T>>): Promise<{ extra: T } | null> {
     if (!this.ipod || this.busy) return null;
-    const keep = this.selectedTracks.map((t) => t.dbid);
-    const anchor = this.anchor !== null ? (this.index?.byId.get(this.anchor)?.dbid ?? null) : null;
     this.busy = label;
     this.error = null;
     try {
       const r = await run(this.ipod.path);
-      this.applyView(r.view, keep, anchor);
+      this.applyView(r.view);
       return { extra: r.extra };
     } catch (e) {
       this.error = String(e);
@@ -391,7 +396,7 @@ class Store {
   async setConversion(c: Conversion) {
     if (!this.ipod) return;
     try {
-      this.applyView(await api.setConversion(this.ipod.path, c), this.selectedTracks.map((t) => t.dbid));
+      this.applyView(await api.setConversion(this.ipod.path, c));
     } catch (e) {
       this.error = String(e);
     }
@@ -400,7 +405,7 @@ class Store {
   async allowChanges(allow: boolean) {
     if (!this.ipod) return;
     try {
-      this.applyView(await api.setAllowChanges(this.ipod.path, allow), this.selectedTracks.map((t) => t.dbid));
+      this.applyView(await api.setAllowChanges(this.ipod.path, allow));
     } catch (e) {
       this.error = String(e);
     }
