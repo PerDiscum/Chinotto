@@ -105,6 +105,23 @@ Everything decided and learned so far, so work can continue in a new session.
   welcome text. "Add Drive…" still only opens iPods until the MSC wizard
   exists.
 
+## Media library: decisions (2026-10-21, from the developer)
+
+- **Several libraries**, each shown in the sidebar and collapsible (e.g. an
+  archival lossless library plus a small everyday one). Each has its own
+  music folders, songs and playlists.
+- **Files are left alone**: read only, never moved, renamed or retagged
+  (tag edits come later, if ever, and only when asked).
+- **Scanning**: automatically every hour, plus a "Scan Now" for picking up
+  new files on the fly. No file watcher needed.
+- **Missing files**: never removed just because they can't be found. If a
+  folder's drive isn't connected, its songs stay (shown as unavailable). Only
+  when the drive *is* connected and the files are gone are they removed.
+- **Playback formats**: WMA matters more than HE-AAC (FFmpeg helper; WMA first).
+- **Library playlists**: yes.
+- **To the iPod**: drag and drop from the library first; full sync later.
+- **No iTunes library import** for now.
+
 Order chosen: confirm editing on the nano → **playback** (done) → artwork (done) → icon chooser → shuffle/repeat → playlist reordering → column browser fixes and Format/Bitrate columns → media library.
 
 ## Status (2026-10-20)
