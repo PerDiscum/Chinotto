@@ -34,6 +34,7 @@ export function songMenu(e: MouseEvent, track: Track, tracks: Track[]) {
     items: [
       { label: t("Play"), action: () => playSelected(tracks) },
       { label: t("Get Info"), action: () => (store.dialog = { kind: "info" }) },
+      { label: n > 1 ? t("Save As Zip…") : t("Save As…"), action: () => store.exportSongs(store.selectedTracks) },
       { label: "", separator: true },
       {
         label: t("Add to Playlist"),

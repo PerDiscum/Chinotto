@@ -135,3 +135,17 @@ export const libRemoveTracks = (lib: string, ids: number[]) => invoke<number>("l
 /** Returns the files that couldn't be changed. `cover`: image path, "" to remove, null to leave. */
 export const libEditTracks = (lib: string, ids: number[], changes: TrackChanges, cover: string | null) =>
   invoke<string[]>("lib_edit_tracks", { lib, ids, changes, cover });
+
+// ---- Saving songs to the computer ----
+export interface SongRef {
+  dbid: string;
+  title?: string;
+  artist?: string;
+  album?: string;
+  trackNr?: number;
+}
+export const exportName = (song: SongRef) => invoke<string>("export_name", { song });
+export const exportSongs = (songs: SongRef[], dest: string) => invoke<string>("export_songs", { songs, dest });
+export async function pickSaveFile(defaultPath: string, title: string, ext: string): Promise<string | null> {
+  return (await save({ title, defaultPath, filters: [{ name: ext.toUpperCase(), extensions: [ext] }] })) ?? null;
+}

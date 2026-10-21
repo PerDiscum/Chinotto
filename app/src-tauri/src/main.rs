@@ -5,6 +5,7 @@ mod artwork;
 mod commands;
 mod cover;
 mod devices;
+mod export;
 mod libcommands;
 mod library;
 mod playback;
@@ -60,6 +61,8 @@ fn main() {
             write::paste_image,
             commands::device_icons,
             commands::system_locales,
+            export::export_name,
+            export::export_songs,
             libcommands::list_libraries,
             libcommands::create_library,
             libcommands::update_library,

@@ -8,9 +8,10 @@
   const isOpen = (path: string) => store.ipod?.path === path;
   const isPlaylist = (id: string) => store.source.kind === "playlist" && store.source.id === id;
 
-  function playlistMenu(e: MouseEvent, id: string, name: string, smart: boolean) {
+  function playlistMenu(e: MouseEvent, id: string, name: string) {
     e.preventDefault();
-    const ro = !store.ipod?.writable || smart;
+    // Smart playlists (made by iTunes) can be renamed and deleted, not edited.
+    const ro = !store.ipod?.writable;
     store.menu = {
       x: e.clientX,
       y: e.clientY,
@@ -26,8 +27,8 @@
     else if (e.key === "Escape") store.renaming = null;
   }
 
-  function rowKey(e: KeyboardEvent, id: string, name: string, smart: boolean) {
-    if (!store.ipod?.writable || smart) return;
+  function rowKey(e: KeyboardEvent, id: string, name: string) {
+    if (!store.ipod?.writable) return;
     if (e.key === "Enter") {
       e.preventDefault();
       store.renaming = id;
@@ -196,9 +197,9 @@
                     class:drop={store.songDrag?.target === p.id}
                     data-drop-playlist={!!store.ipod?.writable && !p.smart ? p.id : undefined}
                     onclick={() => store.select({ kind: "playlist", id: p.id })}
-                    ondblclick={() => !!store.ipod?.writable && !p.smart && (store.renaming = p.id)}
-                    oncontextmenu={(e) => playlistMenu(e, p.id, p.name, p.smart)}
-                    onkeydown={(e) => rowKey(e, p.id, p.name, p.smart)}
+                    ondblclick={() => !!store.ipod?.writable && (store.renaming = p.id)}
+                    oncontextmenu={(e) => playlistMenu(e, p.id, p.name)}
+                    onkeydown={(e) => rowKey(e, p.id, p.name)}
                   >
                     <Icon name={p.smart ? "smart" : "playlist"} /><span>{p.name}</span>
                   </button>

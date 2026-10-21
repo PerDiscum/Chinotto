@@ -367,14 +367,14 @@ impl Database {
     }
 
     pub fn rename_playlist(&mut self, id: u64, name: &str) -> Result<()> {
-        let p = self.editable_playlist(id)?;
+        let p = self.any_playlist(id)?;
         unsafe { set_str(&mut (*p).name, Some(name)) };
         Ok(())
     }
 
     /// Delete a playlist (its songs stay in the library).
     pub fn delete_playlist(&mut self, id: u64) -> Result<()> {
-        let p = self.editable_playlist(id)?;
+        let p = self.any_playlist(id)?;
         unsafe { itdb_playlist_remove(p) };
         Ok(())
     }
@@ -393,6 +393,15 @@ impl Database {
             }
         }
         Ok(())
+    }
+
+    /// Any playlist but the library itself (smart ones too: for renaming and deleting).
+    fn any_playlist(&self, id: u64) -> Result<*mut Itdb_Playlist> {
+        let p = self.find_playlist(id).ok_or_else(|| Error(format!("no playlist with id {id}")))?;
+        if unsafe { itdb_playlist_is_mpl(p) } != 0 {
+            return Err(Error("The library playlist can't be changed directly".into()));
+        }
+        Ok(p)
     }
 
     fn editable_playlist(&self, id: u64) -> Result<*mut Itdb_Playlist> {

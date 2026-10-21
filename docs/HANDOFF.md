@@ -180,6 +180,22 @@ Everything decided and learned so far, so work can continue in a new session.
   "Copy to <iPod>" in the song menu) are copied with add_files; songs already
   there (same name/artist/album/length within 2 s) aren't copied again.
 
+## Saving songs, playlists, reminders (0030)
+
+- Song menu → Save As… (one song: the file, "Artist - Title.ext") or Save As
+  Zip… (several: stored zip, "Artist/Album/NN Title.ext", duplicates get
+  " (2)"); `export.rs`. Works for iPod and library songs.
+- Smart playlists on the iPod (e.g. the nano's video playlists) can be
+  renamed and deleted (`Database::any_playlist`); still not edited.
+- The web view's own right-click menu (Back, Reload…) is suppressed outside
+  text fields.
+- **To do (requested 2026-10-21): conversion on transfer.** FLAC and ALAC
+  (and other formats the device can't play) transcoded to MP3 or AAC into a
+  temporary folder just before copying to the iPod/device, then deleted;
+  never added to the computer's library. Goes with the FFmpeg helper.
+- Translation notes: German always capitalises Du/Dein/Deinem/Deiner/Deines.
+  The developer translates; Claude only corrects grammar, no other changes.
+
 Order chosen: confirm editing on the nano → **playback** (done) → artwork (done) → icon chooser → shuffle/repeat → playlist reordering → column browser fixes and Format/Bitrate columns → media library.
 
 ## Status (2026-10-20)

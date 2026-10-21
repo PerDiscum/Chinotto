@@ -722,6 +722,30 @@ class Store {
     }
   }
 
+  /** Save songs to the computer: one as its own file, several as a zip. */
+  async exportSongs(tracks: Track[]) {
+    const songs = tracks
+      .filter((x) => !x.unavailable)
+      .map((x) => ({ dbid: x.dbid, title: x.title, artist: x.artist, album: x.album, trackNr: x.trackNr }));
+    if (!songs.length) return;
+    try {
+      let dest: string | null;
+      if (songs.length === 1) {
+        const name = await api.exportName(songs[0]);
+        dest = await api.pickSaveFile(name, t("Save Song"), name.split(".").pop() ?? "mp3");
+      } else {
+        dest = await api.pickSaveFile(t("{n} songs", { n: songs.length }) + ".zip", t("Save Songs as a Zip"), "zip");
+      }
+      if (!dest) return;
+      this.busy = tn(songs.length, "Saving {n} song…", "Saving {n} songs…");
+      await api.exportSongs(songs, dest);
+    } catch (e) {
+      this.error = String(e);
+    } finally {
+      this.busy = null;
+    }
+  }
+
   /** A song by dbid, from the iPod or any loaded library. */
   trackByDbid(d: string): Track | null {
     if (d.startsWith("lib:")) {

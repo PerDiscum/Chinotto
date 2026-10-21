@@ -86,7 +86,13 @@
   });
 </script>
 
-<svelte:window onkeydown={keydown} />
+<svelte:window
+  onkeydown={keydown}
+  oncontextmenu={(e) => {
+    // The web view's own menu (Back, Reload…) isn't Chinotto's: only text fields keep theirs.
+    if (!(e.target as HTMLElement).closest("input, textarea, [contenteditable]")) e.preventDefault();
+  }}
+/>
 
 <div class="app">
   <Toolbar {visible} visibleMs={totals.ms} />

@@ -27,6 +27,7 @@ base64 = "0.22"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "bmp", "webp", "tiff"] }
 arboard = { version = "3.7.0", default-features = false, features = ["image-data", "wayland-data-control"] }
 sys-locale = "0.3.2"
+zip = { version = "9.0.5", default-features = false }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

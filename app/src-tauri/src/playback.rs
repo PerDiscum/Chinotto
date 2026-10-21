@@ -39,7 +39,7 @@ pub fn start(app: &AppHandle) -> Player {
 }
 
 /// The music file of a track on the open iPod.
-fn track_file(app: &AppHandle, dbid: u64) -> Result<PathBuf, String> {
+pub(crate) fn track_file(app: &AppHandle, dbid: u64) -> Result<PathBuf, String> {
     let session = app.state::<AppState>().session().ok_or("No iPod is open")?;
     let t = session.db.tracks.iter().find(|t| t.dbid == dbid).ok_or("That song isn't on the iPod any more")?;
     let loc = t.strings.location.as_deref().ok_or("The iPod doesn't say where this song's file is")?;
