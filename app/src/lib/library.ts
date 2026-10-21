@@ -3,7 +3,7 @@
 // compare integers (23k tracks sort in a few milliseconds).
 
 import type { BrowseField, SortKey, Track } from "./types";
-import { browseAlbum, browseArtist, browseComposer, browseGenre, browseYear, fold, formatName, stripThe } from "./format";
+import { browseAlbum, browseArtist, browseComposer, browseGenre, browseYear, COMPILATIONS, fold, formatName, stripThe, UNKNOWN_ALBUM, UNKNOWN_ARTIST } from "./format";
 
 export const collator = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
 
@@ -23,6 +23,9 @@ export class TrackIndex {
   private rGenre: Uint32Array;
   private rKind: Uint32Array;
   private rFormat: Uint32Array;
+  private rAlbumArtist: Uint32Array;
+  /** Year of each track's album (earliest year among its songs). */
+  private albumYear: Uint32Array;
   private haystack: string[];
 
   constructor(tracks: Track[]) {
@@ -37,6 +40,13 @@ export class TrackIndex {
     this.rGenre = ranks(tracks.map((t) => t.genre ?? ""));
     this.rKind = ranks(tracks.map((t) => t.kind));
     this.rFormat = ranks(tracks.map(formatName));
+    this.rAlbumArtist = ranks(tracks.map(albumArtistSortKey));
+    const years = new Map<string, number>();
+    for (const t of tracks) {
+      const k = albumKey(t);
+      if (t.year && (!years.has(k) || t.year < years.get(k)!)) years.set(k, t.year);
+    }
+    this.albumYear = Uint32Array.from(tracks, (t) => years.get(albumKey(t)) ?? 0);
     this.haystack = tracks.map((t) =>
       fold([t.title, t.artist, t.albumArtist, t.album, t.composer, t.genre].filter(Boolean).join("\n")),
     );
@@ -65,9 +75,14 @@ export class TrackIndex {
   sort(tracks: Track[], key: SortKey, dir: 1 | -1): Track[] {
     if (key === "order") return dir === 1 ? tracks : [...tracks].reverse();
     const p = (t: Track) => this.pos.get(t.id)!;
-    const albumOrder = (a: Track, b: Track) =>
-      this.rAlbum[p(a)] - this.rAlbum[p(b)] || a.discNr - b.discNr || a.trackNr - b.trackNr || this.rTitle[p(a)] - this.rTitle[p(b)];
-    const artistOrder = (a: Track, b: Track) => this.rArtist[p(a)] - this.rArtist[p(b)] || albumOrder(a, b);
+    const inAlbum = (a: Track, b: Track) => a.discNr - b.discNr || a.trackNr - b.trackNr || this.rTitle[p(a)] - this.rTitle[p(b)];
+    const albumOrder = (a: Track, b: Track) => this.rAlbum[p(a)] - this.rAlbum[p(b)] || inAlbum(a, b);
+    // Everywhere: album artist, then the album's year, then album title; compilations last.
+    const artistOrder = (a: Track, b: Track) =>
+      Number(a.compilation) - Number(b.compilation) ||
+      this.rAlbumArtist[p(a)] - this.rAlbumArtist[p(b)] ||
+      this.albumYear[p(a)] - this.albumYear[p(b)] ||
+      albumOrder(a, b);
     const primary: Record<SortKey, (a: Track, b: Track) => number> = {
       title: (a, b) => this.rTitle[p(a)] - this.rTitle[p(b)] || artistOrder(a, b),
       time: (a, b) => a.lengthMs - b.lengthMs,
@@ -142,8 +157,102 @@ export function browse(
     out.push(t);
   }
   const columns = fields.map((field, i) => {
-    const items = [...maps[i].entries()].sort((a, b) => collator.compare(a[1], b[1])).map(([v]) => v);
+    let items = [...maps[i].entries()].sort((a, b) => collator.compare(a[1], b[1])).map(([v]) => v);
+    if (field === "artist" && items.includes(COMPILATIONS)) items = [...items.filter((v) => v !== COMPILATIONS), COMPILATIONS];
     return { field, items };
   });
   return { columns, tracks: out };
+}
+
+// ---- Albums ----
+
+/** Sort key of the artist an album is filed under (album artist, else artist). */
+export function albumArtistSortKey(t: Track): string {
+  if (t.albumArtist) return t.sortAlbumArtist ?? stripThe(t.albumArtist);
+  return t.sortArtist ?? stripThe(t.artist ?? "");
+}
+
+/** Songs belong to the same album when album and album artist match (any artist, for compilations). */
+export function albumKey(t: Track): string {
+  const album = t.album ?? "";
+  return t.compilation ? `c\u0000${album}` : `a\u0000${album}\u0000${t.albumArtist || t.artist || ""}`;
+}
+
+export interface Album {
+  key: string;
+  title: string;
+  artist: string;
+  year: number;
+  compilation: boolean;
+  /** In disc and track order. */
+  tracks: Track[];
+  /** A song with a cover, if any. */
+  coverTrack: Track | null;
+  sortArtist: string;
+  sortTitle: string;
+}
+
+/** Albums of `tracks`: album artist, then year, then title; compilations last. */
+export function albums(tracks: Track[]): Album[] {
+  const byKey = new Map<string, Album>();
+  for (const t of tracks) {
+    const key = albumKey(t);
+    let a = byKey.get(key);
+    if (!a) {
+      a = {
+        key,
+        title: t.album || UNKNOWN_ALBUM,
+        artist: t.compilation ? "Various Artists" : t.albumArtist || t.artist || UNKNOWN_ARTIST,
+        year: 0,
+        compilation: t.compilation,
+        tracks: [],
+        coverTrack: null,
+        sortArtist: albumArtistSortKey(t),
+        sortTitle: t.sortAlbum ?? t.album ?? "",
+      };
+      byKey.set(key, a);
+    }
+    a.tracks.push(t);
+    if (t.year && (!a.year || t.year < a.year)) a.year = t.year;
+    if (!a.coverTrack && (t.art || t.hasCover)) a.coverTrack = t;
+  }
+  const list = [...byKey.values()];
+  for (const a of list) {
+    a.tracks.sort((x, y) => x.discNr - y.discNr || x.trackNr - y.trackNr || collator.compare(x.title ?? "", y.title ?? ""));
+  }
+  return list.sort(compareAlbums);
+}
+
+export function compareAlbums(a: Album, b: Album): number {
+  return (
+    Number(a.compilation) - Number(b.compilation) ||
+    (a.compilation ? 0 : collator.compare(a.sortArtist, b.sortArtist)) ||
+    a.year - b.year ||
+    collator.compare(a.sortTitle, b.sortTitle)
+  );
+}
+
+/** Names to list in the Artists, Genres or Composers view, with their songs. */
+export function groups(tracks: Track[], by: "artist" | "genre" | "composer"): { name: string; tracks: Track[] }[] {
+  const m = new Map<string, { name: string; sort: string; tracks: Track[] }>();
+  for (const t of tracks) {
+    let name: string;
+    let sort: string;
+    if (by === "artist") {
+      // Compilations (Various Artists, soundtracks) go together, at the end.
+      name = t.compilation ? COMPILATIONS : t.albumArtist || t.artist || UNKNOWN_ARTIST;
+      sort = t.compilation ? "\uffff" : albumArtistSortKey(t) || name;
+    } else if (by === "genre") {
+      name = browseGenre(t);
+      sort = name;
+    } else {
+      if (!t.composer) continue;
+      name = t.composer;
+      sort = t.sortComposer ?? name;
+    }
+    let g = m.get(name);
+    if (!g) m.set(name, (g = { name, sort, tracks: [] }));
+    g.tracks.push(t);
+  }
+  return [...m.values()].sort((a, b) => collator.compare(a.sort, b.sort)).map(({ name, tracks }) => ({ name, tracks }));
 }

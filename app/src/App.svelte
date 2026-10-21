@@ -1,7 +1,10 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { store } from "./lib/store.svelte";
-  import { browse } from "./lib/library";
+  import { albums, browse } from "./lib/library";
+  import ViewTabs from "./lib/ViewTabs.svelte";
+  import AlbumGrid from "./lib/AlbumGrid.svelte";
+  import GroupView from "./lib/GroupView.svelte";
   import { count, longDuration, bytes } from "./lib/format";
   import Toolbar from "./lib/Toolbar.svelte";
   import SourceList from "./lib/SourceList.svelte";
@@ -70,8 +73,9 @@
   // Source → search → column browser → sort.
   const searched = $derived(store.index ? store.index.search(store.sourceTracks, store.search) : []);
   const browsed = $derived(
-    store.showBrowser ? browse(searched, store.browserFields, store.browserSel) : null,
+    store.showBrowser && store.view === "songs" ? browse(searched, store.browserFields, store.browserSel) : null,
   );
+  const albumList = $derived(store.view === "albums" || store.view === "compilations" ? albums(searched) : []);
   const filtered = $derived(browsed ? browsed.tracks : searched);
   const visible = $derived(store.index ? store.index.sort(filtered, store.sortKey, store.sortDir) : []);
   const totals = $derived.by(() => {
@@ -155,16 +159,22 @@
       </div>
     {/if}
 
-    {#if store.source.kind === "library"}
-      {#if browsed}<ColumnBrowser columns={browsed.columns} />{/if}
-      <SongList tracks={visible} />
-    {:else if !store.ipod}
+    {#if store.source.kind !== "library" && !store.ipod}
       <Welcome />
     {:else if store.source.kind === "device"}
       <DevicePage />
     {:else}
-      {#if browsed}<ColumnBrowser columns={browsed.columns} />{/if}
-      <SongList tracks={visible} />
+      {#if store.hasViews}<ViewTabs />{/if}
+      {#if store.view === "albums"}
+        <AlbumGrid albums={albumList} empty={store.search ? `No albums match “${store.search}”.` : "No albums"} />
+      {:else if store.view === "compilations"}
+        <AlbumGrid albums={albumList.filter((a) => a.compilation)} empty="No compilations (albums with the Compilation tag)." />
+      {:else if store.view === "artists" || store.view === "genres" || store.view === "composers"}
+        <GroupView tracks={searched} by={store.view === "artists" ? "artist" : store.view === "genres" ? "genre" : "composer"} view={store.view} />
+      {:else}
+        {#if browsed}<ColumnBrowser columns={browsed.columns} />{/if}
+        <SongList tracks={visible} />
+      {/if}
     {/if}
   </main>
 

@@ -32,6 +32,8 @@ function loadVolume(): number {
 }
 
 export type Repeat = "off" | "all" | "one";
+export type MusicView = "songs" | "albums" | "artists" | "genres" | "composers" | "compilations";
+const VIEWS = ["songs", "albums", "artists", "genres", "composers", "compilations"] as const;
 
 function loadPref<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
   try {
@@ -109,6 +111,13 @@ class Store {
   browserSel = $state<Partial<Record<BrowseField, string | null>>>({});
   /** Song list columns that are hidden. */
   hiddenColumns = $state<string[]>(loadList("chinotto.hiddenColumns", []));
+  /** How a library's or iPod's Music is shown. */
+  musicView = $state<MusicView>(loadPref("chinotto.view", VIEWS, "songs"));
+  /** Album whose songs are open in the Albums view (album key). */
+  openAlbum = $state<string | null>(null);
+  /** Name picked in the Artists, Genres and Composers views. */
+  groupPick = $state<Partial<Record<MusicView, string>>>({});
+
   /** Sorting per source (playlist id), like iTunes: playlists start in their own order. */
   private sorts = $state<Record<string, { key: SortKey; dir: 1 | -1 }>>({});
   selected = $state.raw<Set<number>>(new Set());
@@ -692,7 +701,27 @@ class Store {
     await api.playerStop();
   }
 
+  /** Music (a library's or the iPod's whole collection) can be shown in several views. */
+  get hasViews(): boolean {
+    const s = this.source;
+    if (s.kind === "library") return s.id === "all";
+    return s.kind === "playlist" && s.id === this.masterPlaylist?.id;
+  }
+
+  /** The view in use: other lists (playlists) are always songs. */
+  get view(): MusicView {
+    return this.hasViews ? this.musicView : "songs";
+  }
+
+  setView(v: MusicView) {
+    this.musicView = v;
+    this.openAlbum = null;
+    savePref("chinotto.view", v);
+  }
+
   select(src: Source) {
+    this.openAlbum = null;
+    this.groupPick = {};
     this.source = src;
     this.selected = new Set();
     this.anchor = null;

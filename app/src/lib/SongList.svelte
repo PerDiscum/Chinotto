@@ -2,6 +2,7 @@
   import { store, isMac } from "./store.svelte";
   import { bitrate, duration, formatName, stars, count } from "./format";
   import type { SortKey, Track } from "./types";
+  import { songMenu, startSongDrag } from "./trackActions";
 
   let { tracks }: { tracks: Track[] } = $props();
 
@@ -110,40 +111,7 @@
     if (i >= 0) void store.playList(tracks, i);
   }
 
-  function contextmenu(e: MouseEvent, t: Track) {
-    e.preventDefault();
-    // Right-clicking outside the selection selects that song.
-    if (!store.selected.has(t.id)) store.clickTrack(t.id, tracks, { shiftKey: false, metaKey: false, ctrlKey: false });
-    const n = store.selected.size;
-    const songs = n === 1 ? "Song" : `${n} Songs`;
-    const ro = !store.writable;
-    const pl = store.editablePlaylist;
-    const targets = (store.ipod?.playlists ?? []).filter((p) => !p.master && !p.smart && p.id !== pl?.id);
-    const dbids = store.selectedTracks.map((x) => x.dbid);
-    store.menu = {
-      x: e.clientX,
-      y: e.clientY,
-      items: [
-        { label: "Play", action: playSelected },
-        { label: "Get Info", action: () => (store.dialog = { kind: "info" }) },
-        { label: "", separator: true },
-        {
-          label: "Add to Playlist",
-          disabled: ro,
-          submenu: targets.map((p) => ({ label: p.name, action: () => store.addToPlaylist(p.id, dbids) })),
-        },
-        { label: "New Playlist from Selection", disabled: ro, action: () => store.newPlaylist(true) },
-        { label: "", separator: true },
-        ...(pl ? [{ label: `Remove from “${pl.name}”`, disabled: ro, action: () => store.removeFromPlaylist(pl.id, [...store.selected]) }] : []),
-        {
-          label: `Delete ${songs} from iPod…`,
-          danger: true,
-          disabled: ro,
-          action: () => (store.dialog = { kind: "delete-songs", ids: dbids }),
-        },
-      ],
-    };
-  }
+  const contextmenu = (e: MouseEvent, t: Track) => songMenu(e, t, tracks);
 
   /** Where in the list a drop at screen height `y` would insert (row boundary), or null outside it. */
   function insertionAt(x: number, y: number): number | null {
@@ -157,32 +125,7 @@
     return Math.max(0, Math.min(tracks.length, Math.round(pos)));
   }
 
-  /** Press on a song and move: drag the selection onto a playlist in the source list,
-   *  or, in a playlist shown in its own order, to a new place in it. */
-  function pressForDrag(e: MouseEvent, t: Track) {
-    if (e.button !== 0 || !store.writable) return;
-    const x0 = e.clientX, y0 = e.clientY;
-    const move = (m: MouseEvent) => {
-      if (!store.songDrag) {
-        if (Math.hypot(m.clientX - x0, m.clientY - y0) < 6) return;
-        if (!store.selected.has(t.id)) store.clickTrack(t.id, tracks, { shiftKey: false, metaKey: false, ctrlKey: false });
-        store.songDrag = { dbids: store.selectedTracks.map((x) => x.dbid), x: m.clientX, y: m.clientY, target: null };
-      }
-      const over = document.elementFromPoint(m.clientX, m.clientY)?.closest<HTMLElement>("[data-drop-playlist]");
-      const insertAt = store.canReorder ? insertionAt(m.clientX, m.clientY) : null;
-      store.songDrag = { ...store.songDrag, x: m.clientX, y: m.clientY, target: over?.dataset.dropPlaylist ?? null, insertAt };
-    };
-    const up = () => {
-      window.removeEventListener("mousemove", move);
-      window.removeEventListener("mouseup", up);
-      const d = store.songDrag;
-      store.songDrag = null;
-      if (d?.target) void store.addToPlaylist(d.target, d.dbids);
-      else if (d?.insertAt != null) void store.moveSelected(d.insertAt);
-    };
-    window.addEventListener("mousemove", move);
-    window.addEventListener("mouseup", up);
-  }
+  const pressForDrag = (e: MouseEvent, t: Track) => startSongDrag(e, t, tracks, store.canReorder ? insertionAt : null);
 </script>
 
 <div

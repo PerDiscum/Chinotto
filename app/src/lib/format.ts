@@ -16,7 +16,8 @@ export function longDuration(ms: number): string {
   const hours = ms / 3_600_000;
   if (hours >= 24) return `${(hours / 24).toFixed(1)} days`;
   if (hours >= 1) return `${hours.toFixed(1)} hours`;
-  return `${Math.round(ms / 60000)} minutes`;
+  const m = Math.round(ms / 60000);
+  return `${m} ${m === 1 ? "minute" : "minutes"}`;
 }
 
 export function bytes(n: number): string {

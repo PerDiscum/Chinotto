@@ -139,6 +139,19 @@ Everything decided and learned so far, so work can continue in a new session.
 - Not yet: library playlists, play counts/ratings in libraries, dragging to
   the iPod, WMA playback.
 
+## Views (0026)
+
+- Music of a library or an iPod has views: Songs, Albums, Artists, Genres,
+  Composers, Compilations (`store.view`, remembered). Playlists are always songs.
+- Albums: `AlbumGrid.svelte` (rows chunked by the measured column count, so
+  the open album's band goes right under its row, iTunes 11 style).
+  Artists/Genres/Composers: `GroupView.svelte`. Album songs:
+  `AlbumTracks.svelte`; shared right-click/drag in `trackActions.ts`.
+- Sorting rule everywhere (developer's): album artist, then the album's year,
+  then album title; compilations last (also "Compilations" last in the column
+  browser and the Artists list). `library.ts`: `albums()`, `groups()`,
+  `albumKey()` (album + album artist; compilations by album only).
+
 Order chosen: confirm editing on the nano → **playback** (done) → artwork (done) → icon chooser → shuffle/repeat → playlist reordering → column browser fixes and Format/Bitrate columns → media library.
 
 ## Status (2026-10-20)
