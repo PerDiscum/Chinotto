@@ -158,6 +158,8 @@ class Store {
   browserSel = $state<Partial<Record<BrowseField, string | null>>>({});
   /** Song list columns that are hidden. */
   hiddenColumns = $state<string[]>(loadList("chinotto.hiddenColumns", []));
+  /** Song list columns, in the order shown (they can be dragged around). */
+  columnOrder = $state<string[]>(loadList("chinotto.columnOrder", []));
   /** How a library's or iPod's Music is shown. */
   musicView = $state<MusicView>(loadPref("chinotto.view", VIEWS, "songs"));
   /** Album whose songs are open in the Albums view (album key). */
@@ -1020,6 +1022,28 @@ class Store {
     savePref("chinotto.hiddenColumns", JSON.stringify(this.hiddenColumns));
     // Hiding the sorted column sorts by artist instead.
     if (this.hiddenColumns.includes(this.sortKey)) this.setSort("artist", 1);
+  }
+
+  /** Put column `key` before column `before` (null: at the end). */
+  moveColumn(key: string, before: string | null, all: string[]) {
+    const order = this.columnsInOrder(all).filter((k) => k !== key);
+    const i = before === null ? order.length : order.indexOf(before);
+    order.splice(i < 0 ? order.length : i, 0, key);
+    this.columnOrder = order;
+    savePref("chinotto.columnOrder", JSON.stringify(order));
+  }
+
+  /** `all` (the default order) arranged as the user left it; new columns keep their default place. */
+  columnsInOrder(all: string[]): string[] {
+    const saved = this.columnOrder.filter((k) => all.includes(k));
+    const out = [...saved];
+    all.forEach((k, i) => {
+      if (out.includes(k)) return;
+      // After the column that comes before it by default.
+      const prev = all.slice(0, i).reverse().find((p) => out.includes(p));
+      out.splice(prev ? out.indexOf(prev) + 1 : 0, 0, k);
+    });
+    return out;
   }
 
   private get sortSlot(): string {

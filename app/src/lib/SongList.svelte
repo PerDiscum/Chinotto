@@ -10,21 +10,28 @@
   const ROW = 20;
   const OVERSCAN = 8;
   type Col = { key: SortKey; label: string; width: string; min: number; num?: boolean; fixed?: boolean };
+  // Default order; the user can drag the titles to rearrange them ("#" and Name stay first).
   const ALL: Col[] = [
     { key: "order", label: "#", width: "38px", min: 38, num: true, fixed: true },
     { key: "title", label: t("Name"), width: "minmax(180px, 2.4fr)", min: 180, fixed: true },
-    { key: "time", label: t("Time"), width: "52px", min: 52, num: true },
     { key: "artist", label: t("Artist"), width: "minmax(120px, 1.5fr)", min: 120 },
-    { key: "album", label: t("Album"), width: "minmax(120px, 1.5fr)", min: 120 },
-    { key: "genre", label: t("Genre"), width: "minmax(80px, 0.9fr)", min: 80 },
     { key: "year", label: t("Year"), width: "46px", min: 46, num: true },
+    { key: "album", label: t("Album"), width: "minmax(120px, 1.5fr)", min: 120 },
+    { key: "disc", label: t("Disc"), width: "40px", min: 40, num: true },
+    { key: "track", label: t("Track"), width: "44px", min: 44, num: true },
     { key: "format", label: t("Format"), width: "58px", min: 58 },
     { key: "bitrate", label: t("Bit Rate"), width: "72px", min: 72, num: true },
+    { key: "time", label: t("Time"), width: "52px", min: 52, num: true },
+    { key: "genre", label: t("Genre"), width: "minmax(80px, 0.9fr)", min: 80 },
     { key: "rating", label: t("Rating"), width: "76px", min: 76 },
     { key: "plays", label: t("Plays"), width: "50px", min: 50, num: true },
+    { key: "path", label: t("Path"), width: "minmax(160px, 2fr)", min: 160 },
   ];
+  const FIXED = ALL.filter((c) => c.fixed);
+  const MOVABLE = ALL.filter((c) => !c.fixed);
+  const ordered = $derived([...FIXED, ...store.columnsInOrder(MOVABLE.map((c) => c.key)).map((k) => MOVABLE.find((c) => c.key === k)!)]);
   // "#" only where the list has an order of its own (a playlist).
-  const columns = $derived(ALL.filter((c) => (c.key === "order" ? store.hasOwnOrder : !store.hiddenColumns.includes(c.key))));
+  const columns = $derived(ordered.filter((c) => (c.key === "order" ? store.hasOwnOrder : !store.hiddenColumns.includes(c.key))));
   const template = $derived(columns.map((c) => c.width).join(" "));
   const minWidth = $derived(columns.reduce((n, c) => n + c.min, 0));
 
@@ -41,6 +48,47 @@
     };
   }
 
+  /** iPod locations are written ":iPod_Control:Music:F00:X.mp3". */
+  const showPath = (p?: string) => (!p ? "" : p.startsWith(":") ? p.replaceAll(":", "/") : p);
+
+  // ---- Dragging a column title to a new place ----
+  let colDrag = $state<{ key: string; before: string | null; x: number } | null>(null);
+  let head: HTMLDivElement | undefined = $state();
+  function pressTitle(e: MouseEvent, c: Col) {
+    if (e.button !== 0 || c.fixed || !head) return;
+    const x0 = e.clientX;
+    const move = (m: MouseEvent) => {
+      if (!colDrag && Math.abs(m.clientX - x0) < 6) return;
+      // The gap nearest the pointer, between movable titles.
+      const cells = [...head!.querySelectorAll<HTMLElement>("[data-col]")].filter((el) => el.dataset.movable);
+      let before: string | null = null;
+      let x = cells.length ? cells[cells.length - 1].getBoundingClientRect().right : 0;
+      for (const el of cells) {
+        const r = el.getBoundingClientRect();
+        if (m.clientX < r.left + r.width / 2) {
+          before = el.dataset.col!;
+          x = r.left;
+          break;
+        }
+      }
+      colDrag = { key: c.key, before, x: x - head!.getBoundingClientRect().left };
+    };
+    const up = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+      const d = colDrag;
+      colDrag = null;
+      if (!d) return;
+      // The click that ends the drag doesn't sort.
+      const swallow = (ev: MouseEvent) => ev.stopPropagation();
+      window.addEventListener("click", swallow, { capture: true, once: true });
+      setTimeout(() => window.removeEventListener("click", swallow, { capture: true }), 0);
+      if (d.before !== d.key) store.moveColumn(d.key, d.before, MOVABLE.map((x) => x.key));
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  }
+
   function cell(c: Col, t: Track, n: number): string {
     switch (c.key) {
       case "order": return String(n + 1);
@@ -53,6 +101,9 @@
       case "bitrate": return bitrate(t);
       case "rating": return stars(t.rating);
       case "plays": return t.playCount ? count(t.playCount) : "";
+      case "disc": return t.discNr ? (t.discCount > 1 ? `${t.discNr}/${t.discCount}` : String(t.discNr)) : "";
+      case "track": return t.trackNr ? String(t.trackNr) : "";
+      case "path": return showPath(t.location);
       default: return "";
     }
   }
@@ -157,12 +208,16 @@
   onscroll={(e) => (scrollTop = (e.currentTarget as HTMLElement).scrollTop)}
   onkeydown={keydown}
 >
-  <div class="head row" role="row" tabindex="-1" style:grid-template-columns={template} style:min-width="{minWidth}px" oncontextmenu={chooseColumns}>
+  <div class="head row" role="row" tabindex="-1" bind:this={head} style:grid-template-columns={template} style:min-width="{minWidth}px" oncontextmenu={chooseColumns}>
     {#each columns as c (c.key)}
       <button
         class="cell"
         class:num={c.num}
         class:sorted={store.sortKey === c.key}
+        class:dragging={colDrag?.key === c.key}
+        data-col={c.key}
+        data-movable={c.fixed ? undefined : "1"}
+        onmousedown={(e) => pressTitle(e, c)}
         role="columnheader"
         aria-sort={store.sortKey === c.key ? (store.sortDir === 1 ? "ascending" : "descending") : "none"}
         onclick={() => store.sortBy(c.key)}
@@ -171,6 +226,7 @@
         {#if store.sortKey === c.key}<span class="arrow">{store.sortDir === 1 ? "▲" : "▼"}</span>{/if}
       </button>
     {/each}
+    {#if colDrag}<span class="col-drop" style:left="{colDrag.x - 1}px" aria-hidden="true"></span>{/if}
   </div>
 
   <div class="body" style:height="{tracks.length * ROW}px">
@@ -284,6 +340,17 @@
   }
   .head .cell.num .label {
     text-align: right;
+  }
+  .head .cell.dragging {
+    opacity: 0.5;
+  }
+  .col-drop {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--accent);
+    pointer-events: none;
   }
   .arrow {
     flex: none;

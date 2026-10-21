@@ -105,6 +105,9 @@ export class TrackIndex {
       kind: (a, b) => this.rKind[p(a)] - this.rKind[p(b)] || artistOrder(a, b),
       format: (a, b) => this.rFormat[p(a)] - this.rFormat[p(b)] || artistOrder(a, b),
       bitrate: (a, b) => a.bitrate - b.bitrate || artistOrder(a, b),
+      disc: (a, b) => a.discNr - b.discNr || artistOrder(a, b),
+      track: (a, b) => a.trackNr - b.trackNr || artistOrder(a, b),
+      path: (a, b) => collator.compare(a.location ?? "", b.location ?? ""),
       order: () => 0,
     };
     const cmp = primary[key];

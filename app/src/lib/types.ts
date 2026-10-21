@@ -116,7 +116,7 @@ export interface ScanProgress {
 }
 
 export type SortKey =
-  | "order" | "title" | "time" | "artist" | "album" | "genre" | "year" | "rating" | "plays" | "added" | "kind" | "format" | "bitrate";
+  | "order" | "title" | "time" | "artist" | "album" | "genre" | "year" | "rating" | "plays" | "added" | "kind" | "format" | "bitrate" | "disc" | "track" | "path";
 
 /** Columns the column browser can show, broadest first. */
 export type BrowseField = "genre" | "format" | "year" | "composer" | "artist" | "album";
