@@ -9,7 +9,7 @@
     <div class="inner">
       <h1>{t("Chinotto couldn't read this iPod's database")}</h1>
       <p>
-        {t("It may be damaged, or written by software Chinotto doesn't understand. You can rebuild it: the songs on the iPod are added back from their files (playlists, play counts and ratings are lost), and the old database is kept in a backup folder on the iPod.")}
+        {t("It may be damaged, or written by software Chinotto doesn't understand. You can rebuild it: the songs on the iPod are added back from their files (playlists, play counts and ratings may be lost), and the old database is kept in a backup folder on the iPod.")}
       </p>
       <div class="buttons">
         <button onclick={() => store.open(path)}>{t("Try Again")}</button>

@@ -71,8 +71,9 @@ Chinotto reads it from the system, or you can type it in.
 
 **Rebuild Database…** (right-click the iPod) replaces a broken database the
 same way. The old one isn't deleted: it's moved, with the artwork, to
-`iPod_Control/iTunes/Chinotto Backups/Before rebuild <time>/`. Playlists,
-play counts and ratings are lost.
+`iPod_Control/iTunes/Chinotto Backups/Before rebuild <time>/`. Playlists
+and ratings are carried over when the old database can still be read; from
+a damaged one they're lost. Play counts are always lost.
 
 ## Getting the apps
 

@@ -62,7 +62,7 @@
 
     {#if rebuild}
       <p class="warn">
-        {t("This replaces the iPod's database. Its playlists, play counts and ratings are lost; the songs themselves stay on the iPod and can be added back below. The old database isn't deleted: it's moved to iPod_Control/iTunes/Chinotto Backups.")}
+        {t("This replaces the iPod's database. The songs stay on the iPod and are added back from their files. If the old database can still be read, its playlists and ratings are kept; if it's damaged, they're lost. Play counts are always lost. The old database isn't deleted: it's moved to iPod_Control/iTunes/Chinotto Backups.")}
       </p>
     {:else if info.hasDatabase}
       <p class="warn">{t("This iPod already has a database. To replace it, use Rebuild Database (right-click the iPod in the sidebar).")}</p>
@@ -106,7 +106,7 @@
       {#if rebuild || !info.isDisk}
         <label class="check">
           <input type="checkbox" bind:checked={confirmed} />
-          <span>{rebuild ? t("Yes, replace this iPod's database") : t("Yes, this is an iPod's drive")}</span>
+          <span>{rebuild ? t("Yes, replace this iPod's database (playlists may be lost)") : t("Yes, this is an iPod's drive")}</span>
         </label>
       {/if}
     </div>

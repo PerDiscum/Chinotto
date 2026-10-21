@@ -3,3 +3,5 @@
 /fixtures-private
 # Static glib built by scripts/build-glib-macos.sh
 /deps
+# Finder
+.DS_Store

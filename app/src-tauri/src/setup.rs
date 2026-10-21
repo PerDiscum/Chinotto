@@ -190,6 +190,62 @@ fn write_firewire_id(root: &Path, id: &str) -> Result<(), String> {
     std::fs::write(&path, lines.join("\n") + "\n").map_err(|e| format!("Couldn't write SysInfo: {e}"))
 }
 
+/// Playlists and ratings of the database being replaced, by the songs' places
+/// on the iPod (the music files stay where they are, so they find their songs again).
+struct Kept {
+    ratings: std::collections::HashMap<String, u32>,
+    playlists: Vec<(String, Vec<String>)>,
+}
+
+impl Kept {
+    fn read(root: &Path) -> Result<Kept, String> {
+        let db = Database::open(root).map_err(|e| e.to_string())?;
+        let mut path_of = std::collections::HashMap::new();
+        let mut ratings = std::collections::HashMap::new();
+        for id in db.track_ids() {
+            if let Some(t) = db.track(id) {
+                if let Some(p) = t.ipod_path {
+                    let p = p.to_lowercase();
+                    if t.rating > 0 {
+                        ratings.insert(p.clone(), t.rating);
+                    }
+                    path_of.insert(id, p);
+                }
+            }
+        }
+        let playlists = db
+            .playlists()
+            .into_iter()
+            .filter(|p| !p.master && !p.smart)
+            .map(|p| (p.name, p.tracks.iter().filter_map(|id| path_of.get(id).cloned()).collect()))
+            .collect();
+        Ok(Kept { ratings, playlists })
+    }
+
+    fn apply(&self, db: &mut Database, problems: &mut Vec<String>) -> Result<(), String> {
+        let mut by_path = std::collections::HashMap::new();
+        for id in db.track_ids() {
+            if let Some(p) = db.track(id).and_then(|t| t.ipod_path) {
+                by_path.insert(p.to_lowercase(), id);
+            }
+        }
+        for (path, rating) in &self.ratings {
+            if let Some(id) = by_path.get(path) {
+                db.edit(&[*id], &[chinotto_gpod::Field::Rating(*rating)]).map_err(|e| e.to_string())?;
+            }
+        }
+        for (name, paths) in &self.playlists {
+            let ids: Vec<u64> = paths.iter().filter_map(|p| by_path.get(p).copied()).collect();
+            if ids.len() < paths.len() {
+                problems.push(format!("Playlist “{name}”: {} of its songs weren't found on the iPod.", paths.len() - ids.len()));
+            }
+            let pl = db.create_playlist(name).map_err(|e| e.to_string())?;
+            db.set_playlist_tracks(pl, &ids).map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetupResult {
@@ -210,6 +266,8 @@ fn run(
     progress: impl Fn(AddProgress),
 ) -> Result<SetupResult, String> {
     let has_db = Layout::new(root).itunesdb().exists();
+    // What can be carried over from the old database, while it can still be read.
+    let old = if rebuild && has_db && add_existing { Some(Kept::read(root)) } else { None };
     let set_aside = if rebuild && has_db {
         Some(chinotto_gpod::set_aside_database(root).map_err(|e| e.to_string())?)
     } else if has_db {
@@ -242,6 +300,11 @@ fn run(
         }
         progress(AddProgress { done: total, total, current: String::new() });
         crate::write::add_embedded_covers(&mut db, &added_files, &mut problems)?;
+        match &old {
+            Some(Ok(kept)) => kept.apply(&mut db, &mut problems)?,
+            Some(Err(e)) => problems.push(format!("Playlists and ratings couldn't be kept: the old database couldn't be read ({e}).")),
+            None => {}
+        }
         db.save().map_err(|e| e.to_string())?;
         added = added_files.len();
     }
@@ -345,12 +408,24 @@ mod tests {
         assert_eq!(u16::from_le_bytes([head[0x30], head[0x31]]), 1);
         assert!(head[0x58..0x6C].iter().any(|b| *b != 0));
         drop(db);
+        // A playlist and a rating, to be kept by the rebuild.
+        let mut db = Database::open(&root).unwrap();
+        let ids = db.track_ids();
+        db.edit(&ids[..1], &[chinotto_gpod::Field::Rating(80)]).unwrap();
+        let pl = db.create_playlist("Kept").unwrap();
+        db.set_playlist_tracks(pl, &ids).unwrap();
+        db.save().unwrap();
+        drop(db);
         // A second setup is refused; a rebuild sets the old one aside.
         assert!(run(&root, "xA978", "Again", None, false, false, |_| {}).is_err());
         let r = run(&root, "xA978", "Again", Some("000A27001B2C3D4E"), true, true, |_| {}).unwrap();
         let aside = PathBuf::from(r.set_aside.unwrap());
         assert!(aside.join("iTunesDB").is_file() && aside.join("Artwork/ArtworkDB").is_file());
-        assert_eq!(Database::open(&root).unwrap().track_count(), copied);
+        let db = Database::open(&root).unwrap();
+        assert_eq!(db.track_count(), copied);
+        let kept = db.playlists().into_iter().find(|p| p.name == "Kept").expect("playlist kept");
+        assert_eq!(kept.tracks.len(), copied);
+        assert_eq!(db.track_ids().iter().filter(|id| db.track(**id).unwrap().rating == 80).count(), 1);
         std::fs::remove_dir_all(&root).unwrap();
     }
 

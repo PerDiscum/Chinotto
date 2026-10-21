@@ -151,7 +151,7 @@
   "Hide column browser": "Spaltenbrowser verbergen",
   "Info": "",
   "iPod": "",
-  "It may be damaged, or written by software Chinotto doesn't understand. You can rebuild it: the songs on the iPod are added back from their files (playlists, play counts and ratings are lost), and the old database is kept in a backup folder on the iPod.": "",
+  "It may be damaged, or written by software Chinotto doesn't understand. You can rebuild it: the songs on the iPod are added back from their files (playlists, play counts and ratings may be lost), and the old database is kept in a backup folder on the iPod.": "",
   "It will be automatically resized such that its shortest side measures 600px. The change applies once the image is saved to your iPod.": "Beim Übertragen auf den iPod wird die kleinste Seite des Covers auf eine Größe von 600px reduziert.",
   "It'll be removed from the iPod and from all its playlists, and the music file deleted from the iPod. Your own copies elsewhere aren't touched.": "",
   "It'll be taken out of this library and its playlists, and won't come back at the next scan. The music file stays where it is: nothing is deleted.": "",
@@ -311,7 +311,7 @@
   "This model needs its FireWire ID (16 hexadecimal digits), or it will show no music. Chinotto couldn't read it from the iPod; iTunes, System Information (USB) or “lsusb -v” show it as the serial number.": "",
   "This new cover is {size}.": "Die Größe des neuen Covers beträgt {size}.",
   "This playlist is empty.": "",
-  "This replaces the iPod's database. Its playlists, play counts and ratings are lost; the songs themselves stay on the iPod and can be added back below. The old database isn't deleted: it's moved to iPod_Control/iTunes/Chinotto Backups.": "",
+  "This replaces the iPod's database. The songs stay on the iPod and are added back from their files. If the old database can still be read, its playlists and ratings are kept; if it's damaged, they're lost. Play counts are always lost. The old database isn't deleted: it's moved to iPod_Control/iTunes/Chinotto Backups.": "",
   "Time": "Dauer",
   "Total size": "",
   "Total time": "",
@@ -342,6 +342,6 @@
   "Window": "",
   "Year": "Jahr",
   "Years": "",
-  "Yes, replace this iPod's database": "",
+  "Yes, replace this iPod's database (playlists may be lost)": "",
   "Yes, this is an iPod's drive": ""
 }
