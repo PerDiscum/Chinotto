@@ -25,6 +25,8 @@ pub struct AppState {
     settings: Mutex<Settings>,
     settings_path: Mutex<Option<PathBuf>>,
     player: OnceLock<Player>,
+    /// Remembers which volumes are iPods (see devices::Scanner).
+    pub scanner: Mutex<crate::devices::Scanner>,
 }
 
 /// Saved between runs in the app's config folder (settings.json).

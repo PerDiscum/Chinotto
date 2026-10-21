@@ -77,24 +77,58 @@ pub fn describe(root: &Path, manual: bool) -> DeviceInfo {
     }
 }
 
-/// All iPods currently reachable: mounted ones plus folders added by hand.
-pub fn scan(manual: &[PathBuf]) -> Vec<DeviceInfo> {
-    let mut roots: Vec<(PathBuf, bool)> = Vec::new();
+/// Mounted volumes (just their paths: listing the mount folder doesn't touch
+/// the volumes themselves).
+fn mounted() -> Vec<PathBuf> {
+    let mut out = Vec::new();
     for parent in mount_parents() {
         let Ok(rd) = std::fs::read_dir(&parent) else { continue };
         for e in rd.flatten() {
             let p = e.path();
-            if is_ipod_root(&p) && !roots.iter().any(|(r, _)| r == &p) {
-                roots.push((p, false));
+            // macOS lists the startup disk in /Volumes as a link to "/".
+            if e.file_type().is_ok_and(|t| t.is_symlink()) || out.contains(&p) {
+                continue;
+            }
+            out.push(p);
+        }
+    }
+    out
+}
+
+/// What's known about each volume and added folder: its iPod details, or
+/// `None` when it isn't one. Each is looked inside only once, when it first
+/// appears, because on macOS every look inside a removable volume can bring
+/// up a permission prompt.
+#[derive(Default)]
+pub struct Scanner {
+    known: std::collections::HashMap<PathBuf, (std::time::Instant, Option<DeviceInfo>)>,
+}
+
+impl Scanner {
+    /// All iPods currently reachable: mounted ones plus folders added by hand.
+    pub fn scan(&mut self, manual: &[PathBuf]) -> Vec<DeviceInfo> {
+        let mut now: Vec<(PathBuf, bool)> = mounted().into_iter().map(|p| (p, false)).collect();
+        for m in manual {
+            if !now.iter().any(|(p, _)| p == m) {
+                now.push((m.clone(), true));
             }
         }
-    }
-    for m in manual {
-        if is_ipod_root(m) && !roots.iter().any(|(r, _)| r == m) {
-            roots.push((m.clone(), true));
+        self.known.retain(|p, _| now.iter().any(|(q, _)| q == p));
+        let mut out = Vec::new();
+        for (p, manual) in now {
+            let probe = |p: &Path| is_ipod_root(p).then(|| describe(p, manual));
+            let entry = self.known.entry(p.clone()).or_insert_with(|| (std::time::Instant::now(), probe(&p)));
+            // A volume can show up a moment before it's readable: keep looking for a few seconds.
+            if entry.1.is_none() && entry.0.elapsed() < Duration::from_secs(8) {
+                entry.1 = probe(&p);
+            }
+            if let Some(d) = &entry.1 {
+                out.push(d.clone());
+            }
         }
+        out
     }
-    roots.iter().map(|(p, manual)| describe(p, *manual)).collect()
+
 }
 
 /// Poll every two seconds and tell the window when the set of iPods changes.
@@ -103,7 +137,7 @@ pub fn start_watcher(app: AppHandle) {
         let mut last: Vec<String> = Vec::new();
         loop {
             let manual = app.state::<AppState>().manual_roots();
-            let list = scan(&manual);
+            let list = app.state::<AppState>().scanner.lock().unwrap().scan(&manual);
             let paths: Vec<String> = list.iter().map(|d| d.path.clone()).collect();
             if paths != last {
                 last = paths;

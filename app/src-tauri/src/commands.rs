@@ -193,7 +193,7 @@ pub(crate) fn view(s: &Session, state: &AppState) -> Result<String, String> {
 
 #[tauri::command]
 pub fn list_devices(state: State<'_, AppState>) -> Vec<DeviceInfo> {
-    devices::scan(&state.manual_roots())
+    state.scanner.lock().unwrap().scan(&state.manual_roots())
 }
 
 /// Remember a folder picked with "Open iPod folder…" (e.g. a copy of an iPod on disk).
