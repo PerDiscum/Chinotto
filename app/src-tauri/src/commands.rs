@@ -251,6 +251,10 @@ pub fn startup_folder(state: State<'_, AppState>) -> Option<String> {
     if is_ipod_root(&p) || devices::needs_setup(&p) {
         state.add_manual_root(p.clone());
         Some(p.to_string_lossy().into_owned())
+    } else if crate::msc::read_config(&p).is_some() {
+        // A player set up as a drive: listed with the devices.
+        state.add_manual_root(p);
+        None
     } else {
         None
     }

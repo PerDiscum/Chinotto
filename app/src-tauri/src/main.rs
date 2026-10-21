@@ -9,6 +9,7 @@ mod devices;
 mod export;
 mod libcommands;
 mod library;
+mod msc;
 mod playback;
 mod scratch;
 mod setup;
@@ -51,6 +52,8 @@ fn main() {
             commands::add_folder,
             commands::open_ipod,
             setup::setup_info,
+            msc::msc_inspect,
+            msc::msc_save,
             setup::setup_ipod,
             commands::close_ipod,
             commands::eject,

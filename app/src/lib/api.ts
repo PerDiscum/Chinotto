@@ -1,7 +1,7 @@
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import type { Conversion, AddProgress, AddResult, DeviceInfo, IpodView, LibrarySummary, LibraryView, ScanProgress, Track, TrackChanges, WriteResult, SetupInfo, SetupResult } from "./types";
+import type { Conversion, AddProgress, AddResult, DeviceInfo, IpodView, LibrarySummary, LibraryView, ScanProgress, Track, TrackChanges, WriteResult, SetupInfo, SetupResult, DriveInfo, MscConfig } from "./types";
 
 export const listDevices = () => invoke<DeviceInfo[]>("list_devices");
 export const addFolder = (path: string) => invoke<DeviceInfo>("add_folder", { path });
@@ -173,3 +173,7 @@ export const setConversion = (path: string, conversion: Conversion) => invoke<Ip
 export const setupInfo = (path: string) => invoke<SetupInfo>("setup_info", { path });
 export const setupIpod = (a: { path: string; model: string; name: string; firewireId: string | null; addExisting: boolean; rebuild: boolean }) =>
   invoke<SetupResult>("setup_ipod", a);
+
+// ---- Players set up as drives (MSC) ----
+export const mscInspect = (path: string) => invoke<DriveInfo>("msc_inspect", { path });
+export const mscSave = (path: string, config: MscConfig) => invoke<DeviceInfo>("msc_save", { path, config });

@@ -100,10 +100,10 @@
       </li>
     </ul>
   {/if}
-  {#if store.libraries.length}
+  {#if store.ownLibraries.length}
     <h2>{t("Libraries")}</h2>
     <ul class="libs">
-      {#each store.libraries as l (l.id)}
+      {#each store.ownLibraries as l (l.id)}
         {@const open = !store.collapsed.includes(l.id)}
         {@const pls = store.libViews[l.id]?.view.playlists.filter((p) => !p.master) ?? []}
         <li>
@@ -169,13 +169,19 @@
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
           class="row device"
-          class:active={isOpen(d.path) && store.source.kind === "device"}
+          class:active={(isOpen(d.path) && store.source.kind === "device") || (!!d.library && isLib(d.library))}
           oncontextmenu={(e) => {
             e.preventDefault();
+            const lib = d.library;
             store.menu = {
               x: e.clientX,
               y: e.clientY,
-              items: d.needsSetup
+              items: lib
+                ? [
+                    { label: t("Scan Now"), action: () => store.scanLibrary(lib) },
+                    { label: t("Player Settings…"), action: () => (store.dialog = { kind: "msc", path: d.path }) },
+                  ]
+                : d.needsSetup
                 ? [{ label: t("Set Up iPod…"), action: () => (store.dialog = { kind: "setup", path: d.path, rebuild: false }) }]
                 : [{ label: t("Rebuild Database…"), danger: true, action: () => (store.dialog = { kind: "setup", path: d.path, rebuild: true }) }],
             };
@@ -183,7 +189,7 @@
         >
           <button
             class="name"
-            onclick={() => (isOpen(d.path) ? store.select({ kind: "device" }) : store.open(d.path))}
+            onclick={() => (d.library ? store.showLibrary(d.library) : isOpen(d.path) ? store.select({ kind: "device" }) : store.open(d.path))}
             title={d.path}
           >
             {#if deviceImage(store.iconFor(d))}<img class="dev" src={deviceImage(store.iconFor(d))} alt="" />{:else}<Icon name="ipod" />{/if}
@@ -198,6 +204,23 @@
           {/if}
         </div>
 
+        {#if d.library && store.libViews[d.library]}
+          {@const lib = d.library}
+          <ul class="nested">
+            <li>
+              <button class="row" class:active={isLib(lib)} onclick={() => store.showLibrary(lib)}>
+                <Icon name="music" /><span>{t("Music")}</span>
+              </button>
+            </li>
+            {#each store.libViews[lib].view.playlists.filter((p) => !p.master) as p (p.id)}
+              <li>
+                <button class="row" class:active={isLib(lib, p.id)} onclick={() => store.showLibrary(lib, p.id)}>
+                  <Icon name="playlist" /><span>{p.name}</span>
+                </button>
+              </li>
+            {/each}
+          </ul>
+        {/if}
         {#if isOpen(d.path) && store.masterPlaylist}
           <ul class="nested">
             <li>

@@ -14,6 +14,41 @@ export interface DeviceInfo {
   manual: boolean;
   /** An iPod without a database: it needs setting up first. */
   needsSetup: boolean;
+  /** "ipod", or "msc" for a player set up as a drive. */
+  kind: "ipod" | "msc";
+  /** MSC player: the library listing its songs. */
+  library: string | null;
+}
+
+/** An MSC player's settings, kept on the player. */
+export interface MscConfig {
+  id: string;
+  name: string;
+  model: string;
+  icon: string;
+  musicFolder: string;
+  playlistFolder: string;
+  playlistFormat: "m3u8" | "m3u" | "pls";
+}
+
+export interface MscProfile {
+  key: string;
+  name: string;
+  icon: string;
+  musicFolder: string;
+  playlistFolder: string;
+  playlistFormat: "m3u8" | "m3u" | "pls";
+}
+
+export interface DriveInfo {
+  path: string;
+  volume: string;
+  isDisk: boolean;
+  isIpod: boolean;
+  config: MscConfig | null;
+  suggested: string;
+  folders: string[];
+  profiles: MscProfile[];
 }
 
 export interface SetupModel {
@@ -127,6 +162,8 @@ export interface LibrarySummary {
   songs: number;
   lastScan?: number | null;
   scanning: boolean;
+  /** An MSC player's songs (shown under Devices). */
+  device?: string | null;
 }
 
 export interface LibraryView {

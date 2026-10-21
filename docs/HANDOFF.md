@@ -239,6 +239,29 @@ Everything decided and learned so far, so work can continue in a new session.
 
 Order chosen: confirm editing on the nano → **playback** (done) → artwork (done) → icon chooser → shuffle/repeat → playlist reordering → column browser fixes and Format/Bitrate columns → media library.
 
+## MSC players, step 1: reading (patch 0046)
+
+- Add Drive… (Welcome / Open Device…) on a drive that isn't an iPod opens
+  MscDialog: model profile (msc.rs `profiles`: Sony NWZ, Sony NW-A, Sansa
+  e200, Sansa Clip/Fuze, Other), name, music folder, playlist folder,
+  playlist format (m3u8/m3u/pls), picture. Saved on the player as
+  `.chinotto-device.json` (MscConfig, with a generated id); right-click the
+  player → Player Settings… changes it.
+- The device scanner lists drives with that file as `kind: "msc"` with
+  `library: "d<id>"` (no dash: libart URLs split on dashes). When one
+  appears, `msc::attach` creates/updates that Library (`device` set,
+  folders = [<mount>/<music folder>], `playlist_dir`) and scans it, so the
+  songs list is cached between plug-ins and only new/changed files are read.
+  After each scan, `msc::import_playlists` replaces its playlists with the
+  playlist files (entries relative to the file, or /-rooted = drive top,
+  drive letters and backslashes accepted, matched ignoring case).
+- Front end: player libraries are hidden from Libraries (`store.ownLibraries`)
+  and shown under Devices with Music + playlists; they use the library views,
+  playback and covers. Read-only for now (`store.writable` false for them).
+- Next (step 2): copy songs to players (with per-model conversion and
+  tag/cover rules: ID3v2.3 for Walkman covers, Sansa e200 size to measure),
+  write playlists in the chosen format, delete songs.
+
 ## Setting up iPods (patch 0044)
 
 - Devices: a volume with `iPod_Control` but no iTunesDB is listed with

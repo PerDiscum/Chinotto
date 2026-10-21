@@ -24,7 +24,9 @@ export type Dialog =
   | { kind: "delete-library"; id: string; name: string }
   | { kind: "remove-from-library"; ids: number[] }
   /** Set up an iPod with no database, or (rebuild) replace a lost or broken one. */
-  | { kind: "setup"; path: string; rebuild: boolean };
+  | { kind: "setup"; path: string; rebuild: boolean }
+  /** Set up (or change the settings of) a player that shows up as a drive. */
+  | { kind: "msc"; path: string };
 
 function loadVolume(): number {
   try {
@@ -213,7 +215,19 @@ class Store {
 
   /** What's shown can be changed: a library always; the iPod when allowed. */
   get writable() {
-    return this.source.kind === "library" ? !!this.libView : !!this.ipod?.writable;
+    // A player set up as a drive is read-only for now (writing to it comes next).
+    if (this.source.kind === "library") return !!this.libView && !this.isDeviceLibrary(this.source.lib);
+    return !!this.ipod?.writable;
+  }
+
+  /** The library lists a player's songs (it's shown under Devices). */
+  isDeviceLibrary(lib: string): boolean {
+    return !!this.libraries.find((l) => l.id === lib)?.device;
+  }
+
+  /** Libraries of the computer's own music (not players'). */
+  get ownLibraries(): LibrarySummary[] {
+    return this.libraries.filter((l) => !l.device);
   }
 
   /** The regular (non-library, non-smart) playlist being shown, if any. */
@@ -278,7 +292,7 @@ class Store {
     await this.loadScratch(null);
     this.libraries = await api.listLibraries().catch(() => []);
     // Expanded libraries show their playlists in the sidebar.
-    for (const l of this.libraries) if (!this.collapsed.includes(l.id)) void this.loadLibrary(l.id);
+    for (const l of this.libraries) if (!l.device && !this.collapsed.includes(l.id)) void this.loadLibrary(l.id);
     const start = await api.startupFolder();
     this.devicesChanged(await api.listDevices());
     if (start && !this.ipod) await this.open(start);
@@ -287,11 +301,16 @@ class Store {
   private devicesChanged(list: DeviceInfo[]) {
     const before = new Set(this.devices.map((d) => d.path));
     this.devices = list;
+    // Players set up as drives: their songs (and playlists, for the sidebar).
+    for (const d of list) if (d.kind === "msc" && d.library && !this.libViews[d.library]) void this.loadPlayer(d.library);
+    // The player being shown was unplugged.
+    const s = this.source;
+    if (s.kind === "library" && this.isDeviceLibrary(s.lib) && !list.some((d) => d.library === s.lib)) this.select({ kind: "none" });
     // The open iPod was unplugged.
     if (this.ipod && !list.some((d) => d.path === this.ipod!.path)) this.forget();
     // Open a newly plugged-in iPod when nothing else is open.
     if (!this.ipod && !this.opening) {
-      const ready = list.filter((d) => !d.needsSetup);
+      const ready = list.filter((d) => !d.needsSetup && d.kind === "ipod");
       const fresh = ready.find((d) => !before.has(d.path) && !d.manual) ?? (before.size === 0 ? ready[0] : undefined);
       if (fresh) void this.open(fresh.path, true);
     }
@@ -375,10 +394,37 @@ class Store {
     }
   }
 
+  /** A player's library, once its first scan has made it. */
+  private async loadPlayer(lib: string) {
+    this.libraries = await api.listLibraries();
+    if (this.libraries.some((l) => l.id === lib)) await this.loadLibrary(lib);
+  }
+
+  /** Save a player's settings (Add Drive); then show its songs. */
+  async saveMsc(path: string, config: import("./types").MscConfig) {
+    try {
+      const d = await api.mscSave(path, config);
+      this.dialog = null;
+      this.devices = [...this.devices.filter((x) => x.path !== d.path), d];
+      if (d.library) {
+        await this.loadPlayer(d.library);
+        if (this.libViews[d.library]) this.select({ kind: "library", lib: d.library, id: "all" });
+      }
+    } catch (e) {
+      this.error = String(e);
+    }
+  }
+
   async openFolder() {
     const path = await api.pickFolder();
     if (!path) return;
     try {
+      // Not an iPod: a player that shows up as a drive.
+      const info = await api.mscInspect(path);
+      if (!info.isIpod) {
+        this.dialog = { kind: "msc", path };
+        return;
+      }
       const d = await api.addFolder(path);
       if (!this.devices.some((x) => x.path === d.path)) this.devices = [...this.devices, d];
       await this.open(d.path);
@@ -522,7 +568,11 @@ class Store {
   private async reloadLibrary(lib: string) {
     const { [lib]: _, ...rest } = this.scanProgress;
     this.scanProgress = rest;
-    if (!this.libViews[lib]) return;
+    if (!this.libViews[lib]) {
+      // A player's first scan: show its songs and playlists.
+      if (this.devices.some((d) => d.library === lib)) await this.loadPlayer(lib);
+      return;
+    }
     const showing = this.source.kind === "library" && this.source.lib === lib;
     const keep = showing ? this.selectedTracks.map((t) => t.dbid) : [];
     if (!(await this.loadLibrary(lib)) || !showing) return;

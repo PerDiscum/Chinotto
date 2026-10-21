@@ -19,7 +19,7 @@ pub struct DeviceInfo {
     pub model: Option<String>,
     pub model_number: Option<String>,
     /// Picture key for the model, e.g. "ipod-nano-3g"; "generic" when unknown.
-    pub icon: &'static str,
+    pub icon: String,
     /// FireWire GUID or serial, for remembering settings per device.
     pub identity: Option<String>,
     pub capacity: u64,
@@ -29,6 +29,10 @@ pub struct DeviceInfo {
     /// An iPod without a database (iPod_Control but no iTunesDB): it needs
     /// setting up before it can be used.
     pub needs_setup: bool,
+    /// "ipod", or "msc" for a player set up as a drive (see msc.rs).
+    pub kind: &'static str,
+    /// MSC player: the library listing its songs.
+    pub library: Option<String>,
 }
 
 /// Folders whose children are mount points on this OS.
@@ -65,6 +69,25 @@ pub fn is_mount_point(_path: &Path) -> bool {
 pub fn describe(root: &Path, manual: bool) -> DeviceInfo {
     // A folder that isn't its own disk (e.g. a copy of an iPod) can't be ejected.
     let manual = manual || !is_mount_point(root);
+    if !is_ipod_root(root) && !needs_setup(root) {
+        if let Some(cfg) = crate::msc::read_config(root) {
+            let (capacity, free) = disk_space(root);
+            return DeviceInfo {
+                path: root.to_string_lossy().into_owned(),
+                volume: cfg.name.clone(),
+                model: crate::msc::profiles().into_iter().find(|p| p.key == cfg.model).map(|p| p.name.to_string()),
+                model_number: None,
+                icon: if cfg.icon.is_empty() { "generic".into() } else { cfg.icon.clone() },
+                identity: Some(format!("msc:{}", cfg.id)),
+                capacity,
+                free,
+                manual,
+                needs_setup: false,
+                kind: "msc",
+                library: Some(cfg.library_id()),
+            };
+        }
+    }
     let sys = SysInfo::read(root).unwrap_or_default();
     let (capacity, free) = disk_space(root);
     DeviceInfo {
@@ -72,12 +95,14 @@ pub fn describe(root: &Path, manual: bool) -> DeviceInfo {
         volume: root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "iPod".into()),
         model: sys.model_name().map(str::to_string),
         model_number: sys.model_number.clone(),
-        icon: sys.generation().map(|g| g.icon).unwrap_or("generic"),
+        icon: sys.generation().map(|g| g.icon).unwrap_or("generic").to_string(),
         identity: sys.identity(),
         capacity,
         free,
         manual,
         needs_setup: !is_ipod_root(root),
+        kind: "ipod",
+        library: None,
     }
 }
 
@@ -126,7 +151,7 @@ impl Scanner {
         self.known.retain(|p, _| now.iter().any(|(q, _)| q == p));
         let mut out = Vec::new();
         for (p, manual) in now {
-            let probe = |p: &Path| (is_ipod_root(p) || needs_setup(p)).then(|| describe(p, manual));
+            let probe = |p: &Path| (is_ipod_root(p) || needs_setup(p) || p.join(crate::msc::CONFIG).is_file()).then(|| describe(p, manual));
             let entry = self.known.entry(p.clone()).or_insert_with(|| (std::time::Instant::now(), probe(&p)));
             // A volume can show up a moment before it's readable: keep looking for a few seconds.
             if entry.1.is_none() && entry.0.elapsed() < Duration::from_secs(8) {
@@ -156,6 +181,12 @@ pub fn start_watcher(app: AppHandle) {
             let list = app.state::<AppState>().scanner.lock().unwrap().scan(&manual);
             let paths: Vec<(String, bool)> = list.iter().map(|d| (d.path.clone(), d.needs_setup)).collect();
             if paths != last {
+                // Players set up as drives: point their song lists at where they are now.
+                for d in list.iter().filter(|d| d.kind == "msc" && !last.iter().any(|(p, _)| p == &d.path)) {
+                    if let Some(cfg) = crate::msc::read_config(Path::new(&d.path)) {
+                        crate::msc::attach(&app, Path::new(&d.path), &cfg);
+                    }
+                }
                 last = paths;
                 let _ = app.emit("devices-changed", &list);
             }

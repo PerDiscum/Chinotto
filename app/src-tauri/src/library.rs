@@ -119,6 +119,10 @@ pub struct Library {
     pub next_playlist_id: u32,
     /// Files taken out of the library by hand: scans skip them.
     pub excluded: Vec<String>,
+    /// Set for the songs of an MSC player (see msc.rs): its settings' id.
+    pub device: Option<String>,
+    /// MSC player: the folder its playlist files are read from.
+    pub playlist_dir: Option<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -137,6 +141,8 @@ pub struct Summary {
     pub folders: Vec<FolderState>,
     pub songs: usize,
     pub last_scan: Option<i64>,
+    /// An MSC player's songs, shown under Devices rather than Libraries.
+    pub device: Option<String>,
 }
 
 fn now() -> i64 {
@@ -164,6 +170,7 @@ impl Library {
             folders: self.folders.iter().map(|f| FolderState { path: f.clone(), available: folder_available(f) }).collect(),
             songs: self.tracks.len(),
             last_scan: self.last_scan,
+            device: self.device.clone(),
         }
     }
 

@@ -42,7 +42,7 @@ impl Libraries {
         self.list.iter_mut().find(|l| l.id == id).ok_or_else(|| "That library doesn't exist any more".to_string())
     }
 
-    fn save(&self, id: &str) -> Result<(), String> {
+    pub(crate) fn save(&self, id: &str) -> Result<(), String> {
         let dir = self.dir.as_deref().ok_or("No place to keep libraries")?;
         self.list.iter().find(|l| l.id == id).ok_or("No such library")?.save(dir)
     }
@@ -127,6 +127,10 @@ pub fn start_scan(app: &AppHandle, id: &str) {
             cur.tracks = merged;
             cur.next_id = cur.next_id.max(lib.next_id);
             cur.last_scan = lib.last_scan;
+            // A player's playlists are its playlist files.
+            if cur.device.is_some() {
+                crate::msc::import_playlists(cur);
+            }
             cur.prune_playlists();
             if let Err(e) = libs.save(&id) {
                 let _ = app.emit("player-error", e);
