@@ -86,7 +86,9 @@ export type Source =
   | { kind: "device" }
   | { kind: "playlist"; id: string }
   /** A library's songs ("all") or one of its playlists. */
-  | { kind: "library"; lib: string; id: string };
+  | { kind: "library"; lib: string; id: string }
+  /** Songs opened from outside the libraries (never added to one). */
+  | { kind: "scratch" };
 
 export interface LibrarySummary {
   id: string;

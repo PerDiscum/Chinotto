@@ -23,7 +23,25 @@ export function songMenu(e: MouseEvent, track: Track, tracks: Track[]) {
   const pl = store.editablePlaylist;
   const dbids = store.selectedTracks.map((x) => x.dbid);
   const src = store.source;
-  const onIpod = src.kind !== "library";
+  const onIpod = src.kind !== "library" && src.kind !== "scratch";
+  if (src.kind === "scratch") {
+    // Opened from outside the libraries: play, look, save, copy to the iPod, or take off the list.
+    store.menu = {
+      x: e.clientX,
+      y: e.clientY,
+      items: [
+        { label: t("Play"), action: () => playSelected(tracks) },
+        { label: t("Get Info"), action: () => (store.dialog = { kind: "info" }) },
+        { label: n > 1 ? t("Save As Zip…") : t("Save As…"), action: () => store.exportSongs(store.selectedTracks) },
+        ...(store.ipod
+          ? [{ label: t("Copy to {name}", { name: store.ipod.name }), disabled: !store.ipod.writable, action: () => store.copyToIpod(dbids, null) }]
+          : []),
+        { label: "", separator: true },
+        { label: t("Remove from Scratch"), action: () => store.removeFromScratch([...store.selected]) },
+      ],
+    };
+    return;
+  }
   // Playlists to add to, as addToPlaylist ids.
   const targets = onIpod
     ? (store.ipod?.playlists ?? []).filter((p) => !p.master && !p.smart && p.id !== pl?.id).map((p) => ({ id: p.id, name: p.name }))
@@ -83,7 +101,8 @@ export function startSongDrag(
   tracks: Track[],
   insertionAt: ((x: number, y: number) => number | null) | null = null,
 ) {
-  if (e.button !== 0 || !store.writable) return;
+  // Scratch songs can be dragged too (onto the iPod).
+  if (e.button !== 0 || !(store.writable || store.source.kind === "scratch")) return;
   const x0 = e.clientX, y0 = e.clientY;
   const move = (m: MouseEvent) => {
     if (!store.songDrag) {

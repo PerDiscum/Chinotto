@@ -29,6 +29,8 @@ pub struct AppState {
     pub scanner: Mutex<crate::devices::Scanner>,
     /// Music libraries on the computer.
     pub libraries: Mutex<crate::libcommands::Libraries>,
+    /// Songs opened from outside the libraries.
+    pub scratch: Mutex<crate::scratch::Scratch>,
 }
 
 /// Saved between runs in the app's config folder (settings.json).

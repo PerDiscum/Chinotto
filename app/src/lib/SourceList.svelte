@@ -86,6 +86,20 @@
 </script>
 
 <nav class="sources" aria-label={t("Sources")}>
+  {#if store.scratch}
+    <h2>{t("Scratch")}</h2>
+    <ul class="libs">
+      <li>
+        <div class="row device" class:active={store.source.kind === "scratch"}>
+          <button class="name" onclick={() => store.select({ kind: "scratch" })} title={t("Songs you opened, not added to any library. Forgotten when Chinotto quits.")}>
+            <Icon name="music" />
+            <span>{tn(store.scratch.tracks.length, "{n} song", "{n} songs")}</span>
+          </button>
+          <button class="eject" title={t("Clear the Scratch list")} aria-label={t("Clear the Scratch list")} onclick={() => store.removeFromScratch([])}>×</button>
+        </div>
+      </li>
+    </ul>
+  {/if}
   {#if store.libraries.length}
     <h2>{t("Libraries")}</h2>
     <ul class="libs">

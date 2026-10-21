@@ -201,6 +201,19 @@ Everything decided and learned so far, so work can continue in a new session.
 - Translation notes: German always capitalises Du/Dein/Deinem/Deiner/Deines.
   The developer translates; Claude only corrects grammar, no other changes.
 
+## Scratch list (0032)
+
+- Songs opened from outside the libraries never join one (the developer's
+  top request): `scratch.rs` keeps them in memory only (dbid `scratch:<n>`,
+  covers via `libart` with library id "scratch"). Sources: macOS
+  `RunEvent::Opened` (double-click, Open With, Dock), command-line files at
+  start, a second launch (tauri-plugin-single-instance, DBus on Linux),
+  files dropped on the window unless an editable iPod is shown, and
+  "Open File…" in the sidebar's folder menu. The sidebar shows "Scratch"
+  only while it has songs; × clears it. The first opened song plays.
+- File associations (bundle.fileAssociations) use rank Alternate, so
+  Chinotto never becomes the default player by itself.
+
 Order chosen: confirm editing on the nano → **playback** (done) → artwork (done) → icon chooser → shuffle/repeat → playlist reordering → column browser fixes and Format/Bitrate columns → media library.
 
 ## Status (2026-10-20)

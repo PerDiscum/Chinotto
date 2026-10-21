@@ -56,6 +56,8 @@ pub(crate) fn track_file(app: &AppHandle, dbid: u64) -> Result<PathBuf, String> 
 pub fn play_track(dbid: String, start_ms: Option<u64>, app: AppHandle) -> Result<(), String> {
     let file = if dbid.starts_with("lib:") {
         crate::libcommands::track_file(&app, &dbid)?
+    } else if dbid.starts_with("scratch:") {
+        crate::scratch::track_file(&app, &dbid)?
     } else {
         track_file(&app, dbid.parse().map_err(|_| "bad id")?)?
     };

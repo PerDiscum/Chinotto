@@ -316,7 +316,7 @@ pub fn folder_cover(dir: &Path) -> Option<PathBuf> {
     found.into_iter().next()
 }
 
-fn read_track(path: &Path, cover_dirs: &mut HashMap<PathBuf, bool>) -> (Tags, bool) {
+pub(crate) fn read_track(path: &Path, cover_dirs: &mut HashMap<PathBuf, bool>) -> (Tags, bool) {
     let kind = tags::library_kind(path).unwrap_or("Audio file");
     let (tags, picture) = match tags::read_tags(path, kind) {
         Ok((info, pic)) => (Tags::from_info(info, kind), pic),

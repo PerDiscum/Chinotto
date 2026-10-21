@@ -28,7 +28,7 @@
       const p = e.payload;
       // Only real files from Finder / the file manager (they carry paths);
       // drags inside the window are Chinotto's own song drags.
-      if (p.type === "enter") fileDrag = !!store.ipod && store.source.kind !== "library" && p.paths.length > 0 && !store.songDrag && store.dialog?.kind !== "info";
+      if (p.type === "enter") fileDrag = p.paths.length > 0 && !store.songDrag && store.dialog?.kind !== "info";
       else if (p.type === "over") {
         /* keep the current state */
       }
@@ -39,7 +39,12 @@
           // Dropped on Get Info: an image becomes the cover.
           const img = p.paths.find((x) => /\.(jpe?g|png|gif|bmp|webp|tiff?)$/i.test(x));
           if (img) store.infoImageDrop = img;
-        } else if (store.ipod && store.writable && p.paths.length) void store.addFiles(p.paths);
+        } else if (store.ipod?.writable && (store.source.kind === "playlist" || store.source.kind === "device") && p.paths.length) {
+          void store.addFiles(p.paths);
+        } else if (p.paths.length) {
+          // Anywhere else: just play them, in the Scratch list.
+          void store.openSongs(p.paths);
+        }
       }
     });
     return () => void off.then((f) => f());
@@ -99,7 +104,7 @@
 
   <aside class="side">
     <SourceList />
-    {#if store.showArtwork && (store.ipod || store.source.kind === "library")}<ArtworkPane />{/if}
+    {#if store.showArtwork && (store.ipod || store.source.kind === "library" || store.source.kind === "scratch")}<ArtworkPane />{/if}
     <div class="side-tools">
       <button
         title={t("New library or open an iPod folder")}
@@ -108,9 +113,10 @@
           const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
           store.menu = {
             x: r.left,
-            y: r.top - 64,
+            y: r.top - 88,
             items: [
               { label: t("New Library…"), action: () => (store.dialog = { kind: "library", id: null }) },
+              { label: t("Open File…"), action: () => store.pickAndOpenSongs() },
               { label: t("Open iPod Folder…"), action: () => store.openFolder() },
             ],
           };
@@ -170,7 +176,7 @@
       </div>
     {/if}
 
-    {#if store.source.kind !== "library" && !store.ipod}
+    {#if store.source.kind !== "library" && store.source.kind !== "scratch" && !store.ipod}
       <Welcome />
     {:else if store.source.kind === "device"}
       <DevicePage />
@@ -192,7 +198,8 @@
   {#if fileDrag}
     <div class="dropzone" aria-hidden="true">
       <p>
-        {#if store.writable}{store.editablePlaylist
+        {#if !(store.ipod?.writable && (store.source.kind === "playlist" || store.source.kind === "device"))}{t("Drop to play (in the Scratch list, not added to a library)")}
+        {:else if store.writable}{store.editablePlaylist
             ? t("Drop to add to {name} and “{playlist}”", { name: store.ipod?.name ?? "", playlist: store.editablePlaylist.name })
             : t("Drop to add to {name}", { name: store.ipod?.name ?? "" })}
         {:else}{t("Turn on “Allow changes” on the iPod's page to add songs")}{/if}
@@ -210,7 +217,7 @@
   <ContextMenu />
 
   <footer class="status">
-    {#if (store.ipod && store.source.kind === "playlist") || store.source.kind === "library"}
+    {#if (store.ipod && store.source.kind === "playlist") || store.source.kind === "library" || store.source.kind === "scratch"}
       {tn(visible.length, "{n} song", "{n} songs")}, {longDuration(totals.ms)}, {bytes(totals.size)}{#if store.selected.size > 1}; {t("{n} selected", { n: store.selected.size })}{/if}
     {/if}
   </footer>

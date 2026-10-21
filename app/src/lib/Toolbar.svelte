@@ -20,6 +20,7 @@
   const sourceName = $derived.by(() => {
     const s = store.source;
     if (s.kind === "device") return store.ipod?.name ?? "";
+    if (s.kind === "scratch") return t("Scratch");
     if (s.kind === "library") {
       const pl = store.libView?.view.playlists.find((p) => p.id === s.id);
       return pl && !pl.master ? pl.name : (store.libView?.view.name ?? t("Library"));
@@ -96,7 +97,7 @@
       {@const p = store.scanProgress[store.source.lib]}
       <strong>{t("Scanning {name}", { name: store.libView?.view.name ?? "" })}</strong>
       <span class="sub">{t("{done} of {total} new or changed files", { done: p.done, total: p.total })}{p.current ? `: ${p.current}` : ""}</span>
-    {:else if store.ipod || store.source.kind === "library"}
+    {:else if store.ipod || store.source.kind === "library" || store.source.kind === "scratch"}
       <strong>{sourceName}</strong>
       <span class="sub">
         {#if store.source.kind === "device" && store.ipod}
@@ -118,7 +119,7 @@
       aria-label={t("Search songs")}
       bind:value={store.search}
       oninput={() => store.searchStarted()}
-      disabled={!store.ipod && store.source.kind !== "library"}
+      disabled={!store.index}
       spellcheck="false"
       autocomplete="off"
     />

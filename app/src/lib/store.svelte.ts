@@ -100,7 +100,49 @@ class Store {
 
   /** Index of the songs being shown (a library's or the iPod's). */
   get index(): TrackIndex | null {
+    if (this.source.kind === "scratch") return this.scratch?.index ?? null;
     return this.source.kind === "library" ? (this.libView?.index ?? null) : this.ipodIndex;
+  }
+
+  /** Songs opened from outside the libraries; null when there are none. */
+  scratch = $state.raw<{ tracks: Track[]; index: TrackIndex } | null>(null);
+
+  private async loadScratch(play: number | null) {
+    try {
+      const v = await api.scratchView();
+      const p = play ?? v.play;
+      this.scratch = v.tracks.length ? { tracks: v.tracks, index: new TrackIndex(v.tracks) } : null;
+      if (!this.scratch) {
+        if (this.source.kind === "scratch") this.select(this.ipod ? { kind: "device" } : { kind: "none" });
+        return;
+      }
+      if (p) {
+        // Just opened: show the Scratch list and play the song.
+        if (this.source.kind !== "scratch") this.select({ kind: "scratch" });
+        const tracks = this.scratch.tracks;
+        const i = tracks.findIndex((t) => t.id === p);
+        if (i >= 0) {
+          this.selected = new Set([p]);
+          await this.playList(tracks, i);
+        }
+      }
+    } catch (e) {
+      this.error = String(e);
+    }
+  }
+
+  /** Open songs (files or folders) in the Scratch list and play the first. */
+  async openSongs(paths: string[]) {
+    if (paths.length) await api.scratchAdd(paths).catch((e) => (this.error = String(e)));
+  }
+
+  async pickAndOpenSongs() {
+    await this.openSongs(await api.pickSongs());
+  }
+
+  async removeFromScratch(ids: number[]) {
+    await api.scratchRemove(ids).catch((e) => (this.error = String(e)));
+    this.selected = new Set();
   }
   /** Path of the iPod being read, while it's being read. */
   opening = $state<string | null>(null);
@@ -157,6 +199,7 @@ class Store {
   get playingTrack(): Track | null {
     const d = this.nowPlaying;
     if (!d) return null;
+    if (d.startsWith("scratch:")) return this.scratch?.index.byId.get(Number(d.slice(8))) ?? null;
     if (d.startsWith("lib:")) {
       const [, lib, id] = d.split(":");
       return this.libViews[lib]?.index.byId.get(Number(id)) ?? null;
@@ -192,6 +235,7 @@ class Store {
   /** Tracks of the current source before search and browser filters. */
   get sourceTracks(): Track[] {
     const s = this.source;
+    if (s.kind === "scratch") return this.scratch?.tracks ?? [];
     if (s.kind === "library") {
       const lv = this.libView;
       const pl = lv?.view.playlists.find((p) => p.id === s.id);
@@ -226,6 +270,8 @@ class Store {
     await api.onLibrariesChanged((l) => (this.libraries = l));
     await api.onLibraryUpdated((id) => void this.reloadLibrary(id));
     await api.onLibraryProgress((p) => (this.scanProgress = { ...this.scanProgress, [p.id]: p }));
+    await api.onScratchChanged((play) => void this.loadScratch(play));
+    await this.loadScratch(null);
     this.libraries = await api.listLibraries().catch(() => []);
     // Expanded libraries show their playlists in the sidebar.
     for (const l of this.libraries) if (!this.collapsed.includes(l.id)) void this.loadLibrary(l.id);
@@ -382,6 +428,7 @@ class Store {
   /** URL of a song's cover about `px` wide, or null when it has none. */
   coverUrl(t: Track | null | undefined, px: number): string | null {
     if (!t) return null;
+    if (t.dbid.startsWith("scratch:")) return t.hasCover ? api.libArtUrl("scratch", t.id, px, t.modified ?? 0) : null;
     if (t.dbid.startsWith("lib:")) {
       const [, lib] = t.dbid.split(":");
       // The file's date is in the URL, so a changed cover isn't served from the cache.
@@ -530,6 +577,7 @@ class Store {
 
   /** Delete key / menu: in a playlist, take songs out of it; elsewhere, delete from the iPod (asks first). */
   removeSelected() {
+    if (this.source.kind === "scratch" && this.selected.size) return void this.removeFromScratch([...this.selected]);
     if (!this.writable || !this.selected.size) return;
     const pl = this.editablePlaylist;
     if (pl) void this.removeFromPlaylist(pl.id, [...this.selected]);
@@ -595,9 +643,10 @@ class Store {
       if (fresh.length) await this.libChange(() => api.libSetPlaylistTracks(t.lib, t.pl.id, [...t.pl.trackIds, ...fresh]));
       return;
     }
-    // Library songs onto the iPod ("ipod:music", or one of its playlists): copy them over.
-    if (dbids.some((d) => d.startsWith("lib:"))) {
-      await this.copyToIpod(dbids.filter((d) => d.startsWith("lib:")), id === "ipod:music" ? null : id);
+    // Library or Scratch songs onto the iPod ("ipod:music", or one of its playlists): copy them over.
+    const fromComputer = (d: string) => d.startsWith("lib:") || d.startsWith("scratch:");
+    if (dbids.some(fromComputer)) {
+      await this.copyToIpod(dbids.filter(fromComputer), id === "ipod:music" ? null : id);
       return;
     }
     if (id === "ipod:music") return;
@@ -748,6 +797,7 @@ class Store {
 
   /** A song by dbid, from the iPod or any loaded library. */
   trackByDbid(d: string): Track | null {
+    if (d.startsWith("scratch:")) return this.scratch?.index.byId.get(Number(d.slice(8))) ?? null;
     if (d.startsWith("lib:")) {
       const [, lib, id] = d.split(":");
       return this.libViews[lib]?.index.byId.get(Number(id)) ?? null;

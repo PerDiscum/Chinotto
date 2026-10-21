@@ -1,7 +1,7 @@
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import type { AddProgress, AddResult, DeviceInfo, IpodView, LibrarySummary, LibraryView, ScanProgress, TrackChanges, WriteResult } from "./types";
+import type { AddProgress, AddResult, DeviceInfo, IpodView, LibrarySummary, LibraryView, ScanProgress, Track, TrackChanges, WriteResult } from "./types";
 
 export const listDevices = () => invoke<DeviceInfo[]>("list_devices");
 export const addFolder = (path: string) => invoke<DeviceInfo>("add_folder", { path });
@@ -135,6 +135,22 @@ export const libRemoveTracks = (lib: string, ids: number[]) => invoke<number>("l
 /** Returns the files that couldn't be changed. `cover`: image path, "" to remove, null to leave. */
 export const libEditTracks = (lib: string, ids: number[], changes: TrackChanges, cover: string | null) =>
   invoke<string[]>("lib_edit_tracks", { lib, ids, changes, cover });
+
+// ---- Scratch list (songs opened from outside the libraries) ----
+export const scratchView = () => invoke<{ tracks: Track[]; play: number | null }>("scratch_view");
+export const scratchAdd = (paths: string[]) => invoke<void>("scratch_add", { paths });
+export const scratchRemove = (ids: number[]) => invoke<void>("scratch_remove", { ids });
+export const onScratchChanged = (f: (play: number | null) => void) =>
+  listen<{ play: number | null }>("scratch-changed", (e) => f(e.payload.play));
+export async function pickSongs(): Promise<string[]> {
+  const r = await open({
+    multiple: true,
+    directory: false,
+    title: "Open",
+    filters: [{ name: "Music", extensions: ["mp3", "m4a", "m4b", "aac", "flac", "ogg", "oga", "opus", "wav", "aif", "aiff"] }],
+  });
+  return Array.isArray(r) ? r : typeof r === "string" ? [r] : [];
+}
 
 // ---- Saving songs to the computer ----
 export interface SongRef {

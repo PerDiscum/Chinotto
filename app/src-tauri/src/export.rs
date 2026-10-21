@@ -40,6 +40,8 @@ pub struct SongRef {
 fn resolve(app: &AppHandle, s: &SongRef) -> Result<Song, String> {
     let file = if s.dbid.starts_with("lib:") {
         crate::libcommands::track_file(app, &s.dbid)?
+    } else if s.dbid.starts_with("scratch:") {
+        crate::scratch::track_file(app, &s.dbid)?
     } else {
         crate::playback::track_file(app, s.dbid.parse().map_err(|_| "bad id")?)?
     };
