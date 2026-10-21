@@ -38,6 +38,9 @@ for triple in aarch64-apple-darwin x86_64-apple-darwin; do
     continue
   fi
   cross="$WORK/cross-$arch.ini"
+  # -Dfdopen=fdopen: glib pins zlib 1.2.11, whose zutil.h turns fdopen() into
+  # NULL on macOS; newer Xcode's stdio.h then fails to compile ("expected
+  # identifier"). Defining fdopen as itself skips that (zlib 1.2.12 fixed it).
   cat > "$cross" <<INI
 [binaries]
 c = 'clang'
@@ -47,8 +50,8 @@ ar = 'ar'
 strip = 'strip'
 
 [built-in options]
-c_args = ['-arch', '$arch', '-mmacosx-version-min=$MIN_MACOS']
-objc_args = ['-arch', '$arch', '-mmacosx-version-min=$MIN_MACOS']
+c_args = ['-arch', '$arch', '-mmacosx-version-min=$MIN_MACOS', '-Dfdopen=fdopen']
+objc_args = ['-arch', '$arch', '-mmacosx-version-min=$MIN_MACOS', '-Dfdopen=fdopen']
 cpp_args = ['-arch', '$arch', '-mmacosx-version-min=$MIN_MACOS']
 c_link_args = ['-arch', '$arch', '-mmacosx-version-min=$MIN_MACOS']
 objc_link_args = ['-arch', '$arch', '-mmacosx-version-min=$MIN_MACOS']
