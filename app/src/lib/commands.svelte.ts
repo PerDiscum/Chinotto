@@ -14,6 +14,7 @@ let visibleSongs: () => Track[] = () => [];
 export function setVisibleSongs(f: () => Track[]) {
   visibleSongs = f;
 }
+export const shownSongs = () => visibleSongs();
 
 const VIEWS: MusicView[] = ["songs", "albums", "artists", "genres", "composers", "compilations"];
 

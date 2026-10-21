@@ -4,6 +4,7 @@
   import { count, duration, longDuration } from "./format";
   import type { Track } from "./types";
 
+  import { shownSongs } from "./commands.svelte";
   let { visible, visibleMs }: { visible: Track[]; visibleMs: number } = $props();
   const visibleCount = $derived(visible.length);
 
@@ -39,7 +40,7 @@
       <button aria-label={t("Previous")} title={t("Previous")} disabled={!store.nowPlaying} onclick={() => store.previous()}>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h2v14H6zM20 5v14L9 12z" /></svg>
       </button>
-      <button class="main" aria-label={playing ? t("Pause") : t("Play")} title={playing ? t("Pause (Space) · Stop (⌘.)") : t("Play (Space)")} disabled={!store.index} onclick={() => store.togglePlay(visible)}>
+      <button class="main" aria-label={playing ? t("Pause") : t("Play")} title={playing ? t("Pause (Space) · Stop (⌘.)") : t("Play (Space)")} disabled={!store.index} onclick={() => store.togglePlay(shownSongs())}>
         {#if playing}
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z" /></svg>
         {:else}

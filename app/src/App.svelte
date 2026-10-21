@@ -2,7 +2,7 @@
   import { t, tn } from "./lib/i18n";
   import { onMount } from "svelte";
   import { store } from "./lib/store.svelte";
-  import { albums, browse } from "./lib/library";
+  import { albums, browse, groups } from "./lib/library";
   import ViewTabs from "./lib/ViewTabs.svelte";
   import AlbumGrid from "./lib/AlbumGrid.svelte";
   import GroupView from "./lib/GroupView.svelte";
@@ -25,7 +25,7 @@
 
   onMount(() => {
     void store.init();
-    setVisibleSongs(() => visible);
+    setVisibleSongs(() => shown);
     void installMenu();
     const off = getCurrentWebview().onDragDropEvent((e) => {
       const p = e.payload;
@@ -71,6 +71,22 @@
   const albumList = $derived(store.view === "albums" || store.view === "compilations" ? albums(searched) : []);
   const filtered = $derived(browsed ? browsed.tracks : searched);
   const visible = $derived(store.index ? store.index.sort(filtered, store.sortKey, store.sortDir) : []);
+  /** The songs the current view actually shows (for ⌘A and Space): in the
+   *  album views the open album or every shown album, in Artists/Genres/
+   *  Composers the picked name's songs. */
+  const shown = $derived.by(() => {
+    const v = store.view;
+    if (v === "songs") return visible;
+    const flat = (list: ReturnType<typeof albums>) => list.flatMap((a) => a.tracks);
+    if (v === "albums" || v === "compilations") {
+      const list = v === "compilations" ? albumList.filter((a) => a.compilation) : albumList;
+      const open = list.find((a) => a.key === store.openAlbum);
+      return open ? open.tracks : flat(list);
+    }
+    const list = groups(searched, v === "artists" ? "artist" : v === "genres" ? "genre" : "composer");
+    const picked = list.find((g) => g.name === store.groupPick[v]) ?? list[0];
+    return picked ? flat(albums(picked.tracks)) : [];
+  });
   const totals = $derived.by(() => {
     let ms = 0, size = 0;
     for (const t of visible) { ms += t.lengthMs; size += t.size; }
