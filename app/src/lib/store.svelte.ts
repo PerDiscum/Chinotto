@@ -22,7 +22,9 @@ export type Dialog =
   | { kind: "report"; title: string; lines: string[] }
   | { kind: "library"; id: string | null }
   | { kind: "delete-library"; id: string; name: string }
-  | { kind: "remove-from-library"; ids: number[] };
+  | { kind: "remove-from-library"; ids: number[] }
+  /** Set up an iPod with no database, or (rebuild) replace a lost or broken one. */
+  | { kind: "setup"; path: string; rebuild: boolean };
 
 function loadVolume(): number {
   try {
@@ -289,7 +291,8 @@ class Store {
     if (this.ipod && !list.some((d) => d.path === this.ipod!.path)) this.forget();
     // Open a newly plugged-in iPod when nothing else is open.
     if (!this.ipod && !this.opening) {
-      const fresh = list.find((d) => !before.has(d.path) && !d.manual) ?? (before.size === 0 ? list[0] : undefined);
+      const ready = list.filter((d) => !d.needsSetup);
+      const fresh = ready.find((d) => !before.has(d.path) && !d.manual) ?? (before.size === 0 ? ready[0] : undefined);
       if (fresh) void this.open(fresh.path, true);
     }
   }
@@ -305,12 +308,20 @@ class Store {
     }
   }
 
+  /** iPod whose database couldn't be read (it can be rebuilt). */
+  openFailed = $state<string | null>(null);
+
   async open(path: string, auto = false) {
     if (this.opening) return;
+    if (this.devices.find((d) => d.path === path)?.needsSetup) {
+      if (!auto) this.dialog = { kind: "setup", path, rebuild: false };
+      return;
+    }
     this.opening = path;
     this.error = null;
     try {
       const view = await api.openIpod(path);
+      this.openFailed = null;
       this.ipodIndex = new TrackIndex(view.tracks);
       this.ipod = view;
       // Opened by hand, or nothing else shown: show the iPod's music.
@@ -322,8 +333,45 @@ class Store {
       }
     } catch (e) {
       this.error = String(e);
+      this.openFailed = path;
     } finally {
       this.opening = null;
+    }
+  }
+
+  /** Pick a drive to set up as an iPod (one that isn't found by itself). */
+  async pickDriveToSetUp() {
+    const path = await api.pickFolder();
+    if (path) this.dialog = { kind: "setup", path, rebuild: false };
+  }
+
+  /** Set up the iPod at `path` (see SetupDialog); then open it. */
+  async setUpIpod(a: { path: string; model: string; name: string; firewireId: string | null; addExisting: boolean; rebuild: boolean }) {
+    if (this.busy) return;
+    if (this.ipod?.path === a.path) this.forget();
+    this.dialog = null;
+    this.busy = a.rebuild ? t("Rebuilding the database…") : t("Setting up the iPod…");
+    this.error = null;
+    try {
+      const r = await api.setupIpod(a);
+      this.openFailed = null;
+      this.busy = null;
+      this.progress = null;
+      this.devicesChanged(await api.listDevices());
+      if (!this.devices.some((d) => d.path === a.path)) {
+        // A drive picked by hand: keep it in the list.
+        const d = await api.addFolder(a.path);
+        this.devices = [...this.devices, d];
+      }
+      await this.open(a.path);
+      const lines = [...r.problems];
+      if (r.setAside) lines.unshift(t("The old database was kept in {path}.", { path: r.setAside }));
+      if (lines.length) this.dialog = { kind: "report", title: tn(r.added, "Done: {n} song is on the iPod", "Done: {n} songs are on the iPod"), lines };
+    } catch (e) {
+      this.error = String(e);
+    } finally {
+      this.busy = null;
+      this.progress = null;
     }
   }
 

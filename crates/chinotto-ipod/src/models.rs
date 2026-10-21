@@ -295,3 +295,51 @@ pub(crate) fn model_from_serial(suffix: &str) -> Option<&'static str> {
         _ => return None,
     })
 }
+
+/// Cover formats for iPods whose covers Chinotto can start from nothing
+/// (no covers on the iPod yet), as (thumbnails per cover, formats listed in
+/// the ArtworkDB as (id, slot bytes)). From iTunes' databases and libgpod's
+/// tables. `None`: no covers on this model, or not known.
+#[allow(clippy::type_complexity)]
+pub fn cover_formats(gen: &Generation) -> Option<(&'static [crate::artworkdb::Format], &'static [(u32, u32)])> {
+    use crate::artworkdb::Format as F;
+    const CLASSIC: &[F] = &[
+        F { format: 1055, width: 128, height: 128, size: 32768 },
+        F { format: 1060, width: 320, height: 320, size: 204800 },
+        // 56×56 in the header, stored as 55 rows of 56 pixels.
+        F { format: 1061, width: 56, height: 56, size: 6160 },
+    ];
+    const CLASSIC_FILES: &[(u32, u32)] = &[(1055, 32768), (1060, 204800), (1061, 6050), (1068, 32768), (1069, 40328)];
+    const NANO: &[F] = &[F { format: 1027, width: 100, height: 100, size: 20000 }, F { format: 1031, width: 42, height: 42, size: 3528 }];
+    const NANO_FILES: &[(u32, u32)] = &[(1027, 20000), (1031, 3528)];
+    const VIDEO: &[F] =
+        &[F { format: 1028, width: 100, height: 100, size: 20000 }, F { format: 1029, width: 200, height: 200, size: 80000 }];
+    const VIDEO_FILES: &[(u32, u32)] = &[(1028, 20000), (1029, 80000)];
+    const PHOTO: &[F] = &[F { format: 1016, width: 140, height: 140, size: 39200 }, F { format: 1017, width: 56, height: 56, size: 6272 }];
+    const PHOTO_FILES: &[(u32, u32)] = &[(1016, 39200), (1017, 6272)];
+    Some(match gen.icon {
+        "ipod-6g" | "ipod-7g" | "ipod-nano-3g" => (CLASSIC, CLASSIC_FILES),
+        "ipod-nano-1g" | "ipod-nano-2g" => (NANO, NANO_FILES),
+        "ipod-5g" | "ipod-5g-u2" => (VIDEO, VIDEO_FILES),
+        _ if gen.name.contains("photo") => (PHOTO, PHOTO_FILES),
+        _ => return None,
+    })
+}
+
+/// One model number per kind of iPod Chinotto can set up, for choosing the
+/// model by hand (the region letter "x" in front, as SysInfo has it).
+pub fn setup_models() -> Vec<(&'static str, Generation)> {
+    [
+        "x8541", "x8737", "x8976", "x9282", "x9787", "xA079", "xA127", "x9160", "x9800", "xA350", "xA477", "xA002", "xA444", "xA452",
+        "xB029", "xB562", "xC297", "xA978",
+    ]
+    .into_iter()
+    .filter_map(|m| generation(&m[1..]).map(|g| (m, g)))
+    .collect()
+}
+
+/// Whether this model's database needs a checksum made from its FireWire ID
+/// (without it, the iPod shows no music).
+pub fn needs_firewire_id(gen: &Generation) -> bool {
+    matches!(gen.icon, "ipod-6g" | "ipod-7g" | "ipod-nano-3g")
+}

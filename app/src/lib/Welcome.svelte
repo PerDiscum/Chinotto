@@ -4,6 +4,19 @@
 </script>
 
 <div class="welcome">
+  {#if store.openFailed && store.devices.some((d) => d.path === store.openFailed)}
+    {@const path = store.openFailed}
+    <div class="inner">
+      <h1>{t("Chinotto couldn't read this iPod's database")}</h1>
+      <p>
+        {t("It may be damaged, or written by software Chinotto doesn't understand. You can rebuild it: the songs on the iPod are added back from their files (playlists, play counts and ratings are lost), and the old database is kept in a backup folder on the iPod.")}
+      </p>
+      <div class="buttons">
+        <button onclick={() => store.open(path)}>{t("Try Again")}</button>
+        <button class="quiet" onclick={() => (store.dialog = { kind: "setup", path, rebuild: true })}>{t("Rebuild Database…")}</button>
+      </div>
+    </div>
+  {:else}
   <div class="inner">
     <h1>{t("Connect your device!")}</h1>
     <p>
@@ -15,6 +28,7 @@
     </div>
     <p class="small">{t("A library holds the music on your computer: choose its folders and Chinotto lists what's in them, without changing your files.")}</p>
   </div>
+  {/if}
 </div>
 
 <style>

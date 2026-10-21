@@ -69,12 +69,35 @@ pub struct Assignment {
 pub fn add_covers(root: &Path, assignments: &[Assignment]) -> Result<HashMap<u64, (u32, u32)>, String> {
     let layout = Layout::new(root);
     let db_path = layout.artworkdb();
-    let bytes = std::fs::read(&db_path)
-        .map_err(|_| "This iPod has no artwork database yet, so Chinotto can't add covers to it (that's coming later)".to_string())?;
-    let art = ArtworkDb::parse(&bytes).map_err(|e| format!("The iPod's artwork database couldn't be read: {e}"))?;
-    let formats = art.common_formats();
+    // The model's formats, for an iPod with no covers yet.
+    let model_formats = || {
+        let gen = chinotto_ipod::device::SysInfo::read(root).and_then(|s| s.generation());
+        gen.as_ref().and_then(chinotto_ipod::models::cover_formats)
+    };
+    let art = match std::fs::read(&db_path) {
+        Ok(bytes) => ArtworkDb::parse(&bytes).map_err(|e| format!("The iPod's artwork database couldn't be read: {e}"))?,
+        Err(_) => {
+            // No artwork database yet (a freshly set-up iPod): start an empty one.
+            let (_, files) =
+                model_formats().ok_or("Chinotto doesn't know the cover sizes for this iPod model, so it can't add covers yet")?;
+            std::fs::create_dir_all(layout.artwork_dir()).map_err(|e| format!("Couldn't create the Artwork folder: {e}"))?;
+            let blank = chinotto_ipod::artworkdb::blank(files);
+            std::fs::write(&db_path, &blank).map_err(|e| format!("Couldn't create the artwork database: {e}"))?;
+            ArtworkDb::parse(&blank).map_err(|e| e.to_string())?
+        }
+    };
+    let mut formats = art.common_formats();
     let ids: Vec<u32> = formats.iter().map(|f| f.format).collect();
-    let template = art.find_template(&ids).ok_or("Couldn't find an existing cover on this iPod to model new ones on")?.clone();
+    // A cover already on the iPod is the model for new ones; with none yet,
+    // one is made from the model's formats.
+    let template = match art.find_template(&ids) {
+        Some(t) if !formats.is_empty() => Template::Existing(t.clone()),
+        _ => {
+            let (thumbs, _) = model_formats().ok_or("Couldn't find an existing cover on this iPod to model new ones on")?;
+            formats = thumbs.to_vec();
+            Template::New(chinotto_ipod::artworkdb::template_image(thumbs).map_err(|e| e.to_string())?)
+        }
+    };
     let mut file_index = art.last_file_index();
 
     backup(root, &db_path)?;
@@ -101,11 +124,20 @@ pub fn add_covers(root: &Path, assignments: &[Assignment]) -> Result<HashMap<u64
             next_id += 1;
         }
     }
-    let out = art.append(&template, &entries).map_err(|e| format!("Couldn't add the covers: {e}"))?;
+    let out = match &template {
+        Template::Existing(t) => art.append(t, &entries),
+        Template::New(t) => art.append_new(t, &entries),
+    }
+    .map_err(|e| format!("Couldn't add the covers: {e}"))?;
     let tmp = db_path.with_extension("chinotto-tmp");
     std::fs::write(&tmp, &out).map_err(|e| format!("Couldn't save the artwork database: {e}"))?;
     std::fs::rename(&tmp, &db_path).map_err(|e| format!("Couldn't save the artwork database: {e}"))?;
     Ok(links)
+}
+
+enum Template {
+    Existing(chinotto_ipod::artworkdb::Image),
+    New((Vec<u8>, chinotto_ipod::artworkdb::Image)),
 }
 
 /// Append one thumbnail to the current `F<format>_<n>.ithmb`; returns (file name, offset).

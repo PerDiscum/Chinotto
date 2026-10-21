@@ -4,6 +4,7 @@
   import Modal from "./Modal.svelte";
   import GetInfo from "./GetInfo.svelte";
   import LibraryDialog from "./LibraryDialog.svelte";
+  import SetupDialog from "./SetupDialog.svelte";
   import { count } from "./format";
 
   const close = () => (store.dialog = null);
@@ -33,6 +34,8 @@
       <button class="danger" onclick={() => store.deletePlaylist(d.id)}>{t("Delete Playlist")}</button>
     {/snippet}
   </Modal>
+{:else if store.dialog?.kind === "setup"}
+  <SetupDialog path={store.dialog.path} rebuild={store.dialog.rebuild} />
 {:else if store.dialog?.kind === "library"}
   <LibraryDialog id={store.dialog.id} />
 {:else if store.dialog?.kind === "delete-library"}

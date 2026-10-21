@@ -166,7 +166,21 @@
   <ul>
     {#each store.devices as d (d.path)}
       <li>
-        <div class="row device" class:active={isOpen(d.path) && store.source.kind === "device"}>
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div
+          class="row device"
+          class:active={isOpen(d.path) && store.source.kind === "device"}
+          oncontextmenu={(e) => {
+            e.preventDefault();
+            store.menu = {
+              x: e.clientX,
+              y: e.clientY,
+              items: d.needsSetup
+                ? [{ label: t("Set Up iPod…"), action: () => (store.dialog = { kind: "setup", path: d.path, rebuild: false }) }]
+                : [{ label: t("Rebuild Database…"), danger: true, action: () => (store.dialog = { kind: "setup", path: d.path, rebuild: true }) }],
+            };
+          }}
+        >
           <button
             class="name"
             onclick={() => (isOpen(d.path) ? store.select({ kind: "device" }) : store.open(d.path))}
@@ -174,6 +188,7 @@
           >
             {#if deviceImage(store.iconFor(d))}<img class="dev" src={deviceImage(store.iconFor(d))} alt="" />{:else}<Icon name="ipod" />{/if}
             <span>{isOpen(d.path) ? store.ipod!.name : d.volume}</span>
+            {#if d.needsSetup}<span class="setup">{t("Set Up…")}</span>{/if}
             {#if store.opening === d.path}<span class="spinner" aria-label={t("Reading")}></span>{/if}
           </button>
           {#if !d.manual}
@@ -389,5 +404,11 @@
     .spinner {
       animation-duration: 3s;
     }
+  }
+  .setup {
+    margin-left: auto;
+    flex: none;
+    font-size: 11px;
+    color: var(--accent);
   }
 </style>

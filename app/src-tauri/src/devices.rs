@@ -26,6 +26,9 @@ pub struct DeviceInfo {
     pub free: u64,
     /// Added by hand with "Open iPod folder…" rather than found mounted.
     pub manual: bool,
+    /// An iPod without a database (iPod_Control but no iTunesDB): it needs
+    /// setting up before it can be used.
+    pub needs_setup: bool,
 }
 
 /// Folders whose children are mount points on this OS.
@@ -74,7 +77,14 @@ pub fn describe(root: &Path, manual: bool) -> DeviceInfo {
         capacity,
         free,
         manual,
+        needs_setup: !is_ipod_root(root),
     }
+}
+
+/// An iPod's folder without a database: the iPod_Control folder is there,
+/// the iTunesDB isn't (formatted or restored without iTunes, or lost).
+pub fn needs_setup(root: &Path) -> bool {
+    root.join("iPod_Control").is_dir() && !is_ipod_root(root)
 }
 
 /// Mounted volumes (just their paths: listing the mount folder doesn't touch
@@ -116,7 +126,7 @@ impl Scanner {
         self.known.retain(|p, _| now.iter().any(|(q, _)| q == p));
         let mut out = Vec::new();
         for (p, manual) in now {
-            let probe = |p: &Path| is_ipod_root(p).then(|| describe(p, manual));
+            let probe = |p: &Path| (is_ipod_root(p) || needs_setup(p)).then(|| describe(p, manual));
             let entry = self.known.entry(p.clone()).or_insert_with(|| (std::time::Instant::now(), probe(&p)));
             // A volume can show up a moment before it's readable: keep looking for a few seconds.
             if entry.1.is_none() && entry.0.elapsed() < Duration::from_secs(8) {
@@ -130,14 +140,21 @@ impl Scanner {
     }
 }
 
+impl Scanner {
+    /// Look inside `root` again on the next scan (it was just set up).
+    pub fn forget(&mut self, root: &Path) {
+        self.known.remove(root);
+    }
+}
+
 /// Poll every two seconds and tell the window when the set of iPods changes.
 pub fn start_watcher(app: AppHandle) {
     std::thread::spawn(move || {
-        let mut last: Vec<String> = Vec::new();
+        let mut last: Vec<(String, bool)> = Vec::new();
         loop {
             let manual = app.state::<AppState>().manual_roots();
             let list = app.state::<AppState>().scanner.lock().unwrap().scan(&manual);
-            let paths: Vec<String> = list.iter().map(|d| d.path.clone()).collect();
+            let paths: Vec<(String, bool)> = list.iter().map(|d| (d.path.clone(), d.needs_setup)).collect();
             if paths != last {
                 last = paths;
                 let _ = app.emit("devices-changed", &list);

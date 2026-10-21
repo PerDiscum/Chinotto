@@ -239,6 +239,40 @@ Everything decided and learned so far, so work can continue in a new session.
 
 Order chosen: confirm editing on the nano → **playback** (done) → artwork (done) → icon chooser → shuffle/repeat → playlist reordering → column browser fixes and Format/Bitrate columns → media library.
 
+## Setting up iPods (patch 0044)
+
+- Devices: a volume with `iPod_Control` but no iTunesDB is listed with
+  `needsSetup` (devices.rs `needs_setup`); clicking it opens SetupDialog.
+  File → Set Up iPod… picks any drive. Right-click an iPod → Rebuild Database….
+  An iPod whose database fails to open shows Try Again / Rebuild on the
+  welcome page (`store.openFailed`).
+- setup.rs `run`: (rebuild: `chinotto_gpod::set_aside_database` moves
+  iTunesDB, iTunesSD/PState/Stats/Play Counts/OTGPlaylistInfo and the Artwork
+  folder into `Chinotto Backups/Before rebuild <time>/`) → FireWire ID into
+  SysInfo (keeps other lines) → `chinotto_gpod::init_ipod` (libgpod
+  itdb_init_ipod with the model number, e.g. xA477) → optionally every audio
+  file in iPod_Control/Music added with `Database::add_existing` (ipod_path set,
+  no copy) and their embedded covers (`write::add_embedded_covers`).
+  Marks the iPod writable afterwards (setting it up is the go-ahead).
+- FireWire ID = USB serial: Linux via /sys/class/block/<dev> up to the USB
+  device (idVendor 05ac); macOS via `system_profiler SPUSBDataType /
+  SPUSBHostDataType -json` (the device with this mount point, or the only
+  Apple device with a 16-hex serial). **macOS path untested.** Required for
+  classic 6G/7G and nano 3G (`models::needs_firewire_id`).
+- Models offered: `models::setup_models` (one model number per kind; no
+  shuffles, no nano 4G/5G: hash72/hashAB can't be made from scratch).
+- Covers with no ArtworkDB / no covers yet: cover.rs makes a blank ArtworkDB
+  (`artworkdb::blank`, laid out like libgpod/iTunes) and a template entry
+  (`artworkdb::template_image`) from `models::cover_formats` (classic/nano3G:
+  1055/1060/1061 as iTunes writes them, mhif list incl. 1068/1069; nano 1G/2G:
+  1027/1031; 5G: 1028/1029; photo: 1016/1017, from libgpod's tables).
+  Tested here on a folder set up as nano 3G (hash58 present, covers read back)
+  and nano 2G (in the app). **Not yet tested on a real iPod.**
+- Gap: an iPod with neither FireWire ID nor serial gets no identity, so
+  "Allow changes" can't be turned on for it.
+- Still to do: format/restore (partition + firmware, via ipodpatcher-like
+  code), much riskier; the device layer for MSC/MTP comes with the MSC pass.
+
 ## Status (2026-10-20)
 
 Roadmap step 1 is half done: the **Tauri app and the Mac/Linux builds exist**;

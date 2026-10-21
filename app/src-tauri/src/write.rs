@@ -135,10 +135,10 @@ pub async fn delete_tracks(path: String, ids: Vec<String>, app: AppHandle) -> Re
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
-struct AddProgress {
-    done: usize,
-    total: usize,
-    current: String,
+pub(crate) struct AddProgress {
+    pub done: usize,
+    pub total: usize,
+    pub current: String,
 }
 
 #[derive(Serialize)]
@@ -222,28 +222,7 @@ pub async fn add_files(path: String, files: Vec<String>, playlist: Option<String
                 }
             }
             let _ = emitter.emit("add-progress", AddProgress { done: total, total, current: String::new() });
-            // Covers embedded in the added files; identical images are stored once.
-            let mut by_image: Vec<(Vec<u8>, Vec<u64>)> = Vec::new();
-            for (dbid, file) in &added_files {
-                if let Some(bytes) = tags::embedded_cover(file) {
-                    match by_image.iter_mut().find(|(b, _)| *b == bytes) {
-                        Some((_, ids)) => ids.push(*dbid),
-                        None => by_image.push((bytes, vec![*dbid])),
-                    }
-                }
-            }
-            let assignments: Vec<Assignment> =
-                by_image.into_iter().filter_map(|(b, dbids)| cover::decode(&b).ok().map(|image| Assignment { image, dbids })).collect();
-            if !assignments.is_empty() {
-                match cover::add_covers(db.root(), &assignments) {
-                    Ok(links) => {
-                        for (dbid, link) in links {
-                            db.edit(&[dbid], &[Field::Artwork(Some(link))]).map_err(|e| e.to_string())?;
-                        }
-                    }
-                    Err(e) => res.skipped.push(format!("Covers weren't added: {e}")),
-                }
-            }
+            add_embedded_covers(db, &added_files, &mut res.skipped)?;
             if let Some(pl) = playlist {
                 let mut ids = db.playlists().into_iter().find(|p| p.id == pl).map(|p| p.tracks).unwrap_or_default();
                 ids.extend(res.added.iter().filter_map(|s| s.parse::<u64>().ok()));
@@ -258,6 +237,41 @@ pub async fn add_files(path: String, files: Vec<String>, playlist: Option<String
         result
     })
     .await
+}
+
+/// Give the newly added songs the covers embedded in their files; identical
+/// images are stored once. Problems are noted in `skipped`.
+pub(crate) fn add_embedded_covers(db: &mut Database, added: &[(u64, PathBuf)], skipped: &mut Vec<String>) -> Result<(), String> {
+    use std::hash::{Hash, Hasher};
+    let mut by_image: Vec<(Vec<u8>, Vec<u64>)> = Vec::new();
+    let mut seen: HashMap<u64, Vec<usize>> = HashMap::new();
+    for (dbid, file) in added {
+        if let Some(bytes) = tags::embedded_cover(file) {
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            bytes.hash(&mut h);
+            let slots = seen.entry(h.finish()).or_default();
+            match slots.iter().find(|&&i| by_image[i].0 == bytes) {
+                Some(&i) => by_image[i].1.push(*dbid),
+                None => {
+                    slots.push(by_image.len());
+                    by_image.push((bytes, vec![*dbid]));
+                }
+            }
+        }
+    }
+    let assignments: Vec<Assignment> =
+        by_image.into_iter().filter_map(|(b, dbids)| cover::decode(&b).ok().map(|image| Assignment { image, dbids })).collect();
+    if !assignments.is_empty() {
+        match cover::add_covers(db.root(), &assignments) {
+            Ok(links) => {
+                for (dbid, link) in links {
+                    db.edit(&[dbid], &[Field::Artwork(Some(link))]).map_err(|e| e.to_string())?;
+                }
+            }
+            Err(e) => skipped.push(format!("Covers weren't added: {e}")),
+        }
+    }
+    Ok(())
 }
 
 /// How songs are converted for this iPod (see convert.rs).

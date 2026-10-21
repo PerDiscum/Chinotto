@@ -117,11 +117,12 @@
           const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
           store.menu = {
             x: r.left,
-            y: r.top - 88,
+            y: r.top - 112,
             items: [
               { label: t("New Library…"), action: () => (store.dialog = { kind: "library", id: null }) },
               { label: t("Open File…"), action: () => store.pickAndOpenSongs() },
               { label: t("Open iPod Folder…"), action: () => store.openFolder() },
+              { label: t("Set Up iPod…"), action: () => store.pickDriveToSetUp() },
             ],
           };
         }}><Icon name="folder" /></button

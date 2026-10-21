@@ -11,6 +11,7 @@ mod libcommands;
 mod library;
 mod playback;
 mod scratch;
+mod setup;
 mod state;
 mod tags;
 mod tagwrite;
@@ -49,6 +50,8 @@ fn main() {
             commands::list_devices,
             commands::add_folder,
             commands::open_ipod,
+            setup::setup_info,
+            setup::setup_ipod,
             commands::close_ipod,
             commands::eject,
             commands::startup_folder,

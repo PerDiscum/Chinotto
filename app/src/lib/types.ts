@@ -12,6 +12,34 @@ export interface DeviceInfo {
   capacity: number;
   free: number;
   manual: boolean;
+  /** An iPod without a database: it needs setting up first. */
+  needsSetup: boolean;
+}
+
+export interface SetupModel {
+  number: string;
+  name: string;
+  icon: string;
+  /** Its database needs the FireWire ID (iPod classic, nano 3G). */
+  needsId: boolean;
+}
+
+export interface SetupInfo {
+  path: string;
+  volume: string;
+  capacity: number;
+  isDisk: boolean;
+  hasDatabase: boolean;
+  model: string | null;
+  firewireId: string | null;
+  musicFiles: number;
+  models: SetupModel[];
+}
+
+export interface SetupResult {
+  added: number;
+  problems: string[];
+  setAside: string | null;
 }
 
 export interface Playlist {

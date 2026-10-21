@@ -18,7 +18,7 @@
 
 use std::collections::HashMap;
 
-use crate::bytes::{decode_utf16le, encode_utf16le, put_u32, put_u64, Bytes};
+use crate::bytes::{decode_utf16le, encode_utf16le, put_u16, put_u32, put_u64, Bytes};
 use crate::Error;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -160,12 +160,21 @@ impl ArtworkDb {
         out
     }
 
-    /// New ArtworkDB bytes with `entries` appended to the image list.
+    /// New ArtworkDB bytes with `entries` appended to the image list, each a
+    /// copy of `template` (an image of this database).
     pub fn append(&self, template: &Image, entries: &[NewImage]) -> Result<Vec<u8>, Error> {
+        self.append_from(&self.bytes[template.at..template.at + template.len], template, entries)
+    }
+
+    /// Like [`append`](Self::append), with a template made by [`template_image`].
+    pub fn append_new(&self, template: &(Vec<u8>, Image), entries: &[NewImage]) -> Result<Vec<u8>, Error> {
+        self.append_from(&template.0, &template.1, entries)
+    }
+
+    fn append_from(&self, tpl: &[u8], template: &Image, entries: &[NewImage]) -> Result<Vec<u8>, Error> {
         if entries.is_empty() {
             return Ok(self.bytes.clone());
         }
-        let tpl = &self.bytes[template.at..template.at + template.len];
         let mut clones = Vec::with_capacity(entries.len() * tpl.len());
         for e in entries {
             let mut c = tpl.to_vec();
@@ -209,6 +218,93 @@ impl ArtworkDb {
         put_u32(&mut out, 0x1C, last);
         Ok(out)
     }
+}
+
+/// An empty ArtworkDB (no covers yet) listing `formats`, laid out as iTunes
+/// and libgpod write it: image list, album list, file list.
+pub fn blank(formats: &[(u32, u32)]) -> Vec<u8> {
+    fn header(tag: &[u8; 4], len: usize) -> Vec<u8> {
+        let mut h = vec![0u8; len];
+        h[..4].copy_from_slice(tag);
+        put_u32(&mut h, 4, len as u32);
+        put_u32(&mut h, 8, len as u32);
+        h
+    }
+    fn section(kind: u16, list: Vec<u8>) -> Vec<u8> {
+        let mut s = header(b"mhsd", 0x60);
+        put_u16(&mut s, 0x0C, kind);
+        put_u32(&mut s, 8, (0x60 + list.len()) as u32);
+        s.extend(list);
+        s
+    }
+    let mhli = header(b"mhli", 0x5C); // count 0 (in the total-length slot)
+    let mut mhli = mhli;
+    put_u32(&mut mhli, 8, 0);
+    let mut mhla = header(b"mhla", 0x5C);
+    put_u32(&mut mhla, 8, 0);
+    let mut mhlf = header(b"mhlf", 0x5C);
+    put_u32(&mut mhlf, 8, formats.len() as u32);
+    for (id, size) in formats {
+        let mut f = header(b"mhif", 0x7C);
+        put_u32(&mut f, 0x10, *id);
+        put_u32(&mut f, 0x14, *size);
+        mhlf.extend(f);
+    }
+    let mut out = header(b"mhfd", 0x84);
+    put_u32(&mut out, 0x10, 2); // iTunes 4.9+ databases
+    put_u32(&mut out, 0x14, 3); // sections
+    put_u32(&mut out, 0x1C, 99); // last image id; the first cover gets 100
+    out[0x30] = 2;
+    out.extend(section(1, mhli));
+    out.extend(section(2, mhla));
+    out.extend(section(3, mhlf));
+    let len = out.len() as u32;
+    put_u32(&mut out, 8, len);
+    out
+}
+
+/// A cover entry to copy for new covers when the iPod has none yet: one
+/// thumbnail per format, in `F<format>_1.ithmb` (the file name only sets the
+/// name's length; [`ArtworkDb::append_new`] fills in the real ones).
+pub fn template_image(formats: &[Format]) -> Result<(Vec<u8>, Image), Error> {
+    let mut m = vec![0u8; 0x98];
+    m[..4].copy_from_slice(b"mhii");
+    put_u32(&mut m, 4, 0x98);
+    put_u32(&mut m, 0x0C, formats.len() as u32);
+    for f in formats {
+        let name = encode_utf16le(&format!(":{}", ithmb_name(f.format, 1)));
+        let pad = (4 - name.len() % 4) % 4;
+        let mut s = vec![0u8; 0x24];
+        s[..4].copy_from_slice(b"mhod");
+        put_u32(&mut s, 4, 0x18);
+        put_u32(&mut s, 8, (0x24 + name.len() + pad) as u32);
+        put_u16(&mut s, 0x0C, 3);
+        put_u32(&mut s, 0x18, name.len() as u32);
+        s[0x1C] = 2; // UTF-16LE
+        s.extend(&name);
+        s.extend(std::iter::repeat_n(0u8, pad));
+        let mut ni = vec![0u8; 0x4C];
+        ni[..4].copy_from_slice(b"mhni");
+        put_u32(&mut ni, 4, 0x4C);
+        put_u32(&mut ni, 8, (0x4C + s.len()) as u32);
+        put_u32(&mut ni, 0x0C, 1);
+        put_u32(&mut ni, 0x10, f.format);
+        put_u32(&mut ni, 0x18, f.size);
+        put_u16(&mut ni, 0x20, f.height);
+        put_u16(&mut ni, 0x22, f.width);
+        ni.extend(s);
+        let mut od = vec![0u8; 0x18];
+        od[..4].copy_from_slice(b"mhod");
+        put_u32(&mut od, 4, 0x18);
+        put_u32(&mut od, 8, (0x18 + ni.len()) as u32);
+        put_u16(&mut od, 0x0C, 2);
+        od.extend(ni);
+        m.extend(od);
+    }
+    let len = m.len() as u32;
+    put_u32(&mut m, 8, len);
+    let img = read_mhii(&Bytes::new(&m), 0)?;
+    Ok((m, img))
 }
 
 fn read_mhii(b: &Bytes, p: usize) -> Result<Image, Error> {
@@ -264,4 +360,38 @@ fn parse_ithmb_name(s: &str) -> Option<(u32, u32)> {
     let rest = s.strip_prefix('F')?.strip_suffix(".ithmb")?;
     let (fmt, n) = rest.split_once('_')?;
     Some((fmt.parse().ok()?, n.parse().ok()?))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn blank_database_takes_new_covers() {
+        let formats =
+            [Format { format: 1055, width: 128, height: 128, size: 32768 }, Format { format: 1061, width: 56, height: 56, size: 6160 }];
+        let db = ArtworkDb::parse(&blank(&[(1055, 32768), (1061, 6050)])).unwrap();
+        assert!(db.images.is_empty());
+        let tpl = template_image(&formats).unwrap();
+        let entries = [NewImage {
+            id: db.max_id() + 1,
+            song_dbid: 0xABCD,
+            source_pixels: 600 * 600 + 1,
+            thumbs: vec![
+                NewThumb { format: 1055, file: "F1055_1.ithmb".into(), offset: 0, width: 128, height: 128 },
+                NewThumb { format: 1061, file: "F1061_1.ithmb".into(), offset: 6160, width: 56, height: 56 },
+            ],
+        }];
+        let again = ArtworkDb::parse(&db.append_new(&tpl, &entries).unwrap()).unwrap();
+        assert_eq!(again.images.len(), 1);
+        let im = &again.images[0];
+        assert_eq!((im.id, im.song_dbid), (100, 0xABCD));
+        assert_eq!(im.thumbs[1].file, "F1061_1.ithmb");
+        assert_eq!((im.thumbs[1].offset, im.thumbs[1].size, im.thumbs[1].width), (6160, 6160, 56));
+        assert_eq!(again.common_formats(), {
+            let mut f = formats.to_vec();
+            f.sort_by_key(|f| f.format);
+            f
+        });
+    }
 }

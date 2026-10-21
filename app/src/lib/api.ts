@@ -1,7 +1,7 @@
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import type { Conversion, AddProgress, AddResult, DeviceInfo, IpodView, LibrarySummary, LibraryView, ScanProgress, Track, TrackChanges, WriteResult } from "./types";
+import type { Conversion, AddProgress, AddResult, DeviceInfo, IpodView, LibrarySummary, LibraryView, ScanProgress, Track, TrackChanges, WriteResult, SetupInfo, SetupResult } from "./types";
 
 export const listDevices = () => invoke<DeviceInfo[]>("list_devices");
 export const addFolder = (path: string) => invoke<DeviceInfo>("add_folder", { path });
@@ -168,3 +168,8 @@ export async function pickSaveFile(defaultPath: string, title: string, ext: stri
   return (await save({ title, defaultPath, filters: [{ name: ext.toUpperCase(), extensions: [ext] }] })) ?? null;
 }
 export const setConversion = (path: string, conversion: Conversion) => invoke<IpodView>("set_conversion", { path, conversion });
+
+// ---- Setting up an iPod ----
+export const setupInfo = (path: string) => invoke<SetupInfo>("setup_info", { path });
+export const setupIpod = (a: { path: string; model: string; name: string; firewireId: string | null; addExisting: boolean; rebuild: boolean }) =>
+  invoke<SetupResult>("setup_ipod", a);

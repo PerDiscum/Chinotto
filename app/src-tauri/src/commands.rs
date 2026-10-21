@@ -203,7 +203,7 @@ pub fn list_devices(state: State<'_, AppState>) -> Vec<DeviceInfo> {
 #[tauri::command]
 pub fn add_folder(path: String, state: State<'_, AppState>) -> Result<DeviceInfo, String> {
     let p = PathBuf::from(&path);
-    if !is_ipod_root(&p) {
+    if !is_ipod_root(&p) && !devices::needs_setup(&p) {
         return Err(format!(
             "{path} isn't an iPod (there's no iPod_Control/iTunes/iTunesDB inside it). Chinotto can only open iPods so far; other players are coming."
         ));
@@ -248,7 +248,7 @@ pub fn startup_folder(state: State<'_, AppState>) -> Option<String> {
         .filter(|a| !a.to_string_lossy().starts_with('-'))
         .or_else(|| std::env::var_os("CHINOTTO_OPEN"))
         .map(PathBuf::from)?;
-    if is_ipod_root(&p) {
+    if is_ipod_root(&p) || devices::needs_setup(&p) {
         state.add_manual_root(p.clone());
         Some(p.to_string_lossy().into_owned())
     } else {

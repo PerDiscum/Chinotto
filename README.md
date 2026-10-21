@@ -54,8 +54,25 @@ disk replaying it. The `hfsprogs` package adds `fsck.hfsplus`, which clears
 the read-only state Linux uses after an iPod was unplugged without ejecting.
 
 **Switching to FAT32** means restoring the iPod, which erases it: use iTunes
-or Finder on a Windows PC, or on a Mac with the iPod set to the Windows
-format, then copy the music back.
+on a Windows PC (a virtual machine works); a Mac's Finder always restores to
+the Mac format. Then copy the music back.
+
+## Setting up an iPod without iTunes
+
+An iPod with no music database (formatted or restored without iTunes, or
+with its database lost) shows up under Devices with **Set Up…**; any other
+drive can be chosen with **File → Set Up iPod…**. Chinotto creates the
+database and folders, records the model, and can add back the songs already
+in `iPod_Control/Music`, with their covers. Nothing else on the drive changes.
+
+The iPod classic and nano 3G need their FireWire ID for the database
+checksum (without it they show no music). It's the iPod's USB serial number;
+Chinotto reads it from the system, or you can type it in.
+
+**Rebuild Database…** (right-click the iPod) replaces a broken database the
+same way. The old one isn't deleted: it's moved, with the artwork, to
+`iPod_Control/iTunes/Chinotto Backups/Before rebuild <time>/`. Playlists,
+play counts and ratings are lost.
 
 ## Getting the apps
 

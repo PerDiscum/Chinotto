@@ -314,6 +314,41 @@ impl Database {
         }
     }
 
+    /// Add a music file that's already on the iPod (under `iPod_Control/Music`)
+    /// to the library, without copying it: for rebuilding a lost database.
+    pub fn add_existing(&mut self, file: &Path, info: &TrackInfo) -> Result<u64> {
+        let rel = file.strip_prefix(&self.root).map_err(|_| Error(format!("{} isn't on this iPod", file.display())))?;
+        // libgpod's form: ":iPod_Control:Music:F00:ABCD.mp3".
+        let ipod_path: String = rel.components().map(|c| format!(":{}", c.as_os_str().to_string_lossy())).collect();
+        let size = std::fs::metadata(file)?.len();
+        let size = u32::try_from(size).map_err(|_| Error(format!("{} is larger than 4 GB", file.display())))?;
+        unsafe {
+            let t = itdb_track_new();
+            for f in info.fields() {
+                apply(t, &f);
+            }
+            set_str(&mut (*t).filetype, info.filetype.as_deref());
+            set_str(&mut (*t).ipod_path, Some(&ipod_path));
+            (*t).transferred = 1;
+            (*t).size = size;
+            (*t).tracklen = info.length_ms;
+            (*t).bitrate = info.bitrate_kbps;
+            (*t).samplerate = info.sample_rate.min(u16::MAX as u32) as u16;
+            (*t).mediatype = 1;
+            let now = unix_now();
+            (*t).time_added = now;
+            (*t).time_modified = now;
+            (*t).has_artwork = 2;
+            (*t).visible = 1;
+            itdb_track_add(self.itdb, t, -1);
+            let mpl = itdb_playlist_mpl(self.itdb);
+            if !mpl.is_null() {
+                itdb_playlist_add_track(mpl, t, -1);
+            }
+            Ok((*t).dbid)
+        }
+    }
+
     /// Remove tracks from the library and every playlist. Their music files are
     /// deleted from the iPod after the next successful save.
     pub fn remove_tracks(&mut self, dbids: &[u64]) -> Result<()> {
@@ -453,6 +488,55 @@ impl Database {
         }
         Ok(backup)
     }
+}
+
+/// Set up an iPod that has no database: libgpod creates the folders
+/// (`iPod_Control/Music/F00…`, `iTunes`, `Device`), records `model` (e.g.
+/// "xC297") in SysInfo, and writes an empty database named `name`.
+///
+/// Refuses when a database is already there (see [`set_aside_database`]).
+/// For models that need a checksum, SysInfo must already hold the
+/// FirewireGuid, or the iPod will show no music.
+pub fn init_ipod(root: &Path, model: Option<&str>, name: &str) -> Result<()> {
+    if root.join("iPod_Control/iTunes/iTunesDB").exists() {
+        return Err(Error("This iPod already has a database".into()));
+    }
+    let c_root = CString::new(root.to_string_lossy().as_bytes()).map_err(|_| Error("bad path".into()))?;
+    let c_model = model.map(|m| CString::new(m).map_err(|_| Error("bad model".into()))).transpose()?;
+    let c_name = CString::new(name).map_err(|_| Error("bad name".into()))?;
+    let mut err: *mut GError = ptr::null_mut();
+    let ok = unsafe { itdb_init_ipod(c_root.as_ptr(), c_model.as_ref().map_or(ptr::null(), |m| m.as_ptr()), c_name.as_ptr(), &mut err) };
+    if ok == 0 {
+        return Err(unsafe { take_gerror(err, "Couldn't set up the iPod") });
+    }
+    if !err.is_null() {
+        unsafe { g_error_free(err) };
+    }
+    Ok(())
+}
+
+/// Move the iPod's database (and its artwork database) into
+/// `Chinotto Backups/Before rebuild <time>/`, so a new one can be set up.
+/// Nothing is deleted. Returns the folder they went to.
+pub fn set_aside_database(root: &Path) -> Result<PathBuf> {
+    let dest = root.join(BACKUP_DIR).join(format!("Before rebuild {}", utc_stamp(unix_now() as i64)));
+    std::fs::create_dir_all(&dest)?;
+    let itunes = root.join("iPod_Control/iTunes/iTunesDB");
+    if itunes.exists() {
+        std::fs::rename(&itunes, dest.join("iTunesDB"))?;
+    }
+    // Other files the iPod keeps beside the database describe the old one.
+    for extra in ["iTunesSD", "iTunesPState", "iTunesStats", "Play Counts", "OTGPlaylistInfo"] {
+        let p = root.join("iPod_Control/iTunes").join(extra);
+        if p.exists() {
+            std::fs::rename(&p, dest.join(extra))?;
+        }
+    }
+    let art = root.join("iPod_Control/Artwork");
+    if art.exists() {
+        std::fs::rename(&art, dest.join("Artwork"))?;
+    }
+    Ok(dest)
 }
 
 /// The checksum scheme an iTunesDB header declares (0 none, 1 hash58,
