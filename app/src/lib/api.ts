@@ -91,14 +91,16 @@ export async function pickImage(): Promise<string | null> {
 }
 
 /** Save a cover (ArtworkDB image id) as a PNG; asks where. Returns false if cancelled. */
-export async function saveCover(imageId: number, name: string): Promise<boolean> {
+/** Save a cover: an iPod song's (by artwork id) or a library/Scratch song's (by dbid). */
+export async function saveCover(from: number | string, name: string): Promise<boolean> {
   const dest = await save({
     title: "Save Cover",
     defaultPath: `${name.replace(/[/\\:*?"<>|]/g, "-").trim() || "Cover"}.png`,
     filters: [{ name: "PNG image", extensions: ["png"] }],
   });
   if (!dest) return false;
-  await invoke<void>("save_cover", { image: imageId, dest });
+  if (typeof from === "string") await invoke<void>("save_file_cover", { dbid: from, dest });
+  else await invoke<void>("save_cover", { image: from, dest });
   return true;
 }
 /** The clipboard's image, kept in a temporary file; returns its path. */

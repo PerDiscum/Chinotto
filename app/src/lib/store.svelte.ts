@@ -562,9 +562,10 @@ class Store {
 
   /** Save a song's cover to a PNG file. */
   async saveCover(t: Track) {
-    if (!t.art) return;
+    if (!t.art && !t.hasCover) return;
     try {
-      await api.saveCover(t.art, t.album || t.title || "Cover");
+      const fromFile = t.dbid.startsWith("lib:") || t.dbid.startsWith("scratch:");
+      await api.saveCover(fromFile ? t.dbid : t.art, t.album || t.title || "Cover");
     } catch (e) {
       this.error = String(e);
     }

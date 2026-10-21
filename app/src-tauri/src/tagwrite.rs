@@ -80,8 +80,18 @@ fn apply(tag: &mut Tag, fields: &[Field], cover: Option<&CoverChange>) {
     }
     match cover {
         Some(CoverChange::Set(bytes, mime)) => {
-            tag.remove_picture_type(PictureType::CoverFront);
+            // The new cover goes first, replacing the front cover. MP4 files
+            // don't mark a picture as "front" (they read back as Other), so
+            // those go too; back covers, booklets and the like stay.
+            let keep: Vec<Picture> =
+                tag.pictures().iter().filter(|p| !matches!(p.pic_type(), PictureType::CoverFront | PictureType::Other)).cloned().collect();
+            while !tag.pictures().is_empty() {
+                tag.remove_picture(0);
+            }
             tag.push_picture(Picture::unchecked(bytes.clone()).pic_type(PictureType::CoverFront).mime_type(mime.clone()).build());
+            for p in keep {
+                tag.push_picture(p);
+            }
         }
         Some(CoverChange::Remove) => {
             while !tag.pictures().is_empty() {
@@ -184,6 +194,12 @@ mod tests {
             image::DynamicImage::ImageRgb8(img).write_to(&mut std::io::Cursor::new(&mut v), image::ImageFormat::Png).unwrap();
             v
         };
+        let blue = {
+            let img = image::RgbImage::from_pixel(8, 8, image::Rgb([30, 30, 200]));
+            let mut v = Vec::new();
+            image::DynamicImage::ImageRgb8(img).write_to(&mut std::io::Cursor::new(&mut v), image::ImageFormat::Png).unwrap();
+            v
+        };
         for ext in ["mp3", "m4a", "alac.m4a", "flac", "ogg", "wav", "aiff"] {
             let from = src.join(format!("sine-440-3s.{ext}"));
             if !from.is_file() {
@@ -206,6 +222,11 @@ mod tests {
             assert_eq!(t.album_artist.as_deref(), Some("Various"), "{ext}");
             assert_eq!((t.year, t.track_nr, t.compilation), (2001, 3, true), "{ext}");
             assert!(pic, "{ext}: cover");
+            // A second cover replaces the first (it must not sit behind it).
+            write(&to, &[], Some(&CoverChange::Set(blue.clone(), MimeType::Png))).unwrap_or_else(|e| panic!("{ext}: {e}"));
+            let tagged = lofty::read_from_path(&to).unwrap();
+            let all: Vec<_> = tagged.tags().iter().flat_map(|t| t.pictures().iter().map(|p| p.data().to_vec())).collect();
+            assert_eq!(all, vec![blue.clone()], "{ext}: only the new cover");
             // No working copies left behind.
             assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1, "{ext}");
             std::fs::remove_file(&to).unwrap();

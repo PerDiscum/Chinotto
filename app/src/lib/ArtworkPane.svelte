@@ -21,10 +21,10 @@
       x: e.clientX,
       y: e.clientY,
       items: [
-        { label: t("Save Cover As…"), disabled: !track?.art || failed, action: () => track && store.saveCover(track) },
+        { label: t("Save Cover As…"), disabled: !(track?.art || track?.hasCover) || failed, action: () => track && store.saveCover(track) },
         {
           label: tn(n, "Paste Cover to Selected Song", "Paste Cover to {n} Selected Songs"),
-          disabled: !n || !store.writable || !!store.busy || store.source.kind === "library",
+          disabled: !n || !store.writable || !!store.busy,
           action: () => store.pasteCover(targets),
         },
       ],

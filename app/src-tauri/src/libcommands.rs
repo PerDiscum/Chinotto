@@ -350,6 +350,22 @@ pub fn track_file(app: &AppHandle, dbid: &str) -> Result<PathBuf, String> {
     Ok(path)
 }
 
+/// Save a library or Scratch song's cover (embedded, or the folder's picture)
+/// as a PNG file at `dest`.
+#[tauri::command]
+pub async fn save_file_cover(app: AppHandle, dbid: String, dest: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let file = if dbid.starts_with("scratch:") { crate::scratch::track_file(&app, &dbid)? } else { track_file(&app, &dbid)? };
+        let bytes = crate::tags::embedded_cover(&file)
+            .or_else(|| std::fs::read(library::folder_cover(file.parent()?)?).ok())
+            .ok_or("This song has no cover")?;
+        let img = crate::cover::decode(&bytes)?;
+        img.save_with_format(&dest, image::ImageFormat::Png).map_err(|e| format!("Couldn't save the cover: {e}"))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 // ---- libart: /<library>-<song>-<px> → JPEG cover ----
 
 pub fn handle_art(app: &AppHandle, req: &Request<Vec<u8>>) -> HttpResponse<Vec<u8>> {

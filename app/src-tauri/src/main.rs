@@ -89,6 +89,7 @@ fn main() {
             libcommands::lib_set_playlist_tracks,
             libcommands::lib_remove_tracks,
             libcommands::lib_edit_tracks,
+            libcommands::save_file_cover,
             scratch::scratch_view,
             scratch::scratch_add,
             scratch::scratch_remove,
