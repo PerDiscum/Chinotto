@@ -8,9 +8,16 @@ import { t } from "./i18n";
 
 export const collator = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
 
+/** Rank of each value in sorted order; values the collator counts as equal
+ *  ("Portishead", "portishead ") share a rank, so they sort as one group. */
 function ranks(values: string[]): Uint32Array {
   const uniq = [...new Set(values)].sort(collator.compare);
-  const m = new Map(uniq.map((v, i) => [v, i]));
+  const m = new Map<string, number>();
+  let r = 0;
+  uniq.forEach((v, i) => {
+    if (i && collator.compare(uniq[i - 1].trim(), v.trim()) !== 0) r++;
+    m.set(v, r);
+  });
   return Uint32Array.from(values, (v) => m.get(v)!);
 }
 
@@ -87,7 +94,8 @@ export class TrackIndex {
     const primary: Record<SortKey, (a: Track, b: Track) => number> = {
       title: (a, b) => this.rTitle[p(a)] - this.rTitle[p(b)] || artistOrder(a, b),
       time: (a, b) => a.lengthMs - b.lengthMs,
-      artist: artistOrder,
+      // The Artist column sorts by the artist it shows, then each album by year and title.
+      artist: (a, b) => this.rArtist[p(a)] - this.rArtist[p(b)] || this.albumYear[p(a)] - this.albumYear[p(b)] || albumOrder(a, b),
       album: albumOrder,
       genre: (a, b) => this.rGenre[p(a)] - this.rGenre[p(b)] || artistOrder(a, b),
       year: (a, b) => a.year - b.year || artistOrder(a, b),
