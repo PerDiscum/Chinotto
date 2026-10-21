@@ -29,6 +29,34 @@ Ogg Vorbis too, for when it has its own library).
 - `.github/workflows/` — `ci.yml` checks every push on Linux and macOS;
   `build.yml` builds the installable apps.
 
+## iPod disk formats (Mac or Windows formatted)
+
+Chinotto works with the iPod's files once your computer has mounted it, so
+the formats it can use are the ones your system supports:
+
+| iPod formatted as | macOS | Linux |
+|---|---|---|
+| Windows (FAT32) | read and write | read and write |
+| Mac (HFS+), journaling off | read and write | read and write |
+| Mac (HFS+), journaling on (iTunes' default) | read and write | **read only** |
+
+**On Linux, FAT32 is the safe choice.** Every system reads and writes it with
+no setup. Its limits don't matter much for an iPod: files can't be over 4 GB
+(songs never are), and it copes less well with being unplugged without
+ejecting, so eject first.
+
+**A Mac-formatted iPod on Linux:** Linux's HFS+ driver won't write to a
+journaled volume. Turn journaling off once, on a Mac (Disk Utility, or
+`diskutil disableJournal /Volumes/<iPod name>`); after that Linux can write
+to it too. Don't force a journaled iPod writable on Linux (`mount -o
+force,rw`): the journal isn't kept up to date, and a Mac may later damage the
+disk replaying it. The `hfsprogs` package adds `fsck.hfsplus`, which clears
+the read-only state Linux uses after an iPod was unplugged without ejecting.
+
+**Switching to FAT32** means restoring the iPod, which erases it: use iTunes
+or Finder on a Windows PC, or on a Mac with the iPod set to the Windows
+format, then copy the music back.
+
 ## Getting the apps
 
 On GitHub: Actions → **Build apps** → Run workflow. When it finishes, the
