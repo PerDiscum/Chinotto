@@ -193,6 +193,11 @@ Everything decided and learned so far, so work can continue in a new session.
   (and other formats the device can't play) transcoded to MP3 or AAC into a
   temporary folder just before copying to the iPod/device, then deleted;
   never added to the computer's library. Goes with the FFmpeg helper.
+- **To do, after conversion (requested 2026-10-21): Burn Playlist to Disc.**
+  Right-click a playlist → Burn…: audio CD (decode to 16-bit/44.1 kHz WAV/AIFF
+  in a temporary folder, warn past ~80 min, gap 2 s or none) or an MP3 data
+  disc. macOS: `drutil burn -audio <folder>` (built in; CD-Text support
+  unverified). Linux: wodim or cdrdao (tell the user which to install).
 - Translation notes: German always capitalises Du/Dein/Deinem/Deiner/Deines.
   The developer translates; Claude only corrects grammar, no other changes.
 
