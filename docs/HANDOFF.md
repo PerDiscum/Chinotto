@@ -219,6 +219,18 @@ Everything decided and learned so far, so work can continue in a new session.
 - File associations (bundle.fileAssociations) use rank Alternate, so
   Chinotto never becomes the default player by itself.
 
+## Small fixes requested (2026-10-21)
+
+- Keyboard shortcuts throughout (⌘I Song Details already works in the song
+  list; extend to the album views, sidebar, and add the usual set).
+- Clicking a blank area (or elsewhere) deselects songs.
+- macOS menu bar (File, Edit, View, Controls…) filled with Chinotto's
+  actions: New Library, Open File, Open Device, Repeat/Shuffle, etc.
+- Compilation flag: also under the Sorting tab of the info window (it's on
+  the Info tab today as "Part of a compilation").
+- Rename "Get Info" to "Song Details" everywhere.
+- Device pictures: new icon pack from the developer (to be sent).
+
 Order chosen: confirm editing on the nano → **playback** (done) → artwork (done) → icon chooser → shuffle/repeat → playlist reordering → column browser fixes and Format/Bitrate columns → media library.
 
 ## Status (2026-10-20)
