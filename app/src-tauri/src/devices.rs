@@ -128,7 +128,6 @@ impl Scanner {
         }
         out
     }
-
 }
 
 /// Poll every two seconds and tell the window when the set of iPods changes.
