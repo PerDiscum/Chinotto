@@ -31,15 +31,27 @@ struct Track {
     std::uint32_t id = 0;
     std::string title;
     std::string artist;
+    std::string albumArtist;
     std::string album;
     std::string genre;
     std::string composer;
+    std::string comment;
+    std::string grouping;
+    std::string sortArtist;
+    std::string sortTitle;
+    std::string sortAlbum;
+    std::string sortAlbumArtist;
+    std::string sortComposer;
     std::string location;  // iPod-style path, ':' separated
     std::uint32_t lengthMs = 0;
     std::uint32_t sizeBytes = 0;
     std::uint32_t trackNumber = 0;
+    std::uint32_t trackCount = 0;
     std::uint32_t discNumber = 0;
+    std::uint32_t discCount = 0;
     std::uint32_t year = 0;
+    std::uint16_t bpm = 0;
+    std::uint8_t compilation = 0;
     std::uint32_t bitrate = 0;
     std::uint32_t sampleRate = 0;
     std::uint16_t artworkCount = 0;

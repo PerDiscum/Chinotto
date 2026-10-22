@@ -11,6 +11,7 @@
 #include <iterator>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 struct Nano6Playlist {
@@ -30,14 +31,26 @@ struct Nano6Track {
     const char* genre;
     const char* composer;
     const char* location;
+    const char* albumArtist;
+    const char* comment;
+    const char* grouping;
+    const char* sortTitle;
+    const char* sortArtist;
+    const char* sortAlbum;
+    const char* sortAlbumArtist;
+    const char* sortComposer;
     std::uint32_t lengthMs;
     std::uint32_t sizeBytes;
     std::uint32_t trackNumber;
+    std::uint32_t trackCount;
     std::uint32_t discNumber;
+    std::uint32_t discCount;
     std::uint32_t year;
     std::uint32_t bitrate;
     std::uint32_t sampleRate;
     std::uint8_t rating;
+    std::uint8_t compilation;
+    std::uint16_t bpm;
     std::uint16_t artworkCount;
     std::uint32_t artworkSize;
     std::uint8_t hasArtwork;
@@ -121,13 +134,55 @@ extern "C" int chinotto_nano6_stage(const char* rootText,
         if (track.id >= nextTrackId && track.id != UINT32_MAX)
             nextTrackId = track.id + 1;
     }
+    std::unordered_set<std::uint64_t> retainedDbids;
+    retainedDbids.reserve(trackCount);
     for (std::size_t i = 0; i < trackCount; ++i) {
         const Nano6Track& in = tracks[i];
-        if (idByDbid.count(in.dbid)) continue;
         if (!in.dbid || in.location == nullptr || in.location[0] == '\0') {
             report(error, errorCapacity,
-                   "A new Nano 6 song has no persistent id or device location");
+                   "A Nano 6 song has no persistent id or device location");
             return 0;
+        }
+        if (!retainedDbids.insert(in.dbid).second) {
+            report(error, errorCapacity,
+                   "The Nano 6 update contains a duplicate song id");
+            return 0;
+        }
+        const auto existing = std::find_if(
+            library.tracks.begin(), library.tracks.end(),
+            [&](const podbox::Track& track) { return track.dbid == in.dbid; });
+        if (existing != library.tracks.end()) {
+            existing->title = in.title == nullptr ? "" : in.title;
+            existing->artist = in.artist == nullptr ? "" : in.artist;
+            existing->album = in.album == nullptr ? "" : in.album;
+            existing->genre = in.genre == nullptr ? "" : in.genre;
+            existing->composer = in.composer == nullptr ? "" : in.composer;
+            existing->albumArtist = in.albumArtist == nullptr ? "" : in.albumArtist;
+            existing->comment = in.comment == nullptr ? "" : in.comment;
+            existing->grouping = in.grouping == nullptr ? "" : in.grouping;
+            existing->sortTitle = in.sortTitle == nullptr ? "" : in.sortTitle;
+            existing->sortArtist = in.sortArtist == nullptr ? "" : in.sortArtist;
+            existing->sortAlbum = in.sortAlbum == nullptr ? "" : in.sortAlbum;
+            existing->sortAlbumArtist = in.sortAlbumArtist == nullptr ? "" : in.sortAlbumArtist;
+            existing->sortComposer = in.sortComposer == nullptr ? "" : in.sortComposer;
+            existing->location = in.location;
+            existing->lengthMs = in.lengthMs;
+            existing->sizeBytes = in.sizeBytes;
+            existing->trackNumber = in.trackNumber;
+            existing->trackCount = in.trackCount;
+            existing->discNumber = in.discNumber;
+            existing->discCount = in.discCount;
+            existing->year = in.year;
+            existing->compilation = in.compilation;
+            existing->bpm = in.bpm;
+            existing->bitrate = in.bitrate;
+            existing->sampleRate = in.sampleRate;
+            existing->rating = in.rating;
+            existing->artworkCount = in.artworkCount;
+            existing->artworkSize = in.artworkSize;
+            existing->hasArtwork = in.hasArtwork;
+            existing->mhiiLink = in.mhiiLink;
+            continue;
         }
         if (nextTrackId == 0 || nextTrackId == UINT32_MAX) {
             report(error, errorCapacity, "No free Nano 6 track id is available");
@@ -141,12 +196,24 @@ extern "C" int chinotto_nano6_stage(const char* rootText,
         track.album = in.album == nullptr ? "" : in.album;
         track.genre = in.genre == nullptr ? "" : in.genre;
         track.composer = in.composer == nullptr ? "" : in.composer;
+        track.albumArtist = in.albumArtist == nullptr ? "" : in.albumArtist;
+        track.comment = in.comment == nullptr ? "" : in.comment;
+        track.grouping = in.grouping == nullptr ? "" : in.grouping;
+        track.sortTitle = in.sortTitle == nullptr ? "" : in.sortTitle;
+        track.sortArtist = in.sortArtist == nullptr ? "" : in.sortArtist;
+        track.sortAlbum = in.sortAlbum == nullptr ? "" : in.sortAlbum;
+        track.sortAlbumArtist = in.sortAlbumArtist == nullptr ? "" : in.sortAlbumArtist;
+        track.sortComposer = in.sortComposer == nullptr ? "" : in.sortComposer;
         track.location = in.location;
         track.lengthMs = in.lengthMs;
         track.sizeBytes = in.sizeBytes;
         track.trackNumber = in.trackNumber;
+        track.trackCount = in.trackCount;
         track.discNumber = in.discNumber;
+        track.discCount = in.discCount;
         track.year = in.year;
+        track.compilation = in.compilation;
+        track.bpm = in.bpm;
         track.bitrate = in.bitrate;
         track.sampleRate = in.sampleRate;
         track.rating = in.rating;
@@ -158,6 +225,28 @@ extern "C" int chinotto_nano6_stage(const char* rootText,
         track.dateAdded = std::time(nullptr);
         library.tracks.push_back(std::move(track));
         idByDbid[in.dbid] = library.tracks.back().id;
+    }
+    library.tracks.erase(
+        std::remove_if(library.tracks.begin(), library.tracks.end(),
+                       [&](const podbox::Track& track) {
+                           return retainedDbids.count(track.dbid) == 0;
+                       }),
+        library.tracks.end());
+    idByDbid.clear();
+    std::unordered_set<std::uint32_t> retainedTrackIds;
+    retainedTrackIds.reserve(library.tracks.size());
+    for (const podbox::Track& track : library.tracks)
+    {
+        idByDbid[track.dbid] = track.id;
+        retainedTrackIds.insert(track.id);
+    }
+    for (podbox::Playlist& playlist : library.playlists) {
+        playlist.trackIds.erase(
+            std::remove_if(playlist.trackIds.begin(), playlist.trackIds.end(),
+                           [&](std::uint32_t trackId) {
+                               return retainedTrackIds.count(trackId) == 0;
+                           }),
+            playlist.trackIds.end());
     }
     std::vector<podbox::Playlist> changed;
     changed.reserve(playlistCount);

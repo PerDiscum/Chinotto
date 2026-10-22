@@ -139,6 +139,7 @@ Bytes mhit(const Track& t, std::uint64_t fallbackDbid) {
     set32(b, 16, t.id);
     put32(20, 1);  // visible
     put32(24, filetypeMarker(t.location));
+    put8(30, t.compilation);
     const bool mp3 = filetypeMarker(t.location) == 0x4D503320;  // "MP3 "
     put8(29, mp3 ? 1 : 0);
     put8(31, t.rating);
@@ -146,16 +147,19 @@ Bytes mhit(const Track& t, std::uint64_t fallbackDbid) {
     put32(36, t.sizeBytes);
     put32(40, t.lengthMs);
     put32(44, t.trackNumber);
+    put32(48, t.trackCount);
     put32(52, t.year);
     put32(56, t.bitrate);
     put32(60, t.sampleRate << 16);
     put32(80, t.playCount);
     put32(84, t.playCount);
     put32(92, t.discNumber);
+    put32(96, t.discCount);
     put32(104, toMacTime(t.dateAdded));
     put64(112, t.dbid ? t.dbid : fallbackDbid);
     put32(208, t.mediaType ? t.mediaType : 1);
     put16(124, t.artworkCount);
+    put16(122, t.bpm);
     put32(128, t.artworkSize);
     put8(164, t.hasArtwork);
     put32(352, t.mhiiLink);
@@ -172,7 +176,15 @@ Bytes mhit(const Track& t, std::uint64_t fallbackDbid) {
     add(3, t.album);
     add(4, t.artist);
     add(5, t.genre);
+    add(8, t.comment);
+    add(13, t.grouping);
     add(12, t.composer);
+    add(22, t.albumArtist);
+    add(23, t.sortArtist);
+    add(27, t.sortTitle);
+    add(28, t.sortAlbum);
+    add(29, t.sortAlbumArtist);
+    add(30, t.sortComposer);
     // Hand back anything the parser could not model — artwork references,
     // sort keys, album artist — exactly as it arrived.
     body.insert(body.end(), t.extraMhods.begin(), t.extraMhods.end());
