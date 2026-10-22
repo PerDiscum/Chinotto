@@ -29,6 +29,8 @@ struct IpodView<'a> {
     writable: bool,
     /// How songs are converted when copied to it.
     conversion: crate::convert::Conversion,
+    /// What it plays (for the conversion settings).
+    plays: &'static [&'static str],
     playlists: Vec<PlaylistView<'a>>,
     tracks: Vec<TrackView<'a>>,
 }
@@ -181,6 +183,7 @@ pub(crate) fn view(s: &Session, state: &AppState) -> Result<String, String> {
         generation: s.generation,
         has_artwork_db: s.art.is_some(),
         conversion: identity.as_deref().map(|i| state.conversion(i)).unwrap_or_default(),
+        plays: crate::convert::IPOD_PLAYS,
         identity,
         writable,
         playlists: s

@@ -346,7 +346,8 @@ fn identity(cfg: &MscConfig) -> String {
 /// The conversion for this player: AAC only if it plays AAC (else MP3 320).
 fn conversion_for(app: &AppHandle, cfg: &MscConfig, profile: &Profile) -> crate::convert::Conversion {
     let mut c = app.state::<AppState>().conversion(&identity(cfg));
-    if c.target().0 && !profile.plays.contains(&"aac") {
+    // Shown as it will be done: no AAC on this player → MP3 320.
+    if c.format.starts_with("aac") && !profile.plays.contains(&"aac") {
         c.format = "mp3_320".into();
     }
     c
@@ -386,23 +387,6 @@ pub fn msc_set_conversion(path: String, conversion: crate::convert::Conversion, 
     let (_, cfg, _) = player(&path)?;
     app.state::<AppState>().set_conversion(&identity(&cfg), conversion)?;
     msc_state(path, app)
-}
-
-/// Why `file` must be converted for this player, if it must.
-fn needs_converting(file: &Path, profile: &Profile, conv: &crate::convert::Conversion) -> bool {
-    let ext = file.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
-    let kind = match ext.as_str() {
-        "m4a" | "mp4" | "m4b" => {
-            if crate::convert::is_alac(file) {
-                "alac"
-            } else {
-                "aac"
-            }
-        }
-        "oga" => "ogg",
-        e => e,
-    };
-    !profile.plays.contains(&kind) || (kind == "alac" && conv.convert_alac)
 }
 
 /// Characters FAT drives (and Windows) don't allow, and names they choke on.
@@ -477,10 +461,10 @@ pub async fn msc_add(path: String, dbids: Vec<String>, files: Vec<String>, app: 
         let total = sources.len();
         for (i, src) in sources.iter().enumerate() {
             let name = src.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-            let _ = app.emit("add-progress", crate::write::AddProgress { done: i, total, current: name.clone() });
+            let _ = app.emit("add-progress", crate::write::AddProgress { done: i, total, current: crate::tags::label(src) });
             let converted;
-            let f = if needs_converting(src, &profile, &conv) {
-                match crate::convert::convert(src, &tmp.0, &conv, i) {
+            let f = if let Some(target) = conv.plan(src, profile.plays) {
+                match crate::convert::convert(src, &tmp.0, &target, i) {
                     Ok(c) => {
                         converted = c;
                         &converted
@@ -604,6 +588,50 @@ fn img_fits(bytes: &[u8], px: u32) -> bool {
     crate::cover::decode(bytes).is_ok_and(|i| i.width() <= px && i.height() <= px)
 }
 
+/// For editing songs in library `lib`: when it's a player's, the player's
+/// rules (and an error if changes to it are switched off); None for an
+/// ordinary library.
+pub fn edit_rules(app: &AppHandle, lib: &str) -> Result<Option<Profile>, String> {
+    let (device, music) = {
+        let state = app.state::<AppState>();
+        let libs = state.libraries.lock().unwrap();
+        let Some(l) = libs.list.iter().find(|l| l.id == lib) else { return Ok(None) };
+        let Some(d) = l.device.clone() else { return Ok(None) };
+        (d, l.folders.first().cloned().unwrap_or_default())
+    };
+    if !app.state::<AppState>().is_writable(&format!("msc:{device}")) {
+        return Err("Changes to this player are switched off. Turn on “Allow changes” on its page first.".into());
+    }
+    let root = Path::new(&music).ancestors().find(|a| a.join(CONFIG).exists()).ok_or("That player isn't plugged in")?;
+    Ok(player(&root.to_string_lossy()).ok().map(|(_, _, p)| p))
+}
+
+/// After a song on a player was edited: the player's rules again (ID3v2.3,
+/// a small cover, the folder's folder.jpg for a new cover).
+pub fn after_edit(file: &Path, profile: &Profile, cover: Option<&crate::tagwrite::CoverChange>) {
+    let mp3 = file.extension().is_some_and(|e| e.eq_ignore_ascii_case("mp3"));
+    if let (Some((px, max)), Some(crate::tagwrite::CoverChange::Set(bytes, _))) = (profile.small_covers, cover) {
+        if let Ok(jpeg) = small_jpeg(bytes, px, max) {
+            if mp3 {
+                let _ = crate::tagwrite::write(
+                    file,
+                    &[],
+                    Some(&crate::tagwrite::CoverChange::Set(jpeg.clone(), lofty::picture::MimeType::Jpeg)),
+                );
+            }
+            if profile.folder_jpg {
+                if let Some(dir) = file.parent() {
+                    // A new cover for the album: its folder.jpg follows.
+                    let _ = std::fs::write(dir.join("folder.jpg"), &jpeg);
+                }
+            }
+        }
+    }
+    if profile.id3v23 && mp3 {
+        let _ = crate::tagwrite::resave_id3v23(file);
+    }
+}
+
 /// Delete songs (the player library's song ids) from the player. Only files
 /// inside its music folder are touched; folders left empty go too.
 #[tauri::command]
@@ -693,8 +721,8 @@ mod tests {
         );
         let nwz = profiles().into_iter().find(|p| p.key == "sony-nwz").unwrap();
         let conv = crate::convert::Conversion::default();
-        assert!(needs_converting(Path::new("a.flac"), &nwz, &conv));
-        assert!(!needs_converting(Path::new("a.mp3"), &nwz, &conv));
+        assert!(conv.plan(Path::new("a.flac"), nwz.plays).is_some());
+        assert!(conv.plan(Path::new("a.mp3"), nwz.plays).is_none());
     }
 
     /// An MP3 copied for a Walkman has an ID3v2.3 tag, cover kept.

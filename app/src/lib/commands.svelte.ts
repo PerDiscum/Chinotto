@@ -20,7 +20,7 @@ const VIEWS: MusicView[] = ["songs", "albums", "artists", "genres", "composers",
 
 export const run = {
   songDetails: () => store.selected.size && (store.dialog = { kind: "info" }),
-  newPlaylist: () => store.writable && void store.newPlaylist(false),
+  newPlaylist: () => store.playlistsWritable && void store.newPlaylist(false),
   newLibrary: () => (store.dialog = { kind: "library", id: null }),
   openFile: () => void store.pickAndOpenSongs(),
   openDevice: () => void store.openFolder(),
@@ -119,7 +119,7 @@ export async function installMenu() {
   const file = await Submenu.new({
     text: t("File"),
     items: [
-      await item(t("New Playlist"), run.newPlaylist, "CmdOrCtrl+N", () => store.writable),
+      await item(t("New Playlist"), run.newPlaylist, "CmdOrCtrl+N", () => store.playlistsWritable),
       await item(t("New Library…"), run.newLibrary, "CmdOrCtrl+Alt+N"),
       sep,
       await item(t("Open File…"), run.openFile, "CmdOrCtrl+O"),

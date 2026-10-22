@@ -511,6 +511,8 @@ pub async fn lib_edit_tracks(
             Some(crate::tagwrite::CoverChange::Set(bytes, mime))
         }
     };
+    // A player's songs follow its rules (and need its "Allow changes").
+    let rules = crate::msc::edit_rules(&app, &lib)?;
     let paths: Vec<(u32, PathBuf)> = {
         let state = app.state::<AppState>();
         let libs = state.libraries.lock().unwrap();
@@ -524,7 +526,12 @@ pub async fn lib_edit_tracks(
         if !fields.is_empty() || cover.is_some() {
             for (id, path) in &paths {
                 match crate::tagwrite::write(path, &fields, cover.as_ref()) {
-                    Ok(()) => done.push(*id),
+                    Ok(()) => {
+                        if let Some(p) = &rules {
+                            crate::msc::after_edit(path, p, cover.as_ref());
+                        }
+                        done.push(*id)
+                    }
                     Err(e) => problems.push(e),
                 }
             }

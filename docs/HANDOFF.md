@@ -239,6 +239,34 @@ Everything decided and learned so far, so work can continue in a new session.
 
 Order chosen: confirm editing on the nano → **playback** (done) → artwork (done) → icon chooser → shuffle/repeat → playlist reordering → column browser fixes and Format/Bitrate columns → media library.
 
+## Editing on players, progress names, conversion rules (patch 0050)
+
+- Player songs are editable when the player allows changes (store.writable
+  for a player library = its playerStates writable). lib_edit_tracks asks
+  `msc::edit_rules` (refuses when changes are off) and runs
+  `msc::after_edit` per file: ID3v2.3 again (Sony, Sansa), small cover and a
+  new folder.jpg for a new cover (Sansa). Player playlists stay read-only
+  (`store.playlistsWritable`; editablePlaylist is null for players).
+- Progress while copying shows "Title / Artist / Album" (`tags::label`) for
+  the iPod, players and setup.
+- Conversion: `Conversion { format, convert_alac, advanced, rules }`.
+  `plan(path, plays)` → None (copy) or a target: simple = what the device
+  can't play (+ ALAC if asked) → format; advanced = per kind
+  (flac, alac, aac, mp3, ogg, opus, wav, aiff, wma) "keep" or aac256/aac128/
+  mp3_320/mp3_192/alac; "keep" of something it can't play, ALAC for a device
+  without ALAC → the simple choice; AAC on a device without AAC → MP3 320.
+  New: Apple Lossless encoding (16-bit; afconvert / ffmpeg). WMA can't be
+  decoded yet (FFmpeg helper later). iPods: `convert::IPOD_PLAYS`.
+  UI: ConversionSettings.svelte on both device pages.
+
+## Remember: covers on players that also do MTP
+
+- The Sansa e260 (and Clip/Fuze, and Walkmans) can run as MSC or MTP. As MSC
+  (files), SanDisk firmware shows only folder.jpg (patch 0049). Over MTP,
+  covers go through the device's database (WMP sends an album object with a
+  "representative sample" image), so the MTP code must send covers that way
+  for these players, not as folder.jpg. Check per device when MTP comes.
+
 ## Sansa covers: folder.jpg (patch 0049)
 
 - Tested on the developer's e260 v2 (SanDisk firmware 03.01.16A, Rockbox 3.15

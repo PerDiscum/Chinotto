@@ -141,6 +141,8 @@ export interface IpodView {
   writable: boolean;
   /** How songs are converted when copied to it. */
   conversion: Conversion;
+  /** What it plays (for the conversion settings). */
+  plays: string[];
   playlists: Playlist[];
   tracks: Track[];
 }
@@ -235,6 +237,10 @@ export interface Conversion {
   format: string;
   /** Convert Apple Lossless too (it plays on iPods but is large). */
   convertAlac: boolean;
+  /** Use `rules` (one per kind of file) instead of the simple choice. */
+  advanced: boolean;
+  /** Kind ("flac", "alac", "aac", "mp3", "ogg", "opus", "wav", "aiff", "wma") → "keep" or a target. */
+  rules: Record<string, string>;
 }
 
 /** A player's page settings (see msc.rs). */

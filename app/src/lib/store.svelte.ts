@@ -216,8 +216,12 @@ class Store {
 
   /** What's shown can be changed: a library always; the iPod when allowed. */
   get writable() {
-    // A player set up as a drive is read-only for now (writing to it comes next).
-    if (this.source.kind === "library") return !!this.libView && !this.isDeviceLibrary(this.source.lib);
+    if (this.source.kind === "library") {
+      // A player's songs can be changed when it allows changes.
+      const player = this.playerOf(this.source.lib);
+      if (player) return !!this.libView && !!this.playerStates[player.path]?.writable;
+      return !!this.libView && !this.isDeviceLibrary(this.source.lib);
+    }
     return !!this.ipod?.writable;
   }
 
@@ -231,10 +235,17 @@ class Store {
     return this.libraries.filter((l) => !l.device);
   }
 
+  /** Playlists can be made and changed here (a player's are read from its files; changing them needs MTP). */
+  get playlistsWritable(): boolean {
+    const s = this.source;
+    return this.writable && !(s.kind === "library" && this.isDeviceLibrary(s.lib));
+  }
+
   /** The regular (non-library, non-smart) playlist being shown, if any. */
   get editablePlaylist() {
     const s = this.source;
     if (s.kind === "library") {
+      if (this.isDeviceLibrary(s.lib)) return null;
       const p = this.libView?.view.playlists.find((x) => x.id === s.id);
       return p && !p.master ? p : null;
     }
@@ -304,6 +315,7 @@ class Store {
     this.devices = list;
     // Players set up as drives: their songs (and playlists, for the sidebar).
     for (const d of list) if (d.kind === "msc" && d.library && !this.libViews[d.library]) void this.loadPlayer(d.library);
+    for (const d of list) if (d.kind === "msc" && !this.playerStates[d.path]) void this.loadPlayerState(d.path);
     // The player being shown was unplugged.
     const s = this.source;
     if (s.kind === "library" && this.isDeviceLibrary(s.lib) && !list.some((d) => d.library === s.lib)) this.select({ kind: "none" });
@@ -853,6 +865,7 @@ class Store {
   }
 
   async newPlaylist(fromSelection: boolean) {
+    if (!this.playlistsWritable) return;
     const s = this.source;
     if (s.kind === "library") {
       const ids = fromSelection ? this.selectedTracks.map((t) => t.id) : [];

@@ -18,7 +18,12 @@ use std::process::Command;
 use chinotto_player::decode::Source;
 use serde::{Deserialize, Serialize};
 
-/// What a device gets, set on its page.
+/// What a device gets, set on its page. Simple: everything it can't play
+/// becomes `format` (and Apple Lossless too, if `convert_alac`). Advanced
+/// (`advanced`): each kind of file has its own rule in `rules`
+/// (kind → "keep", "aac256", "aac128", "mp3_320", "mp3_192" or "alac");
+/// a kind without a rule, or kept but not playable there, falls back to the
+/// simple choice.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Conversion {
@@ -26,34 +31,70 @@ pub struct Conversion {
     pub format: String,
     /// Convert Apple Lossless too (it plays on iPods, but takes much space).
     pub convert_alac: bool,
+    pub advanced: bool,
+    pub rules: std::collections::BTreeMap<String, String>,
 }
 
 impl Default for Conversion {
     fn default() -> Self {
-        Conversion { format: "aac256".into(), convert_alac: true }
+        Conversion { format: "aac256".into(), convert_alac: true, advanced: false, rules: Default::default() }
     }
+}
+
+/// What an iPod plays.
+pub const IPOD_PLAYS: &[&str] = &["mp3", "aac", "alac", "wav", "aiff"];
+
+/// The kind of a music file (for the rules), from its extension (and, for
+/// .m4a, whether it's Apple Lossless).
+pub fn kind_of(path: &Path) -> Option<&'static str> {
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+    Some(match ext.as_str() {
+        "flac" => "flac",
+        "m4a" | "mp4" | "m4b" => {
+            if is_alac(path) {
+                "alac"
+            } else {
+                "aac"
+            }
+        }
+        "aac" => "aac",
+        "mp3" => "mp3",
+        "ogg" | "oga" => "ogg",
+        "opus" => "opus",
+        "wav" => "wav",
+        "aif" | "aiff" => "aiff",
+        "wma" => "wma",
+        _ => return None,
+    })
 }
 
 impl Conversion {
-    pub(crate) fn target(&self) -> (bool, u32) {
-        match self.format.as_str() {
-            "aac128" => (true, 128),
-            "mp3_320" => (false, 320),
-            "mp3_192" => (false, 192),
-            _ => (true, 256),
-        }
-    }
-}
-
-/// Why a file needs converting for an iPod, if it does.
-pub fn needs_converting(path: &Path, conv: &Conversion) -> Option<&'static str> {
-    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
-    match ext.as_str() {
-        "flac" => Some("FLAC"),
-        "ogg" | "oga" => Some("Ogg Vorbis"),
-        "opus" => Some("Opus"),
-        "m4a" if conv.convert_alac && is_alac(path) => Some("Apple Lossless"),
-        _ => None,
+    /// What `path` becomes on a device that plays `plays`: None to copy it as
+    /// it is, else the target ("aac256", …, "alac").
+    pub fn plan(&self, path: &Path, plays: &[&str]) -> Option<String> {
+        let kind = kind_of(path)?;
+        let can = |k: &str| plays.contains(&k);
+        // The simple choice, made playable (no AAC → MP3 320).
+        let simple = || if self.format.starts_with("aac") && !can("aac") { "mp3_320".to_string() } else { self.format.clone() };
+        let rule = if self.advanced { self.rules.get(kind).map(String::as_str).unwrap_or("keep") } else { "" };
+        let target = match rule {
+            "keep" => {
+                if can(kind) {
+                    return None;
+                }
+                simple()
+            }
+            "" => {
+                if can(kind) && !(kind == "alac" && self.convert_alac) {
+                    return None;
+                }
+                simple()
+            }
+            "alac" if !can("alac") => simple(),
+            t if t.starts_with("aac") && !can("aac") => "mp3_320".into(),
+            t => t.to_string(),
+        };
+        Some(target)
     }
 }
 
@@ -97,16 +138,18 @@ fn out_rate(rate: u32) -> u32 {
     }
 }
 
-/// Convert `src` into `dir`; returns the new file (with the original's tags and cover).
-pub fn convert(src: &Path, dir: &Path, conv: &Conversion, n: usize) -> Result<PathBuf, String> {
+/// Convert `src` into `dir` as `target` (see [`Conversion::plan`]); returns
+/// the new file (with the original's tags and cover).
+pub fn convert(src: &Path, dir: &Path, target: &str, n: usize) -> Result<PathBuf, String> {
     let name = src.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    let (aac, kbps) = conv.target();
-    let out = dir.join(format!("{n:05}.{}", if aac { "m4a" } else { "mp3" }));
+    let out = dir.join(format!("{n:05}.{}", if target.starts_with("mp3") { "mp3" } else { "m4a" }));
     let mut source = Source::open(src).map_err(|e| format!("{name}: {e}"))?;
-    if aac {
-        encode_aac(src, &mut source, &out, kbps, dir, n)?;
-    } else {
-        encode_mp3(&mut source, &out, kbps)?;
+    match target {
+        "alac" => encode_alac(src, &mut source, &out, dir, n)?,
+        "aac128" => encode_aac(src, &mut source, &out, 128, dir, n)?,
+        "mp3_320" => encode_mp3(&mut source, &out, 320)?,
+        "mp3_192" => encode_mp3(&mut source, &out, 192)?,
+        _ => encode_aac(src, &mut source, &out, 256, dir, n)?,
     }
     copy_tags(src, &out).map_err(|e| format!("{name}: {e}"))?;
     Ok(out)
@@ -152,6 +195,12 @@ fn encode_mp3(source: &mut Source, out: &Path, kbps: u32) -> Result<(), String> 
 
 /// 24-bit PCM WAV of the decoded audio (afconvert's input).
 fn write_wav(source: &mut Source, out: &Path) -> Result<u32, String> {
+    write_wav_bits(source, out, 24)
+}
+
+/// PCM WAV of the decoded audio, 16 or 24 bits.
+fn write_wav_bits(source: &mut Source, out: &Path, bits: u16) -> Result<u32, String> {
+    let bytes_per = (bits / 8) as u32;
     let rate = source.rate;
     let mut f = BufWriter::new(File::create(out).map_err(|e| e.to_string())?);
     let header = |data: u32| {
@@ -163,9 +212,9 @@ fn write_wav(source: &mut Source, out: &Path) -> Result<u32, String> {
         h.extend_from_slice(&1u16.to_le_bytes()); // PCM
         h.extend_from_slice(&2u16.to_le_bytes());
         h.extend_from_slice(&rate.to_le_bytes());
-        h.extend_from_slice(&(rate * 6).to_le_bytes());
-        h.extend_from_slice(&6u16.to_le_bytes());
-        h.extend_from_slice(&24u16.to_le_bytes());
+        h.extend_from_slice(&(rate * 2 * bytes_per).to_le_bytes());
+        h.extend_from_slice(&(2 * bytes_per as u16).to_le_bytes());
+        h.extend_from_slice(&bits.to_le_bytes());
         h.extend_from_slice(b"data");
         h.extend_from_slice(&data.to_le_bytes());
         h
@@ -173,10 +222,15 @@ fn write_wav(source: &mut Source, out: &Path) -> Result<u32, String> {
     f.write_all(&header(0)).map_err(|e| e.to_string())?;
     let mut bytes: u64 = 0;
     stereo_chunks(source, |pcm| {
-        let mut b = Vec::with_capacity(pcm.len() * 3);
+        let mut b = Vec::with_capacity(pcm.len() * bytes_per as usize);
         for s in pcm {
-            let v = (s.clamp(-1.0, 1.0) * 8_388_607.0).round() as i32;
-            b.extend_from_slice(&v.to_le_bytes()[..3]);
+            if bits == 16 {
+                let v = (s.clamp(-1.0, 1.0) * 32_767.0).round() as i16;
+                b.extend_from_slice(&v.to_le_bytes());
+            } else {
+                let v = (s.clamp(-1.0, 1.0) * 8_388_607.0).round() as i32;
+                b.extend_from_slice(&v.to_le_bytes()[..3]);
+            }
         }
         bytes += b.len() as u64;
         f.write_all(&b).map_err(|e| e.to_string())
@@ -247,6 +301,37 @@ fn encode_aac(src: &Path, source: &mut Source, out: &Path, kbps: u32, dir: &Path
     }
 }
 
+/// Apple Lossless (16-bit, which every iPod plays): afconvert on macOS,
+/// ffmpeg on Linux.
+fn encode_alac(src: &Path, source: &mut Source, out: &Path, dir: &Path, n: usize) -> Result<(), String> {
+    if cfg!(target_os = "macos") {
+        let wav = dir.join(format!("{n:05}.wav"));
+        write_wav_bits(source, &wav, 16)?;
+        let r = run(
+            Command::new("/usr/bin/afconvert").args(["-f", "m4af", "-d", "alac"]).arg(&wav).arg(out),
+            "Apple Lossless encoder (afconvert)",
+        );
+        let _ = std::fs::remove_file(&wav);
+        r
+    } else {
+        run(
+            Command::new("ffmpeg")
+                .args(["-nostdin", "-loglevel", "error", "-y", "-i"])
+                .arg(src)
+                .args(["-vn", "-map_metadata", "-1", "-c:a", "alac", "-sample_fmt", "s16p", "-ac", "2"])
+                .arg(out),
+            "Apple Lossless encoder (ffmpeg)",
+        )
+        .map_err(|e| {
+            if e.contains("No such file") || e.contains("not found") {
+                "Converting to Apple Lossless on Linux needs ffmpeg: install it (e.g. sudo apt install ffmpeg)".to_string()
+            } else {
+                e
+            }
+        })
+    }
+}
+
 /// The original's tags and cover, written into the converted file.
 fn copy_tags(src: &Path, out: &Path) -> Result<(), String> {
     let kind = crate::tags::library_kind(src).unwrap_or("Audio file");
@@ -268,8 +353,24 @@ mod tests {
     #[test]
     fn decides_what_to_convert() {
         let c = Conversion::default();
-        assert_eq!(needs_converting(Path::new("a.flac"), &c), Some("FLAC"));
-        assert_eq!(needs_converting(Path::new("a.mp3"), &c), None);
+        let p = |f: &str, c: &Conversion, plays: &[&str]| c.plan(Path::new(f), plays);
+        assert_eq!(p("a.flac", &c, IPOD_PLAYS).as_deref(), Some("aac256"));
+        assert_eq!(p("a.mp3", &c, IPOD_PLAYS), None);
+        // No AAC on the player: MP3 instead.
+        assert_eq!(p("a.flac", &c, &["mp3", "wma"]).as_deref(), Some("mp3_320"));
+        // Advanced: FLAC to Apple Lossless, Ogg to MP3 192, MP3 shrunk too; WAV kept.
+        let mut a = Conversion { advanced: true, ..Default::default() };
+        a.rules.insert("flac".into(), "alac".into());
+        a.rules.insert("ogg".into(), "mp3_192".into());
+        a.rules.insert("mp3".into(), "mp3_192".into());
+        assert_eq!(p("a.flac", &a, IPOD_PLAYS).as_deref(), Some("alac"));
+        assert_eq!(p("a.ogg", &a, IPOD_PLAYS).as_deref(), Some("mp3_192"));
+        assert_eq!(p("a.mp3", &a, IPOD_PLAYS).as_deref(), Some("mp3_192"));
+        assert_eq!(p("a.wav", &a, IPOD_PLAYS), None);
+        // Kept but not playable there: the simple choice.
+        assert_eq!(p("a.opus", &a, IPOD_PLAYS).as_deref(), Some("aac256"));
+        // Apple Lossless asked for, but the player can't: the simple choice.
+        assert_eq!(p("a.flac", &a, &["mp3", "aac"]).as_deref(), Some("aac256"));
         assert_eq!(out_rate(96_000), 48_000);
         assert_eq!(out_rate(88_200), 44_100);
         assert_eq!(out_rate(44_100), 44_100);
@@ -285,16 +386,24 @@ mod tests {
         crate::tagwrite::write(&flac, &[chinotto_gpod::Field::Title(Some("Converted".into()))], None).unwrap();
         // AAC needs afconvert (macOS) or ffmpeg (Linux).
         let aac = cfg!(target_os = "macos") || Command::new("ffmpeg").arg("-version").output().is_ok();
-        for (n, format) in ["mp3_320", "aac256"].into_iter().enumerate() {
-            if format.starts_with("aac") && !aac {
+        for (n, format) in ["mp3_320", "aac256", "alac"].into_iter().enumerate() {
+            if format != "mp3_320" && !aac {
                 continue;
             }
-            let conv = Conversion { format: format.into(), convert_alac: true };
-            let out = convert(&flac, &dir.0, &conv, n).unwrap_or_else(|e| panic!("{format}: {e}"));
+            let out = convert(&flac, &dir.0, format, n).unwrap_or_else(|e| panic!("{format}: {e}"));
             let (info, _) = crate::tags::read_tags(&out, "audio").unwrap();
             assert_eq!(info.title.as_deref(), Some("Converted"), "{format}");
             assert!((2_800..3_300).contains(&info.length_ms), "{format}: {}", info.length_ms);
             assert!(crate::tags::ipod_kind(&out).is_some(), "{format}");
+            assert_eq!(
+                kind_of(&out),
+                Some(match format {
+                    "alac" => "alac",
+                    "aac256" => "aac",
+                    _ => "mp3",
+                }),
+                "{format}"
+            );
         }
         let kept = dir.0.clone();
         drop(dir);

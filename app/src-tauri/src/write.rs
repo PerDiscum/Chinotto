@@ -189,11 +189,11 @@ pub async fn add_files(path: String, files: Vec<String>, playlist: Option<String
             let total = files.len();
             for (i, f) in files.iter().enumerate() {
                 let name = f.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-                let _ = emitter.emit("add-progress", AddProgress { done: i, total, current: name.clone() });
+                let _ = emitter.emit("add-progress", AddProgress { done: i, total, current: tags::label(f) });
                 // Songs the iPod can't play (or lossless ones, if so set) are converted first.
                 let converted;
-                let f = if crate::convert::needs_converting(f, &conv).is_some() {
-                    match crate::convert::convert(f, &tmp_dir, &conv, i) {
+                let f = if let Some(target) = conv.plan(f, crate::convert::IPOD_PLAYS) {
+                    match crate::convert::convert(f, &tmp_dir, &target, i) {
                         Ok(c) => {
                             converted = c;
                             &converted

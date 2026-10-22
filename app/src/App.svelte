@@ -151,7 +151,7 @@
           disabled={!store.writable || !!store.busy}
           onclick={() => store.newPlaylist(false)}><Icon name="newlist" /></button
         >
-      {:else if store.source.kind === "library"}
+      {:else if store.source.kind === "library" && !store.isDeviceLibrary(store.source.lib)}
         <button title={t("New playlist in this library")} aria-label={t("New playlist")} disabled={!!store.busy} onclick={() => store.newPlaylist(false)}
           ><Icon name="newlist" /></button
         >

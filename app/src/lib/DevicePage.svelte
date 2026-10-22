@@ -3,6 +3,7 @@
   import { store } from "./store.svelte";
   import { bytes, count, isVideo, longDuration } from "./format";
   import { deviceImage, PICTURES } from "./deviceImages";
+  import ConversionSettings from "./ConversionSettings.svelte";
 
   const ipod = $derived(store.ipod!);
   const stats = $derived.by(() => {
@@ -101,22 +102,7 @@
             {t("Chinotto only reads this iPod. Turn this on to edit songs, add or delete them and change playlists. The setting is remembered for this iPod only.")}
           {/if}
         </p>
-        <div class="convert">
-          <label>
-            {t("Convert songs the iPod can't play (FLAC, Ogg) to")}
-            <select value={ipod.conversion.format} onchange={(e) => store.setConversion({ ...ipod.conversion, format: e.currentTarget.value })} disabled={!!store.busy}>
-              <option value="aac256">{t("AAC 256 kbps (iTunes Plus)")}</option>
-              <option value="aac128">{t("AAC 128 kbps (smaller)")}</option>
-              <option value="mp3_320">{t("MP3 320 kbps")}</option>
-              <option value="mp3_192">{t("MP3 192 kbps")}</option>
-            </select>
-          </label>
-          <label class="check">
-            <input type="checkbox" checked={ipod.conversion.convertAlac} onchange={(e) => store.setConversion({ ...ipod.conversion, convertAlac: e.currentTarget.checked })} disabled={!!store.busy} />
-            {t("Also convert Apple Lossless (it plays on the iPod, but takes about four times the space)")}
-          </label>
-          <p class="note">{t("Converted copies are made in a temporary folder just for the iPod, then deleted. Your files and libraries don't change.")}</p>
-        </div>
+        <ConversionSettings conversion={ipod.conversion} plays={ipod.plays} device="iPod" disabled={!!store.busy} onchange={(c) => store.setConversion(c)} />
       {/if}
     </div>
   </section>
@@ -341,22 +327,6 @@
     .switch .knob {
       transition: none;
     }
-  }
-  .convert {
-    margin-top: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    font-size: 13px;
-  }
-  .convert label {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-  .convert select {
-    font: inherit;
   }
   .note {
     margin: 10px 0 0;

@@ -291,7 +291,7 @@ fn run(
         for (i, f) in files.iter().enumerate() {
             let name = f.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
             if i % 25 == 0 {
-                progress(AddProgress { done: i, total, current: name.clone() });
+                progress(AddProgress { done: i, total, current: crate::tags::label(f) });
             }
             match crate::tags::read(f).and_then(|info| db.add_existing(f, &info).map_err(|e| e.to_string())) {
                 Ok(dbid) => added_files.push((dbid, f.clone())),

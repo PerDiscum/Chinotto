@@ -163,6 +163,19 @@ pub fn sort_key(s: &str, drop_the: bool) -> String {
     folded
 }
 
+/// "Title / Artist / Album" for progress messages (what's set of it), else the
+/// file's name.
+pub fn label(path: &Path) -> String {
+    let parts: Vec<String> = read(path)
+        .map(|i| [i.title, i.artist, i.album].into_iter().flatten().filter(|s| !s.trim().is_empty()).collect())
+        .unwrap_or_default();
+    if parts.is_empty() {
+        path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
+    } else {
+        parts.join(" / ")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

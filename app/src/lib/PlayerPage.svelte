@@ -3,6 +3,7 @@
   import { store } from "./store.svelte";
   import { bytes, longDuration } from "./format";
   import { deviceImage } from "./deviceImages";
+  import ConversionSettings from "./ConversionSettings.svelte";
 
   // The page of a player that shows up as a drive (MSC), like the iPod's.
   let { path }: { path: string } = $props();
@@ -77,26 +78,7 @@
               {t("Chinotto only reads this player. Turn this on to copy songs to it and delete them. The setting is remembered for this player only.")}
             {/if}
           </p>
-          <div class="convert">
-            <label>
-              {t("Convert songs the player can't play to")}
-              <select value={st.conversion.format} onchange={(e) => store.setPlayerConversion(path, { ...st.conversion, format: e.currentTarget.value })} disabled={!!store.busy}>
-                {#if st.aac}
-                  <option value="aac256">{t("AAC 256 kbps (iTunes Plus)")}</option>
-                  <option value="aac128">{t("AAC 128 kbps (smaller)")}</option>
-                {/if}
-                <option value="mp3_320">{t("MP3 320 kbps")}</option>
-                <option value="mp3_192">{t("MP3 192 kbps")}</option>
-              </select>
-            </label>
-            {#if st.plays.includes("alac")}
-              <label class="check">
-                <input type="checkbox" checked={st.conversion.convertAlac} onchange={(e) => store.setPlayerConversion(path, { ...st.conversion, convertAlac: e.currentTarget.checked })} disabled={!!store.busy} />
-                {t("Also convert Apple Lossless (it plays on this player, but takes about four times the space)")}
-              </label>
-            {/if}
-            <p class="note">{t("Converted copies are made in a temporary folder just for the player, then deleted. Your files and libraries don't change.")}</p>
-          </div>
+          <ConversionSettings conversion={st.conversion} plays={st.plays} device={t("player")} disabled={!!store.busy} onchange={(c) => store.setPlayerConversion(path, c)} />
         </div>
       </section>
     {/if}
@@ -267,22 +249,6 @@
     .switch .knob {
       transition: none;
     }
-  }
-  .convert {
-    margin-top: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    font-size: 13px;
-  }
-  .convert label {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-  .convert select {
-    font: inherit;
   }
   .note {
     margin: 10px 0 0;
