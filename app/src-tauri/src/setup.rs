@@ -167,7 +167,7 @@ pub async fn setup_info(path: String) -> Result<SetupInfo, String> {
             volume: root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.clone()),
             capacity: crate::devices::describe(&root, false).capacity,
             is_disk: crate::devices::is_mount_point(&root),
-            has_database: Layout::new(&root).itunesdb().exists(),
+            has_database: Layout::new(&root).has_database(),
             model,
             firewire_id,
             music_files: music_files(&root).len(),
@@ -265,7 +265,10 @@ fn run(
     rebuild: bool,
     progress: impl Fn(AddProgress),
 ) -> Result<SetupResult, String> {
-    let has_db = Layout::new(root).itunesdb().exists();
+    if chinotto_ipod::device::is_nano6_root(root) {
+        return Err("Nano 6 setup and rebuild are not supported yet; its compressed and SQLite databases must be handled together.".into());
+    }
+    let has_db = Layout::new(root).has_database();
     // What can be carried over from the old database, while it can still be read.
     let old = if rebuild && has_db && add_existing { Some(Kept::read(root)) } else { None };
     let set_aside = if rebuild && has_db {

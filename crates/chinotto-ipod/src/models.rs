@@ -43,6 +43,9 @@ pub(crate) fn generation(key: &str) -> Option<Generation> {
         }
         "C027" | "C031" | "C034" | "C037" | "C040" | "C043" | "C046" | "C049" | "C050" | "C060" | "C062" | "C064" | "C066" | "C068"
         | "C070" | "C072" | "C074" | "C075" => ("ipod-nano-5g", "iPod nano (5th generation)"),
+        "C525" | "C526" | "C688" | "C689" | "C690" | "C691" | "C692" | "C693" | "C694" | "C695" | "C696" | "C697" | "C698" | "C699" => {
+            ("ipod-nano-6g", "iPod nano (6th generation)")
+        }
         _ => return None,
     };
     Some(Generation { icon, name })

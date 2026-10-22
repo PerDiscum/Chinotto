@@ -30,6 +30,7 @@ const LABELS: Record<string, string> = {
   "ipod-nano-1g": "iPod nano (1st generation)",
   "ipod-nano-2g": "iPod nano (2nd generation)",
   "ipod-nano-3g": "iPod nano (3rd generation)",
+  "ipod-nano-6g": "iPod nano (6th generation)",
   "ipod-shuffle": "iPod shuffle",
   android: "Android phone",
   "cowon-iaudio-x5": "Cowon iAudio X5",

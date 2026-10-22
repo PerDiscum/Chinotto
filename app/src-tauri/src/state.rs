@@ -174,8 +174,71 @@ impl AppState {
 
     pub fn open(&self, root: &Path) -> Result<Arc<Session>, String> {
         let layout = Layout::new(root);
-        let bytes = std::fs::read(layout.itunesdb()).map_err(|e| format!("Couldn't read the iPod's database: {e}"))?;
-        let db = ITunesDb::parse(&bytes).map_err(|e| format!("The iPod's database couldn't be read: {e}"))?;
+        let db = if layout.itunesdb().is_file() {
+            let bytes = std::fs::read(layout.itunesdb()).map_err(|e| format!("Couldn't read the iPod's database: {e}"))?;
+            ITunesDb::parse(&bytes).map_err(|e| format!("The iPod's database couldn't be read: {e}"))?
+        } else if layout.itunescdb().is_file() {
+            // Nano 6 stores its index as a compressed iTunesCDB. libgpod can
+            // read that container; expose a read-only view until Chinotto can
+            // update the companion SQLite databases and their signatures.
+            let gpod = Database::open(root).map_err(|e| format!("Couldn't read the iPod's compressed database: {e}"))?;
+            let track_ids = gpod.track_ids();
+            let indexes: HashMap<u64, u32> = track_ids.iter().enumerate().map(|(i, id)| (*id, i as u32 + 1)).collect();
+            let tracks = track_ids
+                .iter()
+                .filter_map(|id| {
+                    let t = gpod.track(*id)?;
+                    Some(chinotto_ipod::itunesdb::Track {
+                        id: indexes[id],
+                        dbid: t.dbid,
+                        strings: chinotto_ipod::itunesdb::TrackStrings {
+                            title: t.title,
+                            artist: t.artist,
+                            album_artist: t.album_artist,
+                            album: t.album,
+                            genre: t.genre,
+                            composer: t.composer,
+                            comment: t.comment,
+                            grouping: t.grouping,
+                            sort_artist: t.sort_artist,
+                            sort_title: t.sort_title,
+                            sort_album: t.sort_album,
+                            sort_album_artist: t.sort_album_artist,
+                            sort_composer: t.sort_composer,
+                            filetype: t.filetype,
+                            location: t.ipod_path,
+                            ..Default::default()
+                        },
+                        year: t.year.max(0) as u32,
+                        track_nr: t.track_nr.max(0) as u32,
+                        track_count: t.track_count.max(0) as u32,
+                        disc_nr: t.disc_nr.max(0) as u32,
+                        disc_count: t.disc_count.max(0) as u32,
+                        length_ms: t.length_ms.max(0) as u32,
+                        bitrate_kbps: t.bitrate_kbps.max(0) as u32,
+                        sample_rate: t.sample_rate,
+                        rating: t.rating.min(100) as u8,
+                        compilation: t.compilation,
+                        play_count: t.play_count,
+                        ..Default::default()
+                    })
+                })
+                .collect();
+            let playlists = gpod
+                .playlists()
+                .into_iter()
+                .map(|p| chinotto_ipod::itunesdb::Playlist {
+                    id: p.id,
+                    name: p.name,
+                    is_master: p.master,
+                    is_smart: p.smart,
+                    track_ids: p.tracks.iter().filter_map(|id| indexes.get(id).copied()).collect(),
+                })
+                .collect();
+            ITunesDb { tracks, playlists, ..Default::default() }
+        } else {
+            return Err("This iPod has no readable iTunes database".into());
+        };
         // Artwork is optional: a missing or unreadable ArtworkDB just means no covers.
         let art = std::fs::read(layout.artworkdb()).ok().and_then(|b| ArtworkDb::parse(&b).ok());
         let art_index = art.as_ref().map(|a| a.images.iter().enumerate().map(|(i, im)| (im.id, i)).collect()).unwrap_or_default();

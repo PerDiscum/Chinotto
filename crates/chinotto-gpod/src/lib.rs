@@ -498,7 +498,7 @@ impl Database {
 /// For models that need a checksum, SysInfo must already hold the
 /// FirewireGuid, or the iPod will show no music.
 pub fn init_ipod(root: &Path, model: Option<&str>, name: &str) -> Result<()> {
-    if root.join("iPod_Control/iTunes/iTunesDB").exists() {
+    if root.join("iPod_Control/iTunes/iTunesDB").exists() || root.join("iPod_Control/iTunes/iTunesCDB").exists() {
         return Err(Error("This iPod already has a database".into()));
     }
     let c_root = CString::new(root.to_string_lossy().as_bytes()).map_err(|_| Error("bad path".into()))?;

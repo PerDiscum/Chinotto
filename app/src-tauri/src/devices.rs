@@ -26,7 +26,7 @@ pub struct DeviceInfo {
     pub free: u64,
     /// Added by hand with "Open iPod folder…" rather than found mounted.
     pub manual: bool,
-    /// An iPod without a database (iPod_Control but no iTunesDB): it needs
+    /// An iPod without a database (iPod_Control but no iTunesDB/iTunesCDB): it needs
     /// setting up before it can be used.
     pub needs_setup: bool,
     /// "ipod", or "msc" for a player set up as a drive (see msc.rs).
@@ -89,13 +89,14 @@ pub fn describe(root: &Path, manual: bool) -> DeviceInfo {
         }
     }
     let sys = SysInfo::read(root).unwrap_or_default();
+    let generation = chinotto_ipod::device::generation_at_root(root);
     let (capacity, free) = disk_space(root);
     DeviceInfo {
         path: root.to_string_lossy().into_owned(),
         volume: root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "iPod".into()),
-        model: sys.model_name().map(str::to_string),
+        model: sys.model_name().map(str::to_string).or_else(|| generation.map(|g| g.name.to_string())),
         model_number: sys.model_number.clone(),
-        icon: sys.generation().map(|g| g.icon).unwrap_or("generic").to_string(),
+        icon: generation.map(|g| g.icon).unwrap_or("generic").to_string(),
         identity: sys.identity(),
         capacity,
         free,

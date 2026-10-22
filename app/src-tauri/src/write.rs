@@ -30,6 +30,9 @@ fn parse_ids(ids: &[String]) -> Result<Vec<u64>, String> {
 fn with_writer<T: Serialize>(app: &AppHandle, root: &Path, f: impl FnOnce(&mut Database) -> Result<T, String>) -> Result<Response, String> {
     let state = app.state::<AppState>();
     let session = state.session().filter(|s| s.root == root).ok_or("That iPod isn't open")?;
+    if chinotto_ipod::device::is_nano6_root(root) {
+        return Err("Nano 6 changes are not enabled yet: Chinotto must update and verify the companion SQLite database set first.".into());
+    }
     let identity =
         session.sysinfo.identity().ok_or("This iPod doesn't report a FireWire ID or serial number, so Chinotto can't change it")?;
     if !state.is_writable(&identity) {
@@ -67,6 +70,9 @@ async fn blocking(app: AppHandle, f: impl FnOnce(AppHandle) -> Result<Response, 
 pub fn set_allow_changes(path: String, allow: bool, app: AppHandle) -> Result<Response, String> {
     let state = app.state::<AppState>();
     let session = state.session().filter(|s| s.root == Path::new(&path)).ok_or("That iPod isn't open")?;
+    if chinotto_ipod::device::is_nano6_root(&session.root) {
+        return Err("Nano 6 changes are not enabled yet: Chinotto must update and verify the companion SQLite database set first.".into());
+    }
     let identity =
         session.sysinfo.identity().ok_or("This iPod doesn't report a FireWire ID or serial number, so Chinotto can't change it")?;
     state.set_writable(&identity, allow)?;

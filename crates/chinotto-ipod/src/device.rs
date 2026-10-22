@@ -22,6 +22,13 @@ impl Layout {
     pub fn itunesdb(&self) -> PathBuf {
         self.control().join("iTunes/iTunesDB")
     }
+    /// Newer nanos keep a compressed iTunes database beside the SQLite library.
+    pub fn itunescdb(&self) -> PathBuf {
+        self.control().join("iTunes/iTunesCDB")
+    }
+    pub fn has_database(&self) -> bool {
+        self.itunesdb().is_file() || self.itunescdb().is_file()
+    }
     pub fn artworkdb(&self) -> PathBuf {
         self.control().join("Artwork/ArtworkDB")
     }
@@ -38,7 +45,23 @@ impl Layout {
 
 /// True when `root` looks like the top of an iPod (has an iTunesDB).
 pub fn is_ipod_root(root: &Path) -> bool {
-    Layout::new(root).itunesdb().is_file()
+    Layout::new(root).has_database()
+}
+
+/// Generation from on-volume metadata. Nano 6 omits `SysInfo` on some
+/// installations, but its compressed database plus SQLite bundle identify it.
+pub fn generation_at_root(root: &Path) -> Option<crate::models::Generation> {
+    let layout = Layout::new(root);
+    let sys = SysInfo::read(root).unwrap_or_default();
+    sys.generation().or_else(|| {
+        (layout.itunescdb().is_file() && layout.control().join("iTunes/iTunes Library.itlp/Locations.itdb").is_file())
+            .then(|| crate::models::generation("C525"))
+            .flatten()
+    })
+}
+
+pub fn is_nano6_root(root: &Path) -> bool {
+    generation_at_root(root).is_some_and(|generation| generation.icon == "ipod-nano-6g")
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
