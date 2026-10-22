@@ -431,10 +431,10 @@ bool updateLibrary(const Library& library, const fs::path& path,
             "INSERT INTO item(pid,media_kind,date_modified,year,remember_bookmark,"
             "exclude_from_shuffle,artwork_status,start_time_ms,stop_time_ms,"
             "total_time_ms,track_number,disc_number,genre_id,album_pid,artist_pid,"
-            "composer_pid,title,artist,album,composer,sort_title,sort_artist,"
-            "sort_album,sort_composer,title_order,artist_order,album_order,"
-            "genre_order,composer_order) VALUES(?,?,?,?,0,0,2,0,?,?,?,?,?,?,?,?,?,"
-            "?,?,?,?,?,?,?,?,?,?,?,?)", error) ||
+            "composer_pid,title,artist,album,album_artist,composer,sort_title,sort_artist,"
+            "sort_album,sort_album_artist,sort_composer,title_order,artist_order,album_order,"
+            "genre_order,composer_order,album_artist_order,physical_order) "
+            "VALUES(?,?,?,?,0,0,2,0,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", error) ||
         !av.prepare(db,
             "INSERT INTO avformat_info(item_pid,sub_id,audio_format,bit_rate,"
             "sample_rate,duration,gapless_heuristic_info,gapless_encoding_delay,"
@@ -442,12 +442,43 @@ bool updateLibrary(const Library& library, const fs::path& path,
             "analysis_inhibit_flags,audio_fingerprint,volume_normalization_energy) "
             "VALUES(?,0,?,?,?,0,0,0,0,0,0,0,0)", error) ||
         !kind.prepare(db, "INSERT OR IGNORE INTO location_kind_map(id,kind) VALUES(?,?)", error) ||
-        !artist.prepare(db, "INSERT OR IGNORE INTO artist(pid,kind,artwork_status,artwork_album_pid,name,name_order,sort_name) VALUES(?,2,0,0,?,?,?)", error) ||
-        !album.prepare(db, "INSERT OR IGNORE INTO album(pid,kind,artwork_status,artwork_item_pid,artist_pid,user_rating,name,name_order,all_compilations,feed_url,season_number) VALUES(?,2,0,0,?,0,?,?,0,NULL,0)", error) ||
+        !artist.prepare(db, "INSERT OR IGNORE INTO artist(pid,kind,artwork_status,artwork_album_pid,name,name_order,sort_name,has_songs) VALUES(?,2,0,0,?,?,?,1)", error) ||
+        !album.prepare(db, "INSERT OR IGNORE INTO album(pid,kind,artwork_status,artwork_item_pid,artist_pid,user_rating,name,name_order,all_compilations,feed_url,season_number,has_songs,sort_order,artist_order,artist_count_calc,item_count) VALUES(?,2,0,0,?,0,?,?,0,NULL,0,1,?,?,1,1)", error) ||
         !composer.prepare(db, "INSERT OR IGNORE INTO composer(pid,name,name_order,sort_name) VALUES(?,?,?,?)", error) ||
         !container.prepare(db, "INSERT INTO container(pid,distinguished_kind,date_created,date_modified,name,name_order,parent_pid,media_kinds,workout_template_id,is_hidden,smart_is_folder) VALUES(?,0,0,0,?,?,0,?,0,?,0)", error) ||
         !member.prepare(db, "INSERT INTO item_to_container(item_pid,container_pid,physical_order,shuffle_order) VALUES(?,?,?,NULL)", error))
         return fail();
+
+    // iPod nanos use explicit sort ranks in Library.itdb; CDB track order is
+    // not the same order as the Songs, Artists, and Albums indexes.
+    auto sortRanks = [&](auto valueFor) {
+        std::vector<std::size_t> order(library.tracks.size());
+        for (std::size_t i = 0; i < order.size(); ++i) order[i] = i;
+        std::stable_sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b) {
+            const auto left = nanoSortKey(reinterpret_cast<const unsigned char*>(valueFor(library.tracks[a]).c_str()));
+            const auto right = nanoSortKey(reinterpret_cast<const unsigned char*>(valueFor(library.tracks[b]).c_str()));
+            return left < right;
+        });
+        std::vector<std::int64_t> ranks(order.size());
+        std::int64_t rank = 0;
+        std::vector<std::uint8_t> previous;
+        bool first = true;
+        for (const std::size_t index : order) {
+            const auto key = nanoSortKey(reinterpret_cast<const unsigned char*>(valueFor(library.tracks[index]).c_str()));
+            if (first || key != previous) {
+                ++rank;
+                previous = key;
+                first = false;
+            }
+            ranks[index] = rank * 100;
+        }
+        return ranks;
+    };
+    const auto titleRanks = sortRanks([](const Track& t) -> const std::string& { return t.title; });
+    const auto artistRanks = sortRanks([](const Track& t) -> const std::string& { return t.artist; });
+    const auto albumRanks = sortRanks([](const Track& t) -> const std::string& { return t.album; });
+    const auto genreRanks = sortRanks([](const Track& t) -> const std::string& { return t.genre; });
+    const auto composerRanks = sortRanks([](const Track& t) -> const std::string& { return t.composer; });
 
     std::unordered_map<std::string, int> genres;
     for (const Track& track : library.tracks)
@@ -485,12 +516,15 @@ bool updateLibrary(const Library& library, const fs::path& path,
         sqlite3_bind_int64(item.get(), ++p, sqlite3_int64(artistId));
         sqlite3_bind_int64(item.get(), ++p, sqlite3_int64(composerId));
         for (const std::string* text : {&track.title, &track.artist, &track.album,
-                                        &track.composer, &track.title,
-                                        &track.artist, &track.album,
+                                        &track.artist, &track.composer, &track.title,
+                                        &track.artist, &track.album, &track.artist,
                                         &track.composer})
             bindText(item.get(), ++p, *text);
-        for (int order = 0; order < 5; ++order)
-            sqlite3_bind_int64(item.get(), ++p, index + 1);
+        for (const std::int64_t order : {titleRanks[index], artistRanks[index],
+                                         albumRanks[index], genreRanks[index],
+                                         composerRanks[index], artistRanks[index],
+                                         static_cast<std::int64_t>(index)})
+            sqlite3_bind_int64(item.get(), ++p, order);
         if (!item.run(db, error)) return fail();
         item.reset();
 
@@ -509,7 +543,7 @@ bool updateLibrary(const Library& library, const fs::path& path,
         if (artistId) {
             sqlite3_bind_int64(artist.get(), 1, sqlite3_int64(artistId));
             bindText(artist.get(), 2, track.artist);
-            sqlite3_bind_int64(artist.get(), 3, index + 1);
+            sqlite3_bind_int64(artist.get(), 3, artistRanks[index]);
             bindText(artist.get(), 4, track.artist);
             if (!artist.run(db, error)) return fail();
             artist.reset();
@@ -518,19 +552,29 @@ bool updateLibrary(const Library& library, const fs::path& path,
             sqlite3_bind_int64(album.get(), 1, sqlite3_int64(albumId));
             sqlite3_bind_int64(album.get(), 2, sqlite3_int64(artistId));
             bindText(album.get(), 3, track.album);
-            sqlite3_bind_int64(album.get(), 4, index + 1);
+            sqlite3_bind_int64(album.get(), 4, albumRanks[index]);
+            sqlite3_bind_int64(album.get(), 5, albumRanks[index]);
+            sqlite3_bind_int64(album.get(), 6, artistRanks[index]);
             if (!album.run(db, error)) return fail();
             album.reset();
         }
         if (composerId) {
             sqlite3_bind_int64(composer.get(), 1, sqlite3_int64(composerId));
             bindText(composer.get(), 2, track.composer);
-            sqlite3_bind_int64(composer.get(), 3, index + 1);
+            sqlite3_bind_int64(composer.get(), 3, composerRanks[index]);
             bindText(composer.get(), 4, track.composer);
             if (!composer.run(db, error)) return fail();
             composer.reset();
         }
     }
+
+    if (!exec(db,
+              "UPDATE album SET has_songs=1,"
+              "item_count=(SELECT count(*) FROM item WHERE item.album_pid=album.pid),"
+              "artist_count_calc=(SELECT count(DISTINCT artist_pid) FROM item WHERE item.album_pid=album.pid)",
+              error) ||
+        !exec(db, "UPDATE artist SET has_songs=1", error))
+        return fail();
 
     auto addContainer = [&](std::uint64_t id, const std::string& name,
                             bool hidden, const std::vector<std::uint32_t>& ids,
@@ -724,8 +768,13 @@ bool validateItunesSqliteBundle(const Library& library, const fs::path& director
         scalar(dynamic.get(), "SELECT count(*) FROM item_stats") != trackCount ||
         scalar(locations.get(), "SELECT count(*) FROM location") != trackCount ||
         scalar(libraryDb.get(), "SELECT count(*) FROM container") !=
-            std::int64_t(library.playlists.size() + 1)) {
-        if (error) *error = "SQLite companion database counts do not match iTunesCDB";
+            std::int64_t(library.playlists.size() + 1) ||
+        scalar(libraryDb.get(),
+               "SELECT count(*) FROM item WHERE physical_order IS NULL OR "
+               "title_order IS NULL OR artist_order IS NULL OR album_order IS NULL") != 0 ||
+        scalar(libraryDb.get(), "SELECT count(*) FROM album WHERE has_songs=0") != 0 ||
+        scalar(libraryDb.get(), "SELECT count(*) FROM artist WHERE has_songs=0") != 0) {
+        if (error) *error = "SQLite companion database counts or Nano 6 library indexes are invalid";
         return false;
     }
     const auto expected = locationCbk(directory / "Locations.itdb", uuid, nonce);

@@ -733,5 +733,16 @@ Devices were opened with `LIBMTP_Open_Raw_Device_Uncached`, and libmtp's `flush_
   databases using the existing HashAB nonce. Covers, song edits, and song
   deletion remain unavailable; do not widen those operations without separate
   validation. Existing device data is backed up before each write.
-- This addition has compile checks only so far; it still needs a real-device
-  add-song and playback check.
+- The user confirmed that an added song played from a playlist, but the Nano's
+  Albums index was empty and Songs ordering was scrambled. The companion
+  Library.itdb still contained the new track and its album/artist links; its
+  derived browse flags and ordering indexes had been rebuilt incorrectly.
+
+## 0068: restore Nano 6 browse indexes during writes
+
+- Rank song, artist, album, genre, and composer fields with the Nano sort-key
+  encoding, store zero-based physical order, and populate the companion
+  database's album/artist `has_songs` flags and album counts.
+- Validate required sort indexes and browse flags before installing staged
+  databases. Compile-checked only; the repaired database still needs a
+  real-device check with the user's Nano 6.
