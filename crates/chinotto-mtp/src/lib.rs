@@ -221,8 +221,7 @@ impl RawDevice {
     }
 }
 
-/// MTP devices connected now (only those offering an MTP interface: a
-/// player set to mass storage is left out). Probing may open USB devices briefly.
+/// MTP devices connected now (on macOS, not players that are only a drive). Probing may open USB devices briefly.
 pub fn detect() -> Vec<RawDevice> {
     init();
     let mut list: *mut ffi::LIBMTP_raw_device_t = ptr::null_mut();
@@ -232,8 +231,11 @@ pub fn detect() -> Vec<RawDevice> {
     if rc == 0 && !list.is_null() {
         for i in 0..n.max(0) as usize {
             let r = unsafe { &*list.add(i) };
-            // libmtp knows the USB ID, but a player set to mass storage has no MTP interface.
-            if unsafe { ffi::chinotto_has_mtp_interface(r.bus_location, r.devnum) } == 0 {
+            // A player whose only interface is mass storage: some (Sony
+            // Walkmans) answer MTP on it too, once the disk driver lets go.
+            // Linux lets libmtp unload that driver; macOS doesn't, so there
+            // such a player is only a drive.
+            if cfg!(target_os = "macos") && unsafe { ffi::chinotto_has_mtp_interface(r.bus_location, r.devnum) } == 0 {
                 continue;
             }
             out.push(RawDevice {

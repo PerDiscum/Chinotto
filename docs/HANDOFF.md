@@ -674,3 +674,9 @@ mhii_link 416), validated at runtime against the engine's JSON.
 
 - The MTP filter now only hides devices that are mass storage and nothing else.
 - Add Drive with a file-manager MTP path (gvfs `…/gvfs/mtp:host=…`) says to open the device under Devices instead.
+
+## 0058: mass-storage-only players listed as MTP again on Linux
+
+The NWZ-E344 has a single USB interface, class 8 (mass storage), and still answers MTP on it: on Linux libmtp unloads usb-storage (its device flags say to) and talks MTP over the same endpoints, and the Walkman then shows "USB (MTP)". macOS's mass-storage driver can't be unloaded (claim fails with -3), so the class-8-only filter now applies on macOS only. On Linux, opening such a player over MTP takes it away as a drive until it's replugged.
+
+The Sansa e260 v2 here (Rockbox bootloader installed) isn't a guide for MTP: it doesn't answer OpenSession anywhere. The NWZ-E344 on Linux is the MTP test device.
