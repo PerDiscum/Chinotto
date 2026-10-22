@@ -689,14 +689,24 @@ Devices were opened with `LIBMTP_Open_Raw_Device_Uncached`, and libmtp's `flush_
 
 `lib_edit_tracks` on the open MTP device's library goes to `mtp::edit`, which changes the device's database with `Device::update_track` (LIBMTP_Update_Track_Metadata). libmtp sets every property the device supports from the track struct, so the app keeps each song as read (`Opened::tracks`, updated on send/delete/edit) and sends it back with the changes. Kept: title, artist, album, genre, composer, year, track number, rating (a rating of 0 isn't sent: libmtp skips it). Other fields and covers are reported as not kept. The model's rules apply (plain Greek on Walkmans). Needs "Allow changes".
 
-## 0062: recognize and browse iPod nano 6G (read-only first step)
+## 0062: recognize and browse iPod nano 6G
 
 - Model IDs C525/C526 and C688–C699 identify the 6th-generation nano. Some
   volumes omit `SysInfo`; `iTunesCDB` plus the device-created
   `iTunes Library.itlp/Locations.itdb` identifies this database family.
 - `iTunesCDB` can be read through libgpod and exposed as a browseable session.
   The app must not offer setup just because `iTunesDB` is absent.
-- Keep Nano 6 read-only until both the compressed database and companion
-  SQLite files can be rewritten and their HashAB signatures validated as a
-  matched set. The current session permission is read-only for `/Volumes/iPod`,
-  so do not try to write to the connected player.
+
+## 0063: experimental iPod nano 6G writes
+
+- libgpod now uses the vendored HashAB implementation from `dstaley/hashab`
+  (Unlicense) instead of dynamically loading a missing `libhashab` blob. It
+  signs the compressed iTunesCDB with the Nano 6 USB FireWire GUID.
+- `chinotto-gpod` parses that newly written CDB with PodBox's MIT-licensed
+  iTunesDB/SQLite code, verifies the CDB's HashAB signature to recover its
+  nonce, stages and validates the companion `iTunes Library.itlp` databases,
+  and swaps them in only after validation. A full Nano 6 backup of CDB, DB,
+  and the SQLite bundle is kept before each save; failures restore the bundle.
+- USB identity fallback is used when SysInfo omits the GUID. Do not write that
+  value into SysInfo; it is only passed to libgpod for signing.
+- This is experimental and has not been exercised on hardware in this patch.

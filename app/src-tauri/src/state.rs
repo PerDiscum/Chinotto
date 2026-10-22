@@ -47,7 +47,7 @@ pub struct Settings {
     pub conversions: HashMap<String, crate::convert::Conversion>,
 }
 
-/// An iPod's databases, read into memory. Read-only for now.
+/// An iPod's databases, read into memory.
 pub struct Session {
     pub root: PathBuf,
     /// Changes every time an iPod is opened, so cached artwork URLs never go stale.
@@ -242,14 +242,11 @@ impl AppState {
         // Artwork is optional: a missing or unreadable ArtworkDB just means no covers.
         let art = std::fs::read(layout.artworkdb()).ok().and_then(|b| ArtworkDb::parse(&b).ok());
         let art_index = art.as_ref().map(|a| a.images.iter().enumerate().map(|(i, im)| (im.id, i)).collect()).unwrap_or_default();
-        let session = Arc::new(Session {
-            root: root.to_path_buf(),
-            generation: self.next_generation(),
-            db,
-            sysinfo: SysInfo::read(root).unwrap_or_default(),
-            art,
-            art_index,
-        });
+        let mut sysinfo = SysInfo::read(root).unwrap_or_default();
+        if chinotto_ipod::device::is_nano6_root(root) && sysinfo.identity().is_none() {
+            sysinfo.firewire_guid = crate::setup::usb_serial(root);
+        }
+        let session = Arc::new(Session { root: root.to_path_buf(), generation: self.next_generation(), db, sysinfo, art, art_index });
         *self.session.write().unwrap() = Some(session.clone());
         Ok(session)
     }

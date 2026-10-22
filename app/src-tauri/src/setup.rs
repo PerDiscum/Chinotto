@@ -84,7 +84,7 @@ fn clean_id(s: &str) -> Option<String> {
 
 /// The iPod's USB serial number (= its FireWire ID) for the disk mounted at `root`.
 #[cfg(target_os = "linux")]
-fn usb_serial(root: &Path) -> Option<String> {
+pub(crate) fn usb_serial(root: &Path) -> Option<String> {
     let mounts = std::fs::read_to_string("/proc/self/mounts").ok()?;
     let want = root.to_string_lossy();
     let dev = mounts.lines().find_map(|l| {
@@ -107,7 +107,7 @@ fn usb_serial(root: &Path) -> Option<String> {
 }
 
 #[cfg(target_os = "macos")]
-fn usb_serial(root: &Path) -> Option<String> {
+pub(crate) fn usb_serial(root: &Path) -> Option<String> {
     use serde_json::Value;
     let want = root.to_string_lossy().to_string();
     // Apple devices' serial numbers, and whether each has the volume mounted at `root`.
@@ -141,7 +141,7 @@ fn usb_serial(root: &Path) -> Option<String> {
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-fn usb_serial(_root: &Path) -> Option<String> {
+pub(crate) fn usb_serial(_root: &Path) -> Option<String> {
     None
 }
 

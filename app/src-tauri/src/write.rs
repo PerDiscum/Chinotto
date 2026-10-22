@@ -25,14 +25,19 @@ fn parse_ids(ids: &[String]) -> Result<Vec<u64>, String> {
     ids.iter().map(|s| s.parse::<u64>().map_err(|_| format!("bad id {s}"))).collect()
 }
 
+fn playlist_only_on_nano6(path: &str) -> Result<(), String> {
+    if chinotto_ipod::device::is_nano6_root(Path::new(path)) {
+        Err("Nano 6 support is experimental and currently writes playlists only; song and cover changes are disabled.".into())
+    } else {
+        Ok(())
+    }
+}
+
 /// Run `f` against the writer for the iPod at `root`, save, and return the new view
 /// (plus anything `f` wants to report, as `extra`).
 fn with_writer<T: Serialize>(app: &AppHandle, root: &Path, f: impl FnOnce(&mut Database) -> Result<T, String>) -> Result<Response, String> {
     let state = app.state::<AppState>();
     let session = state.session().filter(|s| s.root == root).ok_or("That iPod isn't open")?;
-    if chinotto_ipod::device::is_nano6_root(root) {
-        return Err("Nano 6 changes are not enabled yet: Chinotto must update and verify the companion SQLite database set first.".into());
-    }
     let identity =
         session.sysinfo.identity().ok_or("This iPod doesn't report a FireWire ID or serial number, so Chinotto can't change it")?;
     if !state.is_writable(&identity) {
@@ -41,7 +46,7 @@ fn with_writer<T: Serialize>(app: &AppHandle, root: &Path, f: impl FnOnce(&mut D
 
     let mut guard = state.writer.lock().unwrap();
     if guard.as_ref().is_none_or(|w| w.root() != root) {
-        *guard = Some(Database::open(root).map_err(|e| e.to_string())?);
+        *guard = Some(Database::open_with_uuid(root, Some(&identity)).map_err(|e| e.to_string())?);
     }
     let db = guard.as_mut().unwrap();
     let result = f(db).and_then(|extra| db.save().map(|_| extra).map_err(|e| e.to_string()));
@@ -70,9 +75,6 @@ async fn blocking(app: AppHandle, f: impl FnOnce(AppHandle) -> Result<Response, 
 pub fn set_allow_changes(path: String, allow: bool, app: AppHandle) -> Result<Response, String> {
     let state = app.state::<AppState>();
     let session = state.session().filter(|s| s.root == Path::new(&path)).ok_or("That iPod isn't open")?;
-    if chinotto_ipod::device::is_nano6_root(&session.root) {
-        return Err("Nano 6 changes are not enabled yet: Chinotto must update and verify the companion SQLite database set first.".into());
-    }
     let identity =
         session.sysinfo.identity().ok_or("This iPod doesn't report a FireWire ID or serial number, so Chinotto can't change it")?;
     state.set_writable(&identity, allow)?;
@@ -127,6 +129,7 @@ pub(crate) fn fields(changes: &HashMap<String, Value>) -> Result<Vec<Field>, Str
 
 #[tauri::command]
 pub async fn edit_tracks(path: String, ids: Vec<String>, changes: HashMap<String, Value>, app: AppHandle) -> Result<Response, String> {
+    playlist_only_on_nano6(&path)?;
     let ids = parse_ids(&ids)?;
     let fields = fields(&changes)?;
     blocking(app, move |app| with_writer(&app, Path::new(&path), |db| db.edit(&ids, &fields).map_err(|e| e.to_string()))).await
@@ -135,6 +138,7 @@ pub async fn edit_tracks(path: String, ids: Vec<String>, changes: HashMap<String
 /// Remove songs from the iPod (library and all playlists); their files are deleted after the save.
 #[tauri::command]
 pub async fn delete_tracks(path: String, ids: Vec<String>, app: AppHandle) -> Result<Response, String> {
+    playlist_only_on_nano6(&path)?;
     let ids = parse_ids(&ids)?;
     blocking(app, move |app| with_writer(&app, Path::new(&path), |db| db.remove_tracks(&ids).map_err(|e| e.to_string()))).await
 }
@@ -175,6 +179,7 @@ pub(crate) fn expand(paths: &[String]) -> Vec<PathBuf> {
 /// Copy music files (or folders of them) onto the iPod.
 #[tauri::command]
 pub async fn add_files(path: String, files: Vec<String>, playlist: Option<String>, app: AppHandle) -> Result<Response, String> {
+    playlist_only_on_nano6(&path)?;
     let playlist = playlist.map(|p| p.parse::<u64>().map_err(|_| "bad playlist id".to_string())).transpose()?;
     blocking(app, move |app| {
         let files = expand(&files);
@@ -345,6 +350,7 @@ pub async fn set_playlist_tracks(path: String, id: String, ids: Vec<String>, app
 /// Give songs a cover from an image file (shrunk by the 600 px rule).
 #[tauri::command]
 pub async fn set_artwork(path: String, ids: Vec<String>, image: String, app: AppHandle) -> Result<Response, String> {
+    playlist_only_on_nano6(&path)?;
     let ids = parse_ids(&ids)?;
     blocking(app, move |app| {
         let bytes = std::fs::read(&image).map_err(|e| format!("Couldn't open the image: {e}"))?;
@@ -363,6 +369,7 @@ pub async fn set_artwork(path: String, ids: Vec<String>, image: String, app: App
 /// Take songs' covers off (the thumbnails stay in the iPod's cover files, unused).
 #[tauri::command]
 pub async fn remove_artwork(path: String, ids: Vec<String>, app: AppHandle) -> Result<Response, String> {
+    playlist_only_on_nano6(&path)?;
     let ids = parse_ids(&ids)?;
     blocking(app, move |app| with_writer(&app, Path::new(&path), |db| db.edit(&ids, &[Field::Artwork(None)]).map_err(|e| e.to_string())))
         .await

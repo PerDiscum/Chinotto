@@ -1,0 +1,346 @@
+#include "itdb/itunesdb.h"
+
+#include "itdb/hash58.h"
+#include "itdb/hash72.h"
+#include "itdb/hashab.h"
+#include "itdb/itunescdb.h"
+
+#include <cstring>
+#include <ctime>
+#include <fstream>
+#include <random>
+
+namespace fs = std::filesystem;
+
+namespace podbox {
+namespace {
+
+constexpr std::int64_t kMacToUnixEpoch = 2082844800LL;
+
+using Bytes = std::vector<unsigned char>;
+
+void set8(Bytes& b, size_t off, std::uint8_t v) { b[off] = v; }
+void set16(Bytes& b, size_t off, std::uint16_t v) {
+    b[off] = v & 0xFF;
+    b[off + 1] = v >> 8;
+}
+void set32(Bytes& b, size_t off, std::uint32_t v) {
+    for (int i = 0; i < 4; ++i) b[off + i] = (v >> (8 * i)) & 0xFF;
+}
+void set64(Bytes& b, size_t off, std::uint64_t v) {
+    for (int i = 0; i < 8; ++i) b[off + i] = (v >> (8 * i)) & 0xFF;
+}
+
+// Zero-filled chunk with its tag and header length set. Unknown fields stay
+// zero — the same policy libgpod shipped for years; firmwares tolerate it.
+Bytes chunk(const char* tag, size_t headerLen) {
+    Bytes b(headerLen, 0);
+    std::memcpy(b.data(), tag, 4);
+    set32(b, 4, std::uint32_t(headerLen));
+    return b;
+}
+
+void append(Bytes& dst, const Bytes& src) {
+    dst.insert(dst.end(), src.begin(), src.end());
+}
+
+void appendUtf16le(Bytes& out, const std::string& s) {
+    auto push16 = [&](std::uint32_t u) {
+        out.push_back(u & 0xFF);
+        out.push_back((u >> 8) & 0xFF);
+    };
+    size_t i = 0;
+    while (i < s.size()) {
+        std::uint32_t c = (unsigned char)s[i];
+        int extra = 0;
+        if (c >= 0xF0) {
+            c &= 0x07;
+            extra = 3;
+        } else if (c >= 0xE0) {
+            c &= 0x0F;
+            extra = 2;
+        } else if (c >= 0xC0) {
+            c &= 0x1F;
+            extra = 1;
+        }
+        ++i;
+        while (extra-- > 0 && i < s.size()) {
+            c = (c << 6) | (s[i] & 0x3F);
+            ++i;
+        }
+        if (c >= 0x10000) {
+            c -= 0x10000;
+            push16(0xD800 + (c >> 10));
+            push16(0xDC00 + (c & 0x3FF));
+        } else {
+            push16(c);
+        }
+    }
+}
+
+Bytes mhodString(std::uint32_t type, const std::string& utf8) {
+    Bytes str;
+    appendUtf16le(str, utf8);
+    Bytes b = chunk("mhod", 24);
+    b.resize(40, 0);
+    set32(b, 8, std::uint32_t(40 + str.size()));
+    set32(b, 12, type);
+    set32(b, 24, 1);  // position
+    set32(b, 28, std::uint32_t(str.size()));
+    append(b, str);
+    return b;
+}
+
+// mhod type 100: playlist item position marker.
+Bytes mhodPosition(std::uint32_t position) {
+    Bytes b = chunk("mhod", 24);
+    b.resize(44, 0);
+    set32(b, 8, 44);
+    set32(b, 12, 100);
+    set32(b, 24, position);
+    return b;
+}
+
+std::uint32_t filetypeMarker(const std::string& location) {
+    std::string ext;
+    if (const auto dot = location.rfind('.'); dot != std::string::npos)
+        ext = location.substr(dot + 1);
+    for (char& c : ext)
+        if (c >= 'a' && c <= 'z') c -= 'a' - 'A';
+    char four[4] = {' ', ' ', ' ', ' '};
+    std::memcpy(four, ext.c_str(), std::min<size_t>(ext.size(), 4));
+    return (std::uint32_t(four[0]) << 24) | (std::uint32_t(four[1]) << 16) |
+           (std::uint32_t(four[2]) << 8) | std::uint32_t(four[3]);
+}
+
+std::uint32_t toMacTime(std::int64_t unixTime) {
+    return unixTime > 0 ? std::uint32_t(unixTime + kMacToUnixEpoch) : 0;
+}
+
+Bytes mhit(const Track& t, std::uint64_t fallbackDbid) {
+    // Start from the header this track arrived with, so every field PodBox
+    // does not model — artwork references, gapless data, sort keys — survives.
+    // Only a freshly imported track needs one built from nothing.
+    Bytes b = t.rawHeader.empty() ? chunk("mhit", 0x148)
+                                  : Bytes(t.rawHeader.begin(), t.rawHeader.end());
+    // Patch only within the header we actually have.
+    auto put32 = [&b](std::size_t off, std::uint32_t v) {
+        if (off + 4 <= b.size()) set32(b, off, v);
+    };
+    auto put64 = [&b](std::size_t off, std::uint64_t v) {
+        if (off + 8 <= b.size()) set64(b, off, v);
+    };
+    auto put8 = [&b](std::size_t off, std::uint8_t v) {
+        if (off + 1 <= b.size()) set8(b, off, v);
+    };
+    set32(b, 16, t.id);
+    put32(20, 1);  // visible
+    put32(24, filetypeMarker(t.location));
+    const bool mp3 = filetypeMarker(t.location) == 0x4D503320;  // "MP3 "
+    put8(29, mp3 ? 1 : 0);
+    put8(31, t.rating);
+    put32(32, toMacTime(t.dateAdded));  // date modified
+    put32(36, t.sizeBytes);
+    put32(40, t.lengthMs);
+    put32(44, t.trackNumber);
+    put32(52, t.year);
+    put32(56, t.bitrate);
+    put32(60, t.sampleRate << 16);
+    put32(80, t.playCount);
+    put32(84, t.playCount);
+    put32(92, t.discNumber);
+    put32(104, toMacTime(t.dateAdded));
+    put64(112, t.dbid ? t.dbid : fallbackDbid);
+    put32(208, t.mediaType ? t.mediaType : 1);
+
+    std::uint32_t nMhods = 0;
+    Bytes body;
+    auto add = [&](std::uint32_t type, const std::string& s) {
+        if (s.empty()) return;
+        append(body, mhodString(type, s));
+        ++nMhods;
+    };
+    add(1, t.title);
+    add(2, t.location);
+    add(3, t.album);
+    add(4, t.artist);
+    add(5, t.genre);
+    add(12, t.composer);
+    // Hand back anything the parser could not model — artwork references,
+    // sort keys, album artist — exactly as it arrived.
+    body.insert(body.end(), t.extraMhods.begin(), t.extraMhods.end());
+    nMhods += t.extraMhodCount;
+    set32(b, 4, std::uint32_t(b.size()));  // header length, whatever it is
+    set32(b, 8, std::uint32_t(b.size() + body.size()));
+    set32(b, 12, nMhods);
+    append(b, body);
+    return b;
+}
+
+Bytes mhip(std::uint32_t trackId, std::uint32_t position, std::uint32_t now) {
+    Bytes b = chunk("mhip", 0x4C);
+    const Bytes pos = mhodPosition(position);
+    set32(b, 8, std::uint32_t(b.size() + pos.size()));
+    set32(b, 12, 1);              // one child mhod
+    set32(b, 20, 1000 + position);  // group id, just needs uniqueness
+    set32(b, 24, trackId);
+    set32(b, 28, now);
+    append(b, pos);
+    return b;
+}
+
+Bytes mhyp(const std::string& name, bool master,
+           const std::vector<std::uint32_t>& trackIds, std::uint32_t now,
+           std::uint64_t ppid, const std::vector<std::uint8_t>& extraMhods,
+           std::uint32_t extraMhodCount) {
+    Bytes b = chunk("mhyp", 0x6C);
+    set8(b, 20, master ? 1 : 0);
+    set32(b, 24, now);
+    set64(b, 28, ppid);
+
+    Bytes body;
+    std::uint32_t nMhods = 0;
+    if (!name.empty()) {
+        append(body, mhodString(1, name));
+        ++nMhods;
+    }
+    // Smart-playlist criteria must precede the track entries, matching the
+    // order iTunes writes them in.
+    body.insert(body.end(), extraMhods.begin(), extraMhods.end());
+    nMhods += extraMhodCount;
+
+    std::uint32_t position = 1;
+    for (const std::uint32_t id : trackIds)
+        append(body, mhip(id, position++, now));
+
+    set32(b, 8, std::uint32_t(b.size() + body.size()));
+    set32(b, 12, nMhods);
+    set32(b, 16, std::uint32_t(trackIds.size()));
+    append(b, body);
+    return b;
+}
+
+Bytes mhsd(std::uint32_t type, const Bytes& child) {
+    Bytes b = chunk("mhsd", 0x60);
+    set32(b, 8, std::uint32_t(b.size() + child.size()));
+    set32(b, 12, type);
+    append(b, child);
+    return b;
+}
+
+}  // namespace
+
+bool writeItunesDb(const Library& lib, const fs::path& path,
+                   std::string* error, const WriteOptions& opts) {
+    std::mt19937_64 rng{std::random_device{}()};
+    const std::uint32_t now = toMacTime(std::time(nullptr));
+
+    // Track list.
+    Bytes mhlt = chunk("mhlt", 0x5C);
+    set32(mhlt, 8, std::uint32_t(lib.tracks.size()));
+    for (const Track& t : lib.tracks) append(mhlt, mhit(t, rng()));
+
+    // Playlists: regenerated master first, then user playlists.
+    std::vector<std::uint32_t> allIds;
+    allIds.reserve(lib.tracks.size());
+    for (const Track& t : lib.tracks) allIds.push_back(t.id);
+
+    Bytes mhlp = chunk("mhlp", 0x5C);
+    set32(mhlp, 8, std::uint32_t(1 + lib.playlists.size()));
+    const std::string masterName =
+        lib.masterName.empty() ? "iPod" : lib.masterName;
+    append(mhlp, mhyp(masterName, true, allIds, now,
+                      lib.masterDbid ? lib.masterDbid : rng(), {}, 0));
+    for (const Playlist& pl : lib.playlists)
+        append(mhlp, mhyp(pl.name, false, pl.trackIds, now,
+                          pl.dbid ? pl.dbid : rng(),
+                          pl.extraMhods, pl.extraMhodCount));
+
+    // Everything else the device had — podcasts, the album list, Apple
+    // Music's own playlist dataset — goes back exactly as it came in.
+    Bytes extras;
+    std::uint32_t extraCount = 0;
+    bool sawPodcasts = false;
+    for (const auto& ds : lib.extraDatasets) {
+        append(extras, mhsd(ds.type, Bytes(ds.payload.begin(), ds.payload.end())));
+        ++extraCount;
+        if (ds.type == 3) sawPodcasts = true;
+    }
+    if (!sawPodcasts) {
+        // An empty podcast dataset keeps the firmware's Podcasts menu happy.
+        append(extras, mhsd(3, chunk("mhlp", 0x5C)));
+        ++extraCount;
+    }
+
+    Bytes db = chunk("mhbd", 0xF4);
+    set32(db, 12, 1);
+    // Keep whatever version this device's database already declared. Writing
+    // an older one back invites Apple Music to treat the iPod as foreign and
+    // re-sync it from scratch.
+    set32(db, 16, lib.version ? lib.version : 0x19);
+    set32(db, 20, 2 + extraCount);  // child mhsd count
+    set64(db, 24, lib.databaseDbid ? lib.databaseDbid : rng());
+    set16(db, 32, 2);
+    append(db, mhsd(1, mhlt));
+    append(db, mhsd(2, mhlp));
+    append(db, extras);
+    set32(db, 8, std::uint32_t(db.size()));
+
+    // Devices from the iPod classic on reject a database whose checksum does
+    // not match, and show an empty library instead. The scheme has to be
+    // declared in the header — the hashing_scheme field at 0x30 — as well as
+    // satisfied, and the declared value is itself part of the hashed bytes.
+    //
+    // A nano 5G stores the database compressed, and its hash72 covers the
+    // compressed bytes exactly as they land on disk — so the payload is
+    // deflated first and the signature written into the (uncompressed) header
+    // afterwards. For everything else the plain image is what lands on disk.
+    Bytes out;
+    if (opts.compressed) {
+        out = compressItunesCdb(db);
+        if (out.empty()) {
+            if (error) *error = "Could not compress the database (iTunesCDB)";
+            return false;
+        }
+    } else {
+        out = std::move(db);
+    }
+
+    if (!opts.hash58Guid.empty()) {
+        set16(out, 0x30, kChecksumHash58);  // ITDB_CHECKSUM_HASH58
+        if (!writeHash58(out, opts.hash58Guid)) {
+            if (error) *error = "Could not compute this iPod's checksum";
+            return false;
+        }
+    } else if (!opts.hash72Iv.empty() && !opts.hash72Rndpart.empty()) {
+        set16(out, 0x30, kChecksumHash72);  // ITDB_CHECKSUM_HASH72
+        if (!writeHash72(out, opts.hash72Iv, opts.hash72Rndpart)) {
+            if (error) *error = "Could not compute this iPod's checksum";
+            return false;
+        }
+    } else if (!opts.hashAbUuid.empty() && !opts.hashAbNonce.empty()) {
+        set16(out, 0x30, kChecksumHashAB);
+        // nano 6G/7G databases carry this companion header marker in addition
+        // to hashing_scheme=3.
+        set16(out, 0x70, 4);
+        if (!writeHashAb(out, opts.hashAbUuid, opts.hashAbNonce)) {
+            if (error) *error = "Could not compute this iPod's hashAB checksum";
+            return false;
+        }
+    }
+
+    std::ofstream file(path, std::ios::binary | std::ios::trunc);
+    if (!file || !file.write(reinterpret_cast<const char*>(out.data()),
+                             std::streamsize(out.size()))) {
+        if (error) *error = "Could not write " + path.string();
+        return false;
+    }
+    file.close();
+    if (!file) {
+        if (error) *error = "Could not finish writing " + path.string();
+        return false;
+    }
+    return true;
+}
+
+}  // namespace podbox

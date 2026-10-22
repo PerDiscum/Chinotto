@@ -90,6 +90,8 @@
   "Chinotto lists the music in these folders and keeps the list up to date (every hour, or with Scan Now). Your music files are never changed. Songs on a drive that isn't connected stay in the library until it's back.": "",
   "Chinotto only reads this device. Turn this on to copy songs to it and delete them. The setting is remembered for this device only.": "",
   "Chinotto only reads this iPod. Turn this on to edit songs, add or delete them and change playlists. The setting is remembered for this iPod only.": "",
+  "Nano 6 playlist writing is experimental. It can change playlists only; songs and covers remain read-only. Chinotto saves the ten most recent copies of the iPod's databases to {path}.": "Das Schreiben von Wiedergabelisten auf dem Nano 6 ist experimentell. Nur Wiedergabelisten können geändert werden; Lieder und Cover bleiben schreibgeschützt. Chinotto speichert die zehn letzten Sicherungen der iPod-Datenbanken hier: {path}.",
+  "Nano 6 changes are experimental. Turn this on to change playlists only; songs and covers remain read-only.": "Änderungen am Nano 6 sind experimentell. Aktiviere diese Option, um nur Wiedergabelisten zu ändern; Lieder und Cover bleiben schreibgeschützt.",
   "Chinotto only reads this player. Turn this on to copy songs to it and delete them. The setting is remembered for this player only.": "",
   "Choose a picture": "",
   "Choose a picture for this iPod": "",

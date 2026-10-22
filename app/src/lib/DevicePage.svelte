@@ -96,7 +96,11 @@
           {t("Allow changes to this device.")}
         </label>
         <p class="note">
-          {#if ipod.writable}
+          {#if ipod.device.icon === "ipod-nano-6g" && ipod.writable}
+            {t("Nano 6 playlist writing is experimental. It can change playlists only; songs and covers remain read-only. Chinotto saves the ten most recent copies of the iPod's databases to {path}.", { path: "iPod_Control/iTunes/Chinotto Backups" })}
+          {:else if ipod.device.icon === "ipod-nano-6g"}
+            {t("Nano 6 changes are experimental. Turn this on to change playlists only; songs and covers remain read-only.")}
+          {:else if ipod.writable}
             {t("Chinotto can edit, add, and delete songs and change playlists on this iPod. It saves the ten most recent copies of the iPod's database to {path}.", { path: "iPod_Control/iTunes/Chinotto Backups" })}
           {:else}
             {t("Chinotto only reads this iPod. Turn this on to edit songs, add or delete them and change playlists. The setting is remembered for this iPod only.")}

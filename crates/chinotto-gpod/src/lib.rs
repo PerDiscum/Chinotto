@@ -28,6 +28,26 @@ extern "C" {
     fn g_free(p: *mut c_void);
     fn g_strdup(s: *const c_char) -> *mut c_char;
     fn g_error_free(e: *mut GError);
+    fn chinotto_nano6_stage(
+        root: *const c_char,
+        cdb_stage: *const c_char,
+        sqlite_stage: *const c_char,
+        guid: *const c_char,
+        playlists: *const Nano6PlaylistInput,
+        playlist_count: usize,
+        error: *mut c_char,
+        error_capacity: usize,
+    ) -> i32;
+}
+
+#[repr(C)]
+struct Nano6PlaylistInput {
+    dbid: u64,
+    name: *const c_char,
+    track_dbids: *const u64,
+    track_count: usize,
+    is_master: i32,
+    is_smart: i32,
 }
 
 /// How many database backups [`Database::save`] keeps on the iPod.
@@ -199,6 +219,7 @@ pub struct PlaylistInfo {
 pub struct Database {
     itdb: *mut Itdb_iTunesDB,
     root: PathBuf,
+    firewire_guid: Option<String>,
     /// Music files to delete once the next save succeeds.
     pending_deletes: Vec<PathBuf>,
 }
@@ -215,6 +236,12 @@ impl Drop for Database {
 impl Database {
     /// Parse the iPod mounted at `root` (its top folder, containing iPod_Control).
     pub fn open(root: &Path) -> Result<Self> {
+        Self::open_with_uuid(root, None)
+    }
+
+    /// Parse an iPod, optionally supplying its USB FireWire GUID when it omits
+    /// the value from SysInfo (as Nano 6 devices commonly do).
+    pub fn open_with_uuid(root: &Path, firewire_guid: Option<&str>) -> Result<Self> {
         let c = CString::new(root.to_string_lossy().as_bytes()).map_err(|_| Error("bad path".into()))?;
         let mut err: *mut GError = ptr::null_mut();
         let itdb = unsafe { itdb_parse(c.as_ptr(), &mut err) };
@@ -224,7 +251,8 @@ impl Database {
         if !err.is_null() {
             unsafe { g_error_free(err) };
         }
-        Ok(Database { itdb, root: root.to_path_buf(), pending_deletes: Vec::new() })
+        let firewire_guid = firewire_guid.map(|id| id.trim().to_ascii_uppercase()).filter(|id| id.len() == 16);
+        Ok(Database { itdb, root: root.to_path_buf(), firewire_guid, pending_deletes: Vec::new() })
     }
 
     pub fn root(&self) -> &Path {
@@ -458,6 +486,83 @@ impl Database {
     /// later) and the new one doesn't, the iPod would show an empty library:
     /// the backup is put back and an error returned.
     pub fn save(&mut self) -> Result<PathBuf> {
+        let nano6 = self.root.join("iPod_Control/iTunes/iTunesCDB").is_file()
+            && self.root.join("iPod_Control/iTunes/iTunes Library.itlp/Locations.itdb").is_file();
+        if nano6 {
+            let id = self
+                .firewire_guid
+                .as_deref()
+                .ok_or_else(|| Error("Nano 6 needs its USB FireWire ID before Chinotto can save changes".into()))?;
+            if !self.pending_deletes.is_empty() {
+                return Err(Error("Experimental Nano 6 support currently saves playlist changes only; song deletion is disabled".into()));
+            }
+            let backup = backup_nano6(&self.root)?;
+            let cdb_stage = backup.join("iTunesCDB staged");
+            let sqlite_stage = backup.join("SQLite staged");
+            let root = CString::new(self.root.to_string_lossy().as_bytes()).map_err(|_| Error("bad path".into()))?;
+            let cdb_stage_c = CString::new(cdb_stage.to_string_lossy().as_bytes()).map_err(|_| Error("bad staging path".into()))?;
+            let sqlite_stage_c = CString::new(sqlite_stage.to_string_lossy().as_bytes()).map_err(|_| Error("bad staging path".into()))?;
+            let id_c = CString::new(id).map_err(|_| Error("bad FireWire ID".into()))?;
+            let playlists = self.playlists();
+            let names: Vec<CString> = playlists
+                .iter()
+                .map(|playlist| CString::new(playlist.name.as_str()).map_err(|_| Error("playlist name contains a NUL byte".into())))
+                .collect::<Result<_>>()?;
+            let track_ids: Vec<Vec<u64>> = playlists.iter().map(|playlist| playlist.tracks.clone()).collect();
+            let input: Vec<Nano6PlaylistInput> = playlists
+                .iter()
+                .enumerate()
+                .map(|(i, playlist)| Nano6PlaylistInput {
+                    dbid: playlist.id,
+                    name: names[i].as_ptr(),
+                    track_dbids: track_ids[i].as_ptr(),
+                    track_count: track_ids[i].len(),
+                    is_master: playlist.master as i32,
+                    is_smart: playlist.smart as i32,
+                })
+                .collect();
+            let mut message = vec![0i8; 1024];
+            let ok = unsafe {
+                chinotto_nano6_stage(
+                    root.as_ptr(),
+                    cdb_stage_c.as_ptr(),
+                    sqlite_stage_c.as_ptr(),
+                    id_c.as_ptr(),
+                    input.as_ptr(),
+                    input.len(),
+                    message.as_mut_ptr(),
+                    message.len(),
+                )
+            };
+            if ok == 0 {
+                let detail = unsafe { CStr::from_ptr(message.as_ptr()) }.to_string_lossy();
+                return Err(Error(format!("Nano 6 playlist update was not installed: {detail}")));
+            }
+            let live_cdb = self.root.join("iPod_Control/iTunes/iTunesCDB");
+            let old_cdb = backup.join("iTunesCDB-before-swap");
+            if let Err(e) = std::fs::rename(&live_cdb, &old_cdb) {
+                return Err(Error(format!("Couldn't prepare the Nano 6 database swap: {e}")));
+            }
+            if let Err(e) = std::fs::rename(&cdb_stage, &live_cdb) {
+                let _ = std::fs::rename(&old_cdb, &live_cdb);
+                return Err(Error(format!("Couldn't install the Nano 6 database update: {e}")));
+            }
+            let live = self.root.join("iPod_Control/iTunes/iTunes Library.itlp");
+            let old_bundle = backup.join("iTunes Library.itlp-before-swap");
+            if let Err(e) = std::fs::rename(&live, &old_bundle) {
+                restore_nano6(&self.root, &backup)?;
+                return Err(Error(format!("Couldn't prepare the Nano 6 library swap: {e}")));
+            }
+            if let Err(e) = std::fs::rename(&sqlite_stage, &live) {
+                let _ = std::fs::rename(&old_bundle, &live);
+                restore_nano6(&self.root, &backup)?;
+                return Err(Error(format!("Couldn't install the Nano 6 library update: {e}")));
+            }
+            for f in self.pending_deletes.drain(..) {
+                let _ = std::fs::remove_file(f);
+            }
+            return Ok(backup);
+        }
         let path = self.root.join("iPod_Control/iTunes/iTunesDB");
         let before = checksum_scheme(&path);
         let backup = backup_itunesdb(&self.root)?;
@@ -652,6 +757,74 @@ fn backup_itunesdb(root: &Path) -> Result<PathBuf> {
         let _ = std::fs::remove_file(ours.remove(0));
     }
     Ok(dest)
+}
+
+fn backup_nano6(root: &Path) -> Result<PathBuf> {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static NEXT_BACKUP: AtomicU32 = AtomicU32::new(0);
+    let itunes = root.join("iPod_Control/iTunes");
+    let backups = root.join(BACKUP_DIR);
+    std::fs::create_dir_all(&backups)?;
+    let backup = backups.join(format!(
+        "Nano 6 {} {}-{:04}",
+        utc_stamp(unix_now() as i64),
+        std::process::id(),
+        NEXT_BACKUP.fetch_add(1, Ordering::Relaxed)
+    ));
+    std::fs::create_dir(&backup)?;
+    for name in ["iTunesCDB", "iTunesDB"] {
+        let source = itunes.join(name);
+        if source.exists() {
+            std::fs::copy(&source, backup.join(name)).map_err(|e| Error(format!("Couldn't back up {name}: {e}")))?;
+        }
+    }
+    let bundle = itunes.join("iTunes Library.itlp");
+    if !bundle.is_dir() {
+        return Err(Error("Nano 6 companion SQLite library is missing; no changes were written".into()));
+    }
+    copy_dir_all(&bundle, &backup.join("iTunes Library.itlp"))
+        .map_err(|e| Error(format!("Couldn't back up the Nano 6 SQLite library: {e}")))?;
+    let mut dirs: Vec<PathBuf> = std::fs::read_dir(&backups)?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.is_dir() && p.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with("Nano 6 20")))
+        .collect();
+    dirs.sort();
+    while dirs.len() > BACKUPS_KEPT {
+        let _ = std::fs::remove_dir_all(dirs.remove(0));
+    }
+    Ok(backup)
+}
+
+fn copy_dir_all(source: &Path, destination: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(destination)?;
+    for entry in std::fs::read_dir(source)? {
+        let entry = entry?;
+        let kind = entry.file_type()?;
+        let target = destination.join(entry.file_name());
+        if kind.is_dir() {
+            copy_dir_all(&entry.path(), &target)?;
+        } else if kind.is_file() {
+            std::fs::copy(entry.path(), target)?;
+        }
+    }
+    Ok(())
+}
+
+fn restore_nano6(root: &Path, backup: &Path) -> Result<()> {
+    let itunes = root.join("iPod_Control/iTunes");
+    for name in ["iTunesCDB", "iTunesDB"] {
+        let saved = backup.join(name);
+        if saved.exists() {
+            std::fs::copy(&saved, itunes.join(name)).map_err(|e| Error(format!("Couldn't restore {name}: {e}")))?;
+        }
+    }
+    let target = itunes.join("iTunes Library.itlp");
+    if target.exists() {
+        std::fs::remove_dir_all(&target).map_err(|e| Error(format!("Couldn't remove the incomplete Nano 6 library: {e}")))?;
+    }
+    copy_dir_all(&backup.join("iTunes Library.itlp"), &target)
+        .map_err(|e| Error(format!("Couldn't restore the Nano 6 SQLite library: {e}")))
 }
 
 /// `2026-10-20 143005` (UTC; sorts by time; no characters FAT32 rejects).

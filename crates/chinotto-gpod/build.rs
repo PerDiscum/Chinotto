@@ -46,6 +46,10 @@ fn main() {
     let macos = target.contains("apple-darwin");
 
     println!("cargo:rerun-if-changed=libgpod");
+    track_tree(&src.join("hashab"));
+    track_tree(&src.join("podbox"));
+    println!("cargo:rerun-if-changed=libgpod/src/podbox_nano6.cpp");
+    println!("cargo:rerun-if-changed=libgpod/sqlite_stub.c");
     println!("cargo:rerun-if-env-changed=CHINOTTO_DEPS");
 
     let deps = std::env::var_os("CHINOTTO_DEPS").map(PathBuf::from);
@@ -104,6 +108,48 @@ fn main() {
     }
     build.file(manifest.join("libgpod/sqlite_stub.c"));
     build.compile("gpod");
+
+    let mut hashab = cc::Build::new();
+    hashab
+        .include(src.join("hashab"))
+        .flag_if_supported("-fwrapv")
+        .warnings(false)
+        .file(src.join("hashab/calcHashAB.c"))
+        .file(src.join("hashab/generate_initial_buffer.c"))
+        .file(src.join("hashab/generate_key_material.c"))
+        .file(src.join("hashab/generate_buffer_from_state_mixing.c"))
+        .file(src.join("hashab/data/data.c"))
+        .compile("hashab_impl");
+
+    let mut nano6 = cc::Build::new();
+    nano6
+        .cpp(true)
+        .std("c++17")
+        .include(src.join("podbox"))
+        .include(src.join("hashab"))
+        .warnings(false)
+        .file(src.join("podbox/itdb/hash58.cpp"))
+        .file(src.join("podbox/itdb/hash72.cpp"))
+        .file(src.join("podbox/itdb/hashab.cpp"))
+        .file(src.join("podbox/itdb/itunescdb.cpp"))
+        .file(src.join("podbox/itdb/itunesdb.cpp"))
+        .file(src.join("podbox/itdb/itunesdb_writer.cpp"))
+        .file(src.join("podbox/itdb/itunessqlite.cpp"))
+        .file(src.join("podbox_nano6.cpp"));
+    nano6.compile("chinotto_nano6");
+    println!("cargo:rustc-link-lib=sqlite3");
+}
+
+fn track_tree(root: &std::path::Path) {
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(path) = pending.pop() {
+        println!("cargo:rerun-if-changed={}", path.display());
+        if path.is_dir() {
+            if let Ok(entries) = std::fs::read_dir(&path) {
+                pending.extend(entries.flatten().map(|entry| entry.path()));
+            }
+        }
+    }
 }
 
 /// Link a static glib from `prefix` (as built by scripts/build-glib-macos.sh)

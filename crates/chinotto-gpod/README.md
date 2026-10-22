@@ -1,8 +1,10 @@
 # chinotto-gpod
 
-Changes a classic iPod's database (edit tags, add/remove songs, playlists)
-through a bundled build of libgpod 0.8.3. See `src/lib.rs` for the API and the
-safety rules (backup before every save, files deleted only after a good save).
+Changes iPod databases (edit tags, add/remove songs, playlists) through a
+bundled build of libgpod 0.8.3. Nano 6 writing is experimental and also uses
+the HashAB and SQLite companion database code described below. See `src/lib.rs`
+for the API and safety rules (back up before every save, files deleted only
+after a good save).
 
 - `libgpod/` — the vendored C source (LGPL-2.1-or-later) and our `config.h`.
   Built without gdk-pixbuf, so libgpod never rewrites the ArtworkDB.
@@ -16,6 +18,11 @@ safety rules (backup before every save, files deleted only after a good save).
         --rust-target 1.82 -o src/ffi.rs -- $(pkg-config --cflags glib-2.0 gobject-2.0)
 
   then put back the header comment and `#![allow(...)]` line at the top.
+- `libgpod/src/hashab/` — HashAB implementation from `dstaley/hashab` at
+  `cc3e8aac05172a52e32da259fb31ccca9c625218` (Unlicense; see its `LICENSE`).
+- `libgpod/src/podbox/itdb/` — the iTunesDB and SQLite bundle implementation
+  from Milan Marocchi's PodBox (MIT; see its `LICENSE`), used to stage and
+  validate Nano 6 companion databases.
 
 Tests in `tests/real_ipod.rs` work on a temporary copy of the database in
 `CHINOTTO_TEST_IPOD` (never the original) with a made-up FireWire GUID.

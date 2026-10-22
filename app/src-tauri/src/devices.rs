@@ -97,7 +97,7 @@ pub fn describe(root: &Path, manual: bool) -> DeviceInfo {
         model: sys.model_name().map(str::to_string).or_else(|| generation.map(|g| g.name.to_string())),
         model_number: sys.model_number.clone(),
         icon: generation.map(|g| g.icon).unwrap_or("generic").to_string(),
-        identity: sys.identity(),
+        identity: sys.identity().or_else(|| chinotto_ipod::device::is_nano6_root(root).then(|| crate::setup::usb_serial(root)).flatten()),
         capacity,
         free,
         manual,
