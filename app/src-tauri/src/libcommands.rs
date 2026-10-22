@@ -429,7 +429,7 @@ fn cover_jpeg(bytes: &[u8], px: u32) -> Option<Vec<u8>> {
 // ---- Changing a library ----
 
 /// Run `f` on library `id`, save it, and tell the window.
-fn change<T>(app: &AppHandle, id: &str, f: impl FnOnce(&mut Library) -> Result<T, String>) -> Result<T, String> {
+pub(crate) fn change<T>(app: &AppHandle, id: &str, f: impl FnOnce(&mut Library) -> Result<T, String>) -> Result<T, String> {
     let r = {
         let state = app.state::<AppState>();
         let mut libs = state.libraries.lock().unwrap();
@@ -530,6 +530,13 @@ pub async fn lib_edit_tracks(
             Some(crate::tagwrite::CoverChange::Set(bytes, mime))
         }
     };
+    // Songs on an open MTP device: changed in its database.
+    if crate::mtp::is_mtp_library(&app, &lib) {
+        let app2 = app.clone();
+        return tauri::async_runtime::spawn_blocking(move || crate::mtp::edit(&app2, &lib, &ids, &fields, rating, cover.is_some()))
+            .await
+            .map_err(|e| e.to_string())?;
+    }
     // A player's songs follow its rules (and need its "Allow changes").
     let rules = crate::msc::edit_rules(&app, &lib)?;
     let paths: Vec<(u32, PathBuf)> = {

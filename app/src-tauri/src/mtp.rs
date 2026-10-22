@@ -38,6 +38,8 @@ struct Opened {
     filetypes: Vec<i32>,
     /// Rules for what's copied to it (by model).
     profile: crate::msc::Profile,
+    /// Its songs as its database has them (edits send every field back).
+    tracks: std::collections::HashMap<u32, chinotto_mtp::Track>,
 }
 
 #[derive(Serialize, Clone, Default)]
@@ -255,7 +257,9 @@ pub async fn mtp_open(key: String, app: AppHandle) -> Result<MtpInfo, String> {
         if plays.is_empty() {
             plays = profile.plays.to_vec();
         }
-        state.mtp.lock().unwrap().open = Some(Opened { key, dev, info: info.clone(), identity: identity(&raw), plays, filetypes, profile });
+        let tracks = tracks.into_iter().map(|t| (t.id, t)).collect();
+        state.mtp.lock().unwrap().open =
+            Some(Opened { key, dev, info: info.clone(), identity: identity(&raw), plays, filetypes, profile, tracks });
         Ok(info)
     })
     .await
@@ -495,6 +499,9 @@ pub async fn add(key: String, dbids: Vec<String>, files: Vec<String>, app: AppHa
                         filetype: new.filetype,
                         ..Default::default()
                     };
+                    if let Some(o) = state.mtp.lock().unwrap().open.as_mut().filter(|o| o.key == key) {
+                        o.tracks.insert(id, t.clone());
+                    }
                     let mut libs = state.libraries.lock().unwrap();
                     if let Some(l) = libs.list.iter_mut().find(|l| l.id == lib) {
                         l.tracks.push(lib_track(&key, &t));
@@ -532,6 +539,9 @@ pub fn delete(key: &str, ids: &[u32], app: &AppHandle) -> Result<Vec<String>, St
             Err(e) => problems.push(format!("{id}: {e}")),
         }
     }
+    for id in &gone {
+        o.tracks.remove(id);
+    }
     refresh_space(o);
     drop(m);
     let mut libs = state.libraries.lock().unwrap();
@@ -539,5 +549,81 @@ pub fn delete(key: &str, ids: &[u32], app: &AppHandle) -> Result<Vec<String>, St
         l.tracks.retain(|t| !gone.contains(&t.id));
         l.prune_playlists();
     }
+    Ok(problems)
+}
+
+/// The library lists the songs of the open MTP device.
+pub fn is_mtp_library(app: &AppHandle, lib: &str) -> bool {
+    let state = app.state::<AppState>();
+    let m = state.mtp.lock().unwrap();
+    m.open.as_ref().is_some_and(|o| o.info.library == lib)
+}
+
+/// Change songs' tags (and ratings) in the open device's database. The
+/// device keeps title, artist, album, genre, composer, year, track number
+/// and rating; other fields aren't kept there and are left out (said once).
+pub fn edit(
+    app: &AppHandle,
+    lib: &str,
+    ids: &[u32],
+    fields: &[chinotto_gpod::Field],
+    rating: Option<u8>,
+    cover: bool,
+) -> Result<Vec<String>, String> {
+    use chinotto_gpod::Field as F;
+    let state = app.state::<AppState>();
+    let mut problems = Vec::new();
+    let mut changed: Vec<(String, chinotto_mtp::Track)> = Vec::new();
+    {
+        let mut m = state.mtp.lock().unwrap();
+        let o = m.open.as_mut().filter(|o| o.info.library == lib).ok_or("That device isn't open any more")?;
+        if !state.is_writable(&o.identity) {
+            return Err(SWITCHED_OFF.into());
+        }
+        let greek = o.profile.plain_greek;
+        let text = |v: &Option<String>| v.as_ref().map(|s| if greek { crate::msc::plain_greek(s) } else { s.clone() });
+        let mut ignored = false;
+        for id in ids {
+            let Some(mut t) = o.tracks.get(id).cloned() else { continue };
+            for f in fields {
+                match f {
+                    F::Title(v) => t.title = text(v),
+                    F::Artist(v) => t.artist = text(v),
+                    F::Album(v) => t.album = text(v),
+                    F::Genre(v) => t.genre = text(v),
+                    F::Composer(v) => t.composer = text(v),
+                    F::Year(y) => t.date = (*y > 0).then(|| format!("{y:04}0101T000000.0")),
+                    F::TrackNr(n) => t.track_nr = (*n).clamp(0, u16::MAX as i32) as u16,
+                    _ => ignored = true,
+                }
+            }
+            if let Some(r) = rating {
+                t.rating = r as u16 * 20;
+            }
+            match o.dev.update_track(&t) {
+                Ok(()) => {
+                    o.tracks.insert(*id, t.clone());
+                    changed.push((o.key.clone(), t));
+                }
+                Err(e) => problems.push(format!("{}: {e}", t.title.as_deref().unwrap_or("?"))),
+            }
+        }
+        if ignored {
+            problems.push("Only title, artist, album, genre, composer, year, track number and rating are kept on an MTP device; the other changes were left out.".into());
+        }
+        if cover {
+            problems.push("Covers of songs on an MTP device can't be changed yet.".into());
+        }
+    }
+    crate::libcommands::change(app, lib, |l| {
+        for (key, t) in &changed {
+            if let Some(lt) = l.tracks.iter_mut().find(|x| x.id == t.id) {
+                let added = lt.added;
+                *lt = lib_track(key, t);
+                lt.added = added;
+            }
+        }
+        Ok(())
+    })?;
     Ok(problems)
 }

@@ -684,3 +684,7 @@ The Sansa e260 v2 here (Rockbox bootloader installed) isn't a guide for MTP: it 
 ## 0059: songs already on an MTP device are listed
 
 Devices were opened with `LIBMTP_Open_Raw_Device_Uncached`, and libmtp's `flush_handles` does nothing on uncached devices, so `Get_Tracklisting` and `Get_Playlist_List` found no objects: only songs Chinotto had just sent showed. Now `LIBMTP_Open_Raw_Device` (cached). Opening reads every object's metadata once (the NWZ-E344 with ~1,000 songs: a few seconds); songs sent afterwards are added to the cache by libmtp.
+
+## 0060: editing songs on MTP devices
+
+`lib_edit_tracks` on the open MTP device's library goes to `mtp::edit`, which changes the device's database with `Device::update_track` (LIBMTP_Update_Track_Metadata). libmtp sets every property the device supports from the track struct, so the app keeps each song as read (`Opened::tracks`, updated on send/delete/edit) and sends it back with the changes. Kept: title, artist, album, genre, composer, year, track number, rating (a rating of 0 isn't sent: libmtp skips it). Other fields and covers are reported as not kept. The model's rules apply (plain Greek on Walkmans). Needs "Allow changes".

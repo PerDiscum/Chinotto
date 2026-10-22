@@ -641,9 +641,6 @@ pub fn edit_rules(app: &AppHandle, lib: &str) -> Result<Option<Profile>, String>
         let Some(d) = l.device.clone() else { return Ok(None) };
         (d, l.folders.first().cloned().unwrap_or_default())
     };
-    if device.starts_with("mtp:") {
-        return Err("Songs on MTP devices can't be changed yet.".into());
-    }
     if !app.state::<AppState>().is_writable(&format!("msc:{device}")) {
         return Err("Changes to this player are switched off. Turn on “Allow changes” on its page first.".into());
     }

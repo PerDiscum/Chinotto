@@ -148,6 +148,7 @@ mod ffi {
             cb: Progress,
             data: *const c_void,
         ) -> c_int;
+        pub fn LIBMTP_Update_Track_Metadata(d: *mut LIBMTP_mtpdevice_t, t: *const LIBMTP_track_t) -> c_int;
         pub fn LIBMTP_Delete_Object(d: *mut LIBMTP_mtpdevice_t, id: u32) -> c_int;
         pub fn LIBMTP_Get_Supported_Filetypes(d: *mut LIBMTP_mtpdevice_t, types: *mut *mut u16, len: *mut u16) -> c_int;
         pub fn LIBMTP_Get_Errorstack(d: *mut LIBMTP_mtpdevice_t) -> *mut LIBMTP_error_t;
@@ -279,7 +280,10 @@ pub struct Track {
     pub track_nr: u16,
     pub duration_ms: u32,
     pub sample_rate: u32,
+    pub channels: u16,
+    pub wave_codec: u32,
     pub bitrate: u32,
+    pub bitrate_type: u16,
     /// 0–100.
     pub rating: u16,
     pub play_count: u32,
@@ -465,7 +469,10 @@ impl Device {
                     track_nr: r.tracknumber,
                     duration_ms: r.duration,
                     sample_rate: r.samplerate,
+                    channels: r.nochannels,
+                    wave_codec: r.wavecodec,
                     bitrate: r.bitrate,
+                    bitrate_type: r.bitratetype,
                     rating: r.rating,
                     play_count: r.usecount,
                     size: r.filesize,
@@ -578,6 +585,57 @@ impl Device {
             ffi::LIBMTP_Clear_Errorstack(self.d);
             Ok(id)
         }
+    }
+
+    /// Write a track's tags to the device's database. Every field is sent
+    /// (libmtp sets each property the device has), so `t` should be the
+    /// track as read, with the changes made to it. A rating of 0 is left as
+    /// it is on the device.
+    pub fn update_track(&mut self, t: &Track) -> Result<()> {
+        let dup = |s: &Option<String>| -> *mut c_char {
+            match CString::new(s.as_deref().unwrap_or("").replace('\0', "")) {
+                Ok(c) => unsafe { ffi::strdup(c.as_ptr()) },
+                Err(_) => ptr::null_mut(),
+            }
+        };
+        unsafe {
+            let p = ffi::LIBMTP_new_track_t();
+            if p.is_null() {
+                return Err(Error("out of memory".into()));
+            }
+            let r = &mut *p;
+            r.item_id = t.id;
+            r.parent_id = t.parent;
+            r.storage_id = t.storage;
+            r.title = dup(&t.title);
+            r.artist = dup(&t.artist);
+            r.album = dup(&t.album);
+            r.genre = dup(&t.genre);
+            r.composer = dup(&t.composer);
+            r.date = match &t.date {
+                Some(d) if !d.is_empty() => dup(&Some(d.clone())),
+                _ => ptr::null_mut(),
+            };
+            r.filename = if t.filename.is_some() { dup(&t.filename) } else { ptr::null_mut() };
+            r.tracknumber = t.track_nr;
+            r.duration = t.duration_ms;
+            r.samplerate = t.sample_rate;
+            r.nochannels = t.channels;
+            r.wavecodec = t.wave_codec;
+            r.bitrate = t.bitrate;
+            r.bitratetype = t.bitrate_type;
+            r.rating = t.rating;
+            r.usecount = t.play_count;
+            r.filesize = t.size;
+            r.filetype = t.filetype;
+            let rc = ffi::LIBMTP_Update_Track_Metadata(self.d, p);
+            ffi::LIBMTP_destroy_track_t(p);
+            if rc != 0 {
+                return Err(self.take_error("The device didn't take the changes"));
+            }
+            ffi::LIBMTP_Clear_Errorstack(self.d);
+        }
+        Ok(())
     }
 
     /// Delete a track (or a playlist, or any object) from the device.
