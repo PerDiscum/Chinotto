@@ -72,6 +72,9 @@ pub struct Profile {
     /// either; when songs are copied as files,
     /// SanDisk's firmware ignores covers embedded in them).
     pub folder_jpg: bool,
+    /// Greek letters without accents (Walkmans without Android show accented
+    /// Greek wrongly): "Φοίβος" → "Φοιβος", in tags and folder names.
+    pub plain_greek: bool,
 }
 
 /// Known players and where they keep things. "Other" fits most players.
@@ -87,19 +90,26 @@ pub fn profiles() -> Vec<Profile> {
         id3v23,
         small_covers: None,
         folder_jpg: false,
+        plain_greek: false,
     };
     vec![
-        p("sony-nwz", "Sony Walkman NWZ (E, S, A series…)", "sony-nwz", "MUSIC", "MUSIC", "m3u8", &["mp3", "aac", "wma", "wav"], true),
-        p(
-            "sony-nwa",
-            "Sony Walkman NW-A (A10, A20…)",
-            "sony-a10",
-            "MUSIC",
-            "MUSIC",
-            "m3u8",
-            &["mp3", "aac", "alac", "flac", "wma", "wav", "aiff", "aif"],
-            true,
-        ),
+        Profile {
+            plain_greek: true,
+            ..p("sony-nwz", "Sony Walkman NWZ (E, S, A series…)", "sony-nwz", "MUSIC", "MUSIC", "m3u8", &["mp3", "aac", "wma", "wav"], true)
+        },
+        Profile {
+            plain_greek: true,
+            ..p(
+                "sony-nwa",
+                "Sony Walkman NW-A (A10, A20…)",
+                "sony-a10",
+                "MUSIC",
+                "MUSIC",
+                "m3u8",
+                &["mp3", "aac", "alac", "flac", "wma", "wav", "aiff", "aif"],
+                true,
+            )
+        },
         // The e200 shows embedded covers up to about 32 KB (a 300×300 one did, a
         // 455×455 one of 42 KB didn't, as reported on SanDisk's and JRiver's forums).
         // Copied as files (not through MTP), SanDisk players show the album
@@ -477,7 +487,10 @@ pub async fn msc_add(path: String, dbids: Vec<String>, files: Vec<String>, app: 
             } else {
                 src
             };
-            let info = crate::tags::read(f).unwrap_or_default();
+            let mut info = crate::tags::read(f).unwrap_or_default();
+            if profile.plain_greek {
+                plain_greek_info(&mut info);
+            }
             let mut dest = place(&music, &info, f);
             let size = std::fs::metadata(f).map(|m| m.len()).unwrap_or(0);
             if dest.exists() {
@@ -548,6 +561,9 @@ fn copy_in(from: &Path, to: &Path, profile: &Profile) -> Result<(), String> {
                 }
             }
         }
+    }
+    if profile.plain_greek {
+        let _ = plain_greek_tags(&part);
     }
     if profile.id3v23 && mp3 {
         // Not fatal: the song plays either way.
@@ -627,9 +643,83 @@ pub fn after_edit(file: &Path, profile: &Profile, cover: Option<&crate::tagwrite
             }
         }
     }
+    if profile.plain_greek {
+        let _ = plain_greek_tags(file);
+    }
     if profile.id3v23 && mp3 {
         let _ = crate::tagwrite::resave_id3v23(file);
     }
+}
+
+/// Greek letters without their accents (tonos, dialytika, and the polytonic
+/// marks); everything else, final sigma included, as it is.
+pub fn plain_greek(s: &str) -> String {
+    use unicode_normalization::char::is_combining_mark;
+    use unicode_normalization::UnicodeNormalization;
+    let greek = |c: char| matches!(c as u32, 0x0370..=0x03FF | 0x1F00..=0x1FFF);
+    let mut out = String::with_capacity(s.len());
+    let mut base_greek = false;
+    for c in s.nfd() {
+        if is_combining_mark(c) {
+            if !base_greek {
+                out.push(c);
+            }
+        } else {
+            base_greek = greek(c);
+            out.push(c);
+        }
+    }
+    out.nfc().collect()
+}
+
+/// The text fields of `info`, without Greek accents.
+fn plain_greek_info(info: &mut chinotto_gpod::TrackInfo) {
+    for f in [
+        &mut info.title,
+        &mut info.artist,
+        &mut info.album_artist,
+        &mut info.album,
+        &mut info.genre,
+        &mut info.composer,
+        &mut info.grouping,
+        &mut info.comment,
+        &mut info.sort_title,
+        &mut info.sort_artist,
+        &mut info.sort_album,
+        &mut info.sort_album_artist,
+        &mut info.sort_composer,
+    ] {
+        if let Some(v) = f.as_mut() {
+            *v = plain_greek(v);
+        }
+    }
+}
+
+/// Rewrite the file's tags without Greek accents (only if any were there).
+fn plain_greek_tags(file: &Path) -> Result<(), String> {
+    let info = crate::tags::read(file)?;
+    let mut plain = info.clone();
+    plain_greek_info(&mut plain);
+    if plain == info {
+        return Ok(());
+    }
+    use chinotto_gpod::Field as F;
+    let fields = vec![
+        F::Title(plain.title),
+        F::Artist(plain.artist),
+        F::AlbumArtist(plain.album_artist),
+        F::Album(plain.album),
+        F::Genre(plain.genre),
+        F::Composer(plain.composer),
+        F::Grouping(plain.grouping),
+        F::Comment(plain.comment),
+        F::SortTitle(plain.sort_title),
+        F::SortArtist(plain.sort_artist),
+        F::SortAlbum(plain.sort_album),
+        F::SortAlbumArtist(plain.sort_album_artist),
+        F::SortComposer(plain.sort_composer),
+    ];
+    crate::tagwrite::write(file, &fields, None)
 }
 
 /// Delete songs (the player library's song ids) from the player. Only files
@@ -769,6 +859,14 @@ mod tests {
         let folder = std::fs::read(dir.join("C/folder.jpg")).expect("folder.jpg for the e200");
         assert!(folder.len() <= 30_000 && !is_progressive(&folder));
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn greek_without_accents() {
+        assert_eq!(plain_greek("Φοίβος Δεληβοριάς - Χάλια - Κάθε Σεπτέμβρη"), "Φοιβος Δεληβοριας - Χαλια - Καθε Σεπτεμβρη");
+        assert_eq!(plain_greek("ΐ ϋ Ώρα ἄνθρωπος"), "ι υ Ωρα ανθρωπος");
+        // Other languages keep their accents.
+        assert_eq!(plain_greek("Björk – Café"), "Björk – Café");
     }
 
     #[test]

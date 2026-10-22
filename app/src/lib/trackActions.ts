@@ -123,6 +123,31 @@ export function songMenu(e: MouseEvent, track: Track, tracks: Track[]) {
  * Press on a song and move: drag the selection onto a playlist in the source
  * list, or (with `insertionAt`) to a new place in the shown playlist.
  */
+/** Scrolling the list during a drag is allowed only by the drag itself (see allowDragScroll). */
+let scrollAllowedUntil = 0;
+export function allowDragScroll() {
+  scrollAllowedUntil = performance.now() + 100;
+}
+
+/**
+ * Keep the list the drag started in where it is while dragging: nothing may
+ * scroll it away (the web view's own edge scrolling included), except a
+ * deliberate reorder scroll. Returns the function that lets go.
+ */
+function holdScroll(from: EventTarget | null): () => void {
+  let el = from instanceof HTMLElement ? from : null;
+  while (el && !(el.scrollHeight > el.clientHeight && /(auto|scroll)/.test(getComputedStyle(el).overflowY))) el = el.parentElement;
+  if (!el) return () => {};
+  const box = el;
+  let top = box.scrollTop;
+  const onScroll = () => {
+    if (performance.now() < scrollAllowedUntil) top = box.scrollTop;
+    else if (box.scrollTop !== top) box.scrollTop = top;
+  };
+  box.addEventListener("scroll", onScroll);
+  return () => box.removeEventListener("scroll", onScroll);
+}
+
 export function startSongDrag(
   e: MouseEvent,
   t: Track,
@@ -133,9 +158,12 @@ export function startSongDrag(
   // what happens, and says so when it can't.
   if (e.button !== 0) return;
   const x0 = e.clientX, y0 = e.clientY;
+  let release = () => {};
+  const from = e.currentTarget;
   const move = (m: MouseEvent) => {
     if (!store.songDrag) {
       if (Math.hypot(m.clientX - x0, m.clientY - y0) < 6) return;
+      release = holdScroll(from);
       if (!store.selected.has(t.id)) store.clickTrack(t.id, tracks, plain);
       store.songDrag = { dbids: store.selectedTracks.map((x) => x.dbid), x: m.clientX, y: m.clientY, target: null };
     }
@@ -146,6 +174,7 @@ export function startSongDrag(
   const up = () => {
     window.removeEventListener("mousemove", move);
     window.removeEventListener("mouseup", up);
+    release();
     const d = store.songDrag;
     store.songDrag = null;
     if (d?.target) void store.addToPlaylist(d.target, d.dbids);
@@ -162,9 +191,12 @@ export function startSongDrag(
 export function startAlbumDrag(e: MouseEvent, tracks: Track[]) {
   if (e.button !== 0 || (isMac && e.ctrlKey) || !tracks.length) return;
   const x0 = e.clientX, y0 = e.clientY;
+  let release = () => {};
+  const from = e.currentTarget;
   const move = (m: MouseEvent) => {
     if (!store.songDrag) {
       if (Math.hypot(m.clientX - x0, m.clientY - y0) < 6) return;
+      release = holdScroll(from);
       store.selected = new Set(tracks.map((x) => x.id));
       store.anchor = tracks[0].id;
       store.songDrag = { dbids: tracks.map((x) => x.dbid), x: m.clientX, y: m.clientY, target: null };
@@ -175,6 +207,7 @@ export function startAlbumDrag(e: MouseEvent, tracks: Track[]) {
   const up = () => {
     window.removeEventListener("mousemove", move);
     window.removeEventListener("mouseup", up);
+    release();
     const d = store.songDrag;
     store.songDrag = null;
     if (!d) return;

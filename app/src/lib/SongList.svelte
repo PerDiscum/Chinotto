@@ -3,7 +3,7 @@
   import { store, isMac } from "./store.svelte";
   import { bitrate, duration, formatName, stars, count } from "./format";
   import type { SortKey, Track } from "./types";
-  import { songMenu, startSongDrag } from "./trackActions";
+  import { allowDragScroll, songMenu, startSongDrag } from "./trackActions";
 
   let { tracks }: { tracks: Track[] } = $props();
 
@@ -186,13 +186,21 @@
   const contextmenu = (e: MouseEvent, t: Track) => songMenu(e, t, tracks);
 
   /** Where in the list a drop at screen height `y` would insert (row boundary), or null outside it. */
+  let edgeSince = 0;
   function insertionAt(x: number, y: number): number | null {
     if (!scroller) return null;
     const r = scroller.getBoundingClientRect();
     if (x < r.left || x > r.right || y < r.top || y > r.bottom) return null;
-    // Scroll when near the top or bottom edge.
-    if (y < r.top + ROW + 16) scroller.scrollTop -= ROW;
-    else if (y > r.bottom - 16) scroller.scrollTop += ROW;
+    // Reordering a long playlist: scroll only after resting at the very top or
+    // bottom of the rows for a moment, so passing through on the way to the
+    // sidebar doesn't move the list.
+    const edge = y > r.top + ROW && y < r.top + ROW + 14 ? -1 : y > r.bottom - 14 ? 1 : 0;
+    if (!edge) edgeSince = 0;
+    else if (!edgeSince) edgeSince = performance.now();
+    else if (performance.now() - edgeSince > 500) {
+      allowDragScroll();
+      scroller.scrollTop += edge * ROW;
+    }
     const pos = (y - r.top - ROW + scroller.scrollTop) / ROW; // minus the sticky header
     return Math.max(0, Math.min(tracks.length, Math.round(pos)));
   }

@@ -239,6 +239,18 @@ Everything decided and learned so far, so work can continue in a new session.
 
 Order chosen: confirm editing on the nano → **playback** (done) → artwork (done) → icon chooser → shuffle/repeat → playlist reordering → column browser fixes and Format/Bitrate columns → media library.
 
+## Drag scrolling; Greek on Walkmans (patch 0051)
+
+- While a song or album is dragged, the list it came from is held where it
+  was (trackActions `holdScroll` resets any scroll), except the reorder
+  scroll, which now waits 0.5 s at the very top/bottom of the rows
+  (`allowDragScroll`). Before, passing the playlist's top edge on the way
+  to the sidebar scrolled it.
+- Sony profiles (NWZ, NW-A10/A20 — not the Android ones) have
+  `plain_greek`: Greek letters lose their accents (tonos, dialytika,
+  polytonic marks; final ς kept) in tags and folder names when copying and
+  after edits (`msc::plain_greek`, NFD + drop marks after Greek letters).
+
 ## Editing on players, progress names, conversion rules (patch 0050)
 
 - Player songs are editable when the player allows changes (store.writable
