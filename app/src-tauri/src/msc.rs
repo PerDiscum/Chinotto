@@ -67,6 +67,11 @@ pub struct Profile {
     /// It only shows small embedded covers: at most this many pixels a side
     /// and bytes (they're re-encoded as plain, "baseline" JPEGs).
     pub small_covers: Option<(u32, usize)>,
+    /// It shows the album folder's `folder.jpg` (tested on a Sansa e260 v2,
+    /// firmware 03.01.16A: its own firmware shows folder.jpg only, Rockbox
+    /// either; when songs are copied as files,
+    /// SanDisk's firmware ignores covers embedded in them).
+    pub folder_jpg: bool,
 }
 
 /// Known players and where they keep things. "Other" fits most players.
@@ -81,6 +86,7 @@ pub fn profiles() -> Vec<Profile> {
         plays,
         id3v23,
         small_covers: None,
+        folder_jpg: false,
     };
     vec![
         p("sony-nwz", "Sony Walkman NWZ (E, S, A series…)", "sony-nwz", "MUSIC", "MUSIC", "m3u8", &["mp3", "aac", "wma", "wav"], true),
@@ -96,11 +102,27 @@ pub fn profiles() -> Vec<Profile> {
         ),
         // The e200 shows embedded covers up to about 32 KB (a 300×300 one did, a
         // 455×455 one of 42 KB didn't, as reported on SanDisk's and JRiver's forums).
+        // Copied as files (not through MTP), SanDisk players show the album
+        // folder's folder.jpg rather than covers in the songs.
         Profile {
             small_covers: Some((300, 30_000)),
+            folder_jpg: true,
             ..p("sansa-e200", "SanDisk Sansa e200", "sansa-e200", "Music", "Music", "m3u", &["mp3", "wma", "wav"], true)
         },
-        p("sansa-clip", "SanDisk Sansa Clip / Fuze", "sansa-clip", "Music", "Music", "m3u", &["mp3", "wma", "wav", "flac", "ogg"], false),
+        Profile {
+            small_covers: Some((300, 30_000)),
+            folder_jpg: true,
+            ..p(
+                "sansa-clip",
+                "SanDisk Sansa Clip / Fuze",
+                "sansa-clip",
+                "Music",
+                "Music",
+                "m3u",
+                &["mp3", "wma", "wav", "flac", "ogg"],
+                true,
+            )
+        },
         p("other", "Other player", "generic", "Music", "Playlists", "m3u8", &["mp3", "aac", "wav"], false),
     ]
 }
@@ -521,9 +543,27 @@ fn copy_in(from: &Path, to: &Path, profile: &Profile) -> Result<(), String> {
         }
     })?;
     let mp3 = to.extension().is_some_and(|e| e.eq_ignore_ascii_case("mp3"));
-    if let (Some((px, max)), true) = (profile.small_covers, mp3) {
-        // Not fatal either: without it, only the cover is missing.
-        let _ = shrink_cover(&part, px, max);
+    if let Some((px, max)) = profile.small_covers {
+        // The song's cover (or its folder's), made small enough for the player.
+        // Not fatal: without it, only the cover is missing.
+        let cover = crate::tags::embedded_cover(from)
+            .or_else(|| crate::library::folder_cover(from.parent()?).and_then(|p| std::fs::read(p).ok()))
+            .and_then(|b| small_jpeg(&b, px, max).ok());
+        if let Some(jpeg) = &cover {
+            if mp3 {
+                let _ = crate::tagwrite::write(
+                    &part,
+                    &[],
+                    Some(&crate::tagwrite::CoverChange::Set(jpeg.clone(), lofty::picture::MimeType::Jpeg)),
+                );
+            }
+            if profile.folder_jpg {
+                let folder = dir.join("folder.jpg");
+                if !folder.exists() {
+                    let _ = std::fs::write(&folder, jpeg);
+                }
+            }
+        }
     }
     if profile.id3v23 && mp3 {
         // Not fatal: the song plays either way.
@@ -535,14 +575,13 @@ fn copy_in(from: &Path, to: &Path, profile: &Profile) -> Result<(), String> {
     })
 }
 
-/// Replace the song's cover with a baseline JPEG of at most `px` a side and
-/// `max` bytes (lower quality until it fits). Songs without one get the
-/// folder's cover picture.
-fn shrink_cover(file: &Path, px: u32, max: usize) -> Result<(), String> {
-    let bytes = crate::tags::embedded_cover(file)
-        .or_else(|| crate::library::folder_cover(file.parent()?).and_then(|p| std::fs::read(p).ok()))
-        .ok_or("no cover")?;
-    let img = crate::cover::decode(&bytes)?;
+/// A cover as a baseline JPEG of at most `px` a side and `max` bytes (lower
+/// quality until it fits).
+fn small_jpeg(bytes: &[u8], px: u32, max: usize) -> Result<Vec<u8>, String> {
+    if bytes.len() <= max && bytes.starts_with(&[0xFF, 0xD8]) && !is_progressive(bytes) && img_fits(bytes, px) {
+        return Ok(bytes.to_vec()); // already fine
+    }
+    let img = crate::cover::decode(bytes)?;
     let small = if img.width() > px || img.height() > px { img.resize(px, px, image::imageops::FilterType::Lanczos3) } else { img };
     let rgb = small.to_rgb8();
     let mut jpeg = Vec::new();
@@ -553,10 +592,7 @@ fn shrink_cover(file: &Path, px: u32, max: usize) -> Result<(), String> {
             break;
         }
     }
-    if bytes.len() <= max && bytes.starts_with(&[0xFF, 0xD8]) && !is_progressive(&bytes) && img_fits(&bytes, px) {
-        return Ok(()); // already fine
-    }
-    crate::tagwrite::write(file, &[], Some(&crate::tagwrite::CoverChange::Set(jpeg, lofty::picture::MimeType::Jpeg)))
+    Ok(jpeg)
 }
 
 /// A progressive JPEG (SOF2 marker), which many old players can't show.
@@ -593,10 +629,24 @@ pub fn msc_delete(path: String, ids: Vec<u32>, app: AppHandle) -> Result<Vec<Str
             problems.push(format!("{}: {e}", f.display()));
             continue;
         }
-        // Tidy up folders the song leaves empty (never the music folder itself).
+        // Tidy up folders the song leaves empty (never the music folder itself);
+        // a folder.jpg or hidden files left on their own go with it.
         let mut dir = f.parent().map(Path::to_path_buf);
         while let Some(d) = dir {
-            if d == music || !d.starts_with(&music) || std::fs::remove_dir(&d).is_err() {
+            if d == music || !d.starts_with(&music) {
+                break;
+            }
+            let rest: Vec<PathBuf> = std::fs::read_dir(&d).map(|rd| rd.flatten().map(|e| e.path()).collect()).unwrap_or_default();
+            let leftovers = rest.iter().all(|p| {
+                let n = p.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
+                p.is_file() && (n == "folder.jpg" || n.starts_with('.'))
+            });
+            if leftovers {
+                for p in &rest {
+                    let _ = std::fs::remove_file(p);
+                }
+            }
+            if std::fs::remove_dir(&d).is_err() {
                 break;
             }
             dir = d.parent().map(Path::to_path_buf);
@@ -688,6 +738,8 @@ mod tests {
         let cover = crate::tags::embedded_cover(&to2).unwrap();
         assert!(cover.starts_with(&[0xFF, 0xD8]) && cover.len() <= 30_000 && !is_progressive(&cover), "{} bytes", cover.len());
         assert!(img_fits(&cover, 300));
+        let folder = std::fs::read(dir.join("C/folder.jpg")).expect("folder.jpg for the e200");
+        assert!(folder.len() <= 30_000 && !is_progressive(&folder));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

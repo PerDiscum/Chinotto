@@ -239,6 +239,15 @@ Everything decided and learned so far, so work can continue in a new session.
 
 Order chosen: confirm editing on the nano → **playback** (done) → artwork (done) → icon chooser → shuffle/repeat → playlist reordering → column browser fixes and Format/Bitrate columns → media library.
 
+## Sansa covers: folder.jpg (patch 0049)
+
+- Tested on the developer's e260 v2 (SanDisk firmware 03.01.16A, Rockbox 3.15
+  also installed) with four test albums: SanDisk's firmware showed only the
+  albums with a `folder.jpg` (embedded covers ignored, whatever the size or
+  text encoding); Rockbox showed all. So the Sansa profiles also write a
+  small baseline `folder.jpg` (≤300 px, ≤30 KB) into each album folder when
+  copying, if there isn't one; deleting an album's last song removes it.
+
 ## Same rules everywhere; Sansa covers (patch 0048)
 
 - Any song can be dragged, from any source and view (song list, album panel,
