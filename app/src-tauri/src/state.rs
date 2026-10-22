@@ -207,7 +207,6 @@ impl AppState {
                             sort_composer: t.sort_composer,
                             filetype: t.filetype,
                             location: t.ipod_path,
-                            ..Default::default()
                         },
                         year: t.year.max(0) as u32,
                         track_nr: t.track_nr.max(0) as u32,
