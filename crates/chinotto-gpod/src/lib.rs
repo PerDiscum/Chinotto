@@ -542,42 +542,52 @@ impl Database {
             let cdb_stage_c = CString::new(cdb_stage.to_string_lossy().as_bytes()).map_err(|_| Error("bad staging path".into()))?;
             let sqlite_stage_c = CString::new(sqlite_stage.to_string_lossy().as_bytes()).map_err(|_| Error("bad staging path".into()))?;
             let id_c = CString::new(id).map_err(|_| Error("bad FireWire ID".into()))?;
-            let track_infos: Vec<TrackInfo> = self.track_ids().into_iter()
+            let track_infos: Vec<TrackInfo> = self
+                .track_ids()
+                .into_iter()
                 .map(|id| self.track(id).ok_or_else(|| Error(format!("Couldn't read track {id} for Nano 6 save"))))
                 .collect::<Result<_>>()?;
-            let track_strings: Vec<Nano6TrackStrings> = track_infos.iter().map(|track| {
-                let make = |value: Option<&str>| CString::new(value.unwrap_or_default())
-                    .map_err(|_| Error("track metadata contains a NUL byte".into()));
-                Ok(Nano6TrackStrings {
-                    title: make(track.title.as_deref())?,
-                    artist: make(track.artist.as_deref())?,
-                    album: make(track.album.as_deref())?,
-                    genre: make(track.genre.as_deref())?,
-                    composer: make(track.composer.as_deref())?,
-                    location: make(track.ipod_path.as_deref())?,
+            let track_strings: Vec<Nano6TrackStrings> = track_infos
+                .iter()
+                .map(|track| {
+                    let make = |value: Option<&str>| {
+                        CString::new(value.unwrap_or_default()).map_err(|_| Error("track metadata contains a NUL byte".into()))
+                    };
+                    Ok(Nano6TrackStrings {
+                        title: make(track.title.as_deref())?,
+                        artist: make(track.artist.as_deref())?,
+                        album: make(track.album.as_deref())?,
+                        genre: make(track.genre.as_deref())?,
+                        composer: make(track.composer.as_deref())?,
+                        location: make(track.ipod_path.as_deref())?,
+                    })
                 })
-            }).collect::<Result<_>>()?;
-            let track_input: Vec<Nano6TrackInput> = track_infos.iter().zip(&track_strings).map(|(track, strings)| Nano6TrackInput {
-                dbid: track.dbid,
-                title: strings.title.as_ptr(),
-                artist: strings.artist.as_ptr(),
-                album: strings.album.as_ptr(),
-                genre: strings.genre.as_ptr(),
-                composer: strings.composer.as_ptr(),
-                location: strings.location.as_ptr(),
-                length_ms: track.length_ms.max(0) as u32,
-                size_bytes: track.size_bytes,
-                track_number: track.track_nr.max(0) as u32,
-                disc_number: track.disc_nr.max(0) as u32,
-                year: track.year.max(0) as u32,
-                bitrate: track.bitrate_kbps.max(0) as u32,
-                sample_rate: track.sample_rate,
-                rating: track.rating.min(100) as u8,
-                artwork_count: track.artwork_count,
-                artwork_size: track.artwork_size,
-                has_artwork: track.has_artwork,
-                mhii_link: track.mhii_link,
-            }).collect();
+                .collect::<Result<_>>()?;
+            let track_input: Vec<Nano6TrackInput> = track_infos
+                .iter()
+                .zip(&track_strings)
+                .map(|(track, strings)| Nano6TrackInput {
+                    dbid: track.dbid,
+                    title: strings.title.as_ptr(),
+                    artist: strings.artist.as_ptr(),
+                    album: strings.album.as_ptr(),
+                    genre: strings.genre.as_ptr(),
+                    composer: strings.composer.as_ptr(),
+                    location: strings.location.as_ptr(),
+                    length_ms: track.length_ms.max(0) as u32,
+                    size_bytes: track.size_bytes,
+                    track_number: track.track_nr.max(0) as u32,
+                    disc_number: track.disc_nr.max(0) as u32,
+                    year: track.year.max(0) as u32,
+                    bitrate: track.bitrate_kbps.max(0) as u32,
+                    sample_rate: track.sample_rate,
+                    rating: track.rating.min(100) as u8,
+                    artwork_count: track.artwork_count,
+                    artwork_size: track.artwork_size,
+                    has_artwork: track.has_artwork,
+                    mhii_link: track.mhii_link,
+                })
+                .collect();
             let playlists = self.playlists();
             let names: Vec<CString> = playlists
                 .iter()

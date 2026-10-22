@@ -765,3 +765,8 @@ Devices were opened with `LIBMTP_Open_Raw_Device_Uncached`, and libmtp's `flush_
   rebuild instead of leaving stale indexes in place.
 - Mark only artists with linked tracks as populated, which also clears stale
   artist entries left by earlier database rewrites.
+
+## 0071: clear CI formatting and Clippy blockers
+
+- Format the Nano 6 FFI code with rustfmt and remove a redundant struct default
+  update so CI can proceed through Rust formatting and Clippy.
