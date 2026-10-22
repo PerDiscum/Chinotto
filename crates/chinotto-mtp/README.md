@@ -20,5 +20,7 @@ Changes to the upstream sources:
 - `libmtp/src/libusb1-glue.c`: Apple devices (vendor 0x05ac) are never
   probed: iPods in disk mode aren't MTP, and may be busy being written to.
 
-`shim.c` adds a cheap USB fingerprint (to probe only when something was
+`shim.c` adds a check that a device really offers an MTP interface (a
+player set to mass storage keeps its USB ID, so libmtp would list it), a cheap
+USB fingerprint (to probe only when something was
 plugged in or out) and struct sizes for a layout test.

@@ -652,3 +652,7 @@ WASM engine has no setters for album artist/sort/artwork fields; we write the
 sort_album 23×4, sort_albumartist 24×4, composer 9×4; cd_nr 120, track_nr 128,
 year 144, dbid 232, artwork_count 252, artwork_size 256, has_artwork 304,
 mhii_link 416), validated at runtime against the engine's JSON.
+
+## 0054: MTP only when the device offers it
+
+`chinotto_has_mtp_interface` (shim.c) reads the USB descriptors (without opening the device) and `detect()` skips devices with no interface of class 6 or 255 with 3 endpoints. A player in mass-storage mode (NWZ-E344 on a Mac, Sansa on "Auto Detect") keeps its USB ID, which libmtp knows, so it used to be listed as MTP as well as a drive, and opening it failed ("in use"). Now it appears only as the drive. To test MTP on the Sansa: SanDisk firmware, Settings → USB Mode → MTP.

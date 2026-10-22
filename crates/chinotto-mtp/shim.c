@@ -26,6 +26,37 @@ uint64_t chinotto_usb_fingerprint(void) {
   return h ^ (uint64_t)n;
 }
 
+/* Whether the USB device at bus/address offers an MTP interface: one (any
+ * configuration or setting) of class "still image" (6) or vendor-specific
+ * (255) with the three endpoints MTP uses. Read from the descriptors the
+ * system already has; the device isn't opened. A player in mass-storage mode
+ * has only a class 8 interface, even when libmtp knows its USB ID. */
+int chinotto_has_mtp_interface(uint32_t bus, uint8_t address) {
+  if (!ctx && libusb_init(&ctx) != 0) return 1; /* can't tell: don't hide it */
+  libusb_device **list;
+  ssize_t n = libusb_get_device_list(ctx, &list);
+  if (n < 0) return 1;
+  int found = -1;
+  for (ssize_t i = 0; i < n && found < 0; i++) {
+    if (libusb_get_bus_number(list[i]) != bus || libusb_get_device_address(list[i]) != address) continue;
+    struct libusb_device_descriptor d;
+    if (libusb_get_device_descriptor(list[i], &d) != 0) { found = 1; break; }
+    found = 0;
+    for (uint8_t c = 0; c < d.bNumConfigurations && !found; c++) {
+      struct libusb_config_descriptor *cfg;
+      if (libusb_get_config_descriptor(list[i], c, &cfg) != 0) { found = 1; break; }
+      for (int j = 0; j < cfg->bNumInterfaces && !found; j++)
+        for (int k = 0; k < cfg->interface[j].num_altsetting; k++) {
+          const struct libusb_interface_descriptor *intf = &cfg->interface[j].altsetting[k];
+          if (intf->bNumEndpoints == 3 && (intf->bInterfaceClass == 6 || intf->bInterfaceClass == 255)) { found = 1; break; }
+        }
+      libusb_free_config_descriptor(cfg);
+    }
+  }
+  libusb_free_device_list(list, 1);
+  return found != 0; /* not found in the list: don't hide it */
+}
+
 /* Sizes and field offsets of libmtp's structs, for a test that checks the
  * Rust declarations match. */
 #include <stddef.h>
