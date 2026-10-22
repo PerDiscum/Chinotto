@@ -452,7 +452,7 @@ bool updateLibrary(const Library& library, const fs::path& path,
         !album.prepare(db, "INSERT OR IGNORE INTO album(pid,kind,artwork_status,artwork_item_pid,artist_pid,user_rating,name,name_order,all_compilations,feed_url,season_number,has_songs,sort_order,artist_order,artist_count_calc,item_count) VALUES(?,2,0,0,?,0,?,?,0,NULL,0,1,?,?,1,1)", error) ||
         !composer.prepare(db, "INSERT OR IGNORE INTO composer(pid,name,name_order,sort_name) VALUES(?,?,?,?)", error) ||
         (tableExists(db, "track_artist") &&
-         !trackArtist.prepare(db, "INSERT OR IGNORE INTO track_artist(pid,name,name_order,sort_name,has_songs,has_non_compilation_tracks,album_count) VALUES(?,?,?,?,1,1,1)", error)) ||
+         !trackArtist.prepare(db, "INSERT INTO track_artist(pid,name,name_order,sort_name,has_songs,has_non_compilation_tracks,album_count) VALUES(?,?,?,?,1,1,1) ON CONFLICT(pid) DO UPDATE SET name=excluded.name,name_order=excluded.name_order,sort_name=excluded.sort_name,has_songs=1,has_non_compilation_tracks=1", error)) ||
         !container.prepare(db, "INSERT INTO container(pid,distinguished_kind,date_created,date_modified,name,name_order,parent_pid,media_kinds,workout_template_id,is_hidden,smart_is_folder) VALUES(?,0,0,0,?,?,0,?,0,?,0)", error) ||
         !member.prepare(db, "INSERT INTO item_to_container(item_pid,container_pid,physical_order,shuffle_order) VALUES(?,?,?,NULL)", error))
         return fail();
@@ -547,13 +547,13 @@ bool updateLibrary(const Library& library, const fs::path& path,
             } else {
                 trackArtistId = nextTrackArtistId++;
                 trackArtists.emplace(track.artist, trackArtistId);
-                sqlite3_bind_int64(trackArtist.get(), 1, sqlite3_int64(trackArtistId));
-                bindText(trackArtist.get(), 2, track.artist);
-                sqlite3_bind_int64(trackArtist.get(), 3, artistRanks[index]);
-                bindText(trackArtist.get(), 4, track.artist);
-                if (!trackArtist.run(db, error)) return fail();
-                trackArtist.reset();
             }
+            sqlite3_bind_int64(trackArtist.get(), 1, sqlite3_int64(trackArtistId));
+            bindText(trackArtist.get(), 2, track.artist);
+            sqlite3_bind_int64(trackArtist.get(), 3, artistRanks[index]);
+            bindText(trackArtist.get(), 4, track.artist);
+            if (!trackArtist.run(db, error)) return fail();
+            trackArtist.reset();
         }
         sqlite3_bind_int64(item.get(), ++p, sqlite3_int64(trackArtistId));
         if (!item.run(db, error)) return fail();
@@ -607,7 +607,9 @@ bool updateLibrary(const Library& library, const fs::path& path,
               error) ||
         !exec(db, "UPDATE artist SET has_songs=1", error) ||
         (tableExists(db, "track_artist") &&
-         !exec(db, "UPDATE track_artist SET has_songs=1,has_non_compilation_tracks=1,"
+         !exec(db, "UPDATE track_artist SET "
+                  "has_songs=EXISTS(SELECT 1 FROM item WHERE item.track_artist_pid=track_artist.pid),"
+                  "has_non_compilation_tracks=EXISTS(SELECT 1 FROM item WHERE item.track_artist_pid=track_artist.pid),"
                   "album_count=(SELECT count(DISTINCT album_pid) FROM item WHERE item.track_artist_pid=track_artist.pid)", error)) ||
         !exec(db, "UPDATE genre_map SET has_music=1,"
                   "artist_count_calc=(SELECT count(DISTINCT artist_pid) FROM item WHERE item.genre_id=genre_map.id),"

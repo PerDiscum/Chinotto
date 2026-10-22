@@ -757,3 +757,11 @@ Devices were opened with `LIBMTP_Open_Raw_Device_Uncached`, and libmtp's `flush_
 - This targets the missing browse metadata and cover links seen after Chinotto
   writes the Nano databases. Compatibility with Apple Music.app sync still
   requires a real-device check; no Apple sync was performed during development.
+
+## 0070: refresh existing Nano 6 artist sort indexes
+
+- Existing `track_artist` rows are retained to preserve their persistent IDs,
+  so refresh each row's display name and sort order during every database
+  rebuild instead of leaving stale indexes in place.
+- Mark only artists with linked tracks as populated, which also clears stale
+  artist entries left by earlier database rewrites.
