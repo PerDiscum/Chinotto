@@ -746,3 +746,14 @@ Devices were opened with `LIBMTP_Open_Raw_Device_Uncached`, and libmtp's `flush_
 - Validate required sort indexes and browse flags before installing staged
   databases. Compile-checked only; the repaired database still needs a
   real-device check with the user's Nano 6.
+
+## 0069: restore Nano 6 artist, genre, and artwork metadata
+
+- Rebuild `track_artist` rows and item links, set genre browse flags/counts,
+  and keep album artwork item links consistent with the companion database.
+- Preserve the iTunesCDB artwork fields in `Library.itdb`, including for new
+  tracks, and allow embedded or manually assigned covers on Nano 6 using its
+  observed artwork thumbnail formats.
+- This targets the missing browse metadata and cover links seen after Chinotto
+  writes the Nano databases. Compatibility with Apple Music.app sync still
+  requires a real-device check; no Apple sync was performed during development.

@@ -38,6 +38,10 @@ struct Nano6Track {
     std::uint32_t bitrate;
     std::uint32_t sampleRate;
     std::uint8_t rating;
+    std::uint16_t artworkCount;
+    std::uint32_t artworkSize;
+    std::uint8_t hasArtwork;
+    std::uint32_t mhiiLink;
 };
 
 namespace {
@@ -146,6 +150,10 @@ extern "C" int chinotto_nano6_stage(const char* rootText,
         track.bitrate = in.bitrate;
         track.sampleRate = in.sampleRate;
         track.rating = in.rating;
+        track.artworkCount = in.artworkCount;
+        track.artworkSize = in.artworkSize;
+        track.hasArtwork = in.hasArtwork;
+        track.mhiiLink = in.mhiiLink;
         track.mediaType = podbox::kMediaAudio;
         track.dateAdded = std::time(nullptr);
         library.tracks.push_back(std::move(track));

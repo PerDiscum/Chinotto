@@ -59,6 +59,10 @@ struct Nano6TrackInput {
     bitrate: u32,
     sample_rate: u32,
     rating: u8,
+    artwork_count: u16,
+    artwork_size: u32,
+    has_artwork: u8,
+    mhii_link: u32,
 }
 
 #[repr(C)]
@@ -200,6 +204,10 @@ pub struct TrackInfo {
     pub size_bytes: u32,
     pub bitrate_kbps: i32,
     pub sample_rate: u32,
+    pub artwork_count: u16,
+    pub artwork_size: u32,
+    pub has_artwork: u8,
+    pub mhii_link: u32,
     /// Description shown as "Kind", e.g. "MPEG audio file", "AAC audio file".
     pub filetype: Option<String>,
     pub play_count: u32,
@@ -565,6 +573,10 @@ impl Database {
                 bitrate: track.bitrate_kbps.max(0) as u32,
                 sample_rate: track.sample_rate,
                 rating: track.rating.min(100) as u8,
+                artwork_count: track.artwork_count,
+                artwork_size: track.artwork_size,
+                has_artwork: track.has_artwork,
+                mhii_link: track.mhii_link,
             }).collect();
             let playlists = self.playlists();
             let names: Vec<CString> = playlists
@@ -755,6 +767,10 @@ unsafe fn read_track(t: *mut Itdb_Track) -> TrackInfo {
         size_bytes: t.size,
         bitrate_kbps: t.bitrate,
         sample_rate: t.samplerate as u32,
+        artwork_count: t.artwork_count,
+        artwork_size: t.artwork_size,
+        has_artwork: t.has_artwork,
+        mhii_link: t.mhii_link,
         filetype: get_str(t.filetype),
         play_count: t.playcount,
         dbid: t.dbid,

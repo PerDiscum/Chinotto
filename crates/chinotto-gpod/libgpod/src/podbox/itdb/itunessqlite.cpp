@@ -407,6 +407,10 @@ bool updateLibrary(const Library& library, const fs::path& path,
     }
 
     IdMap artists = textIds(db, "SELECT name,pid FROM artist");
+    IdMap trackArtists = textIds(db, "SELECT name,pid FROM track_artist");
+    std::uint64_t nextTrackArtistId = 1;
+    for (const auto& [_, id] : trackArtists)
+        nextTrackArtistId = std::max(nextTrackArtistId, id + 1);
     IdMap composers = textIds(db, "SELECT name,pid FROM composer");
     IdMap albums = textIds(
         db, "SELECT album.name || char(31) || coalesce(artist.name,''),album.pid "
@@ -425,16 +429,18 @@ bool updateLibrary(const Library& library, const fs::path& path,
             !exec(db, std::string("DELETE FROM \"") + table + "\"", error))
             return fail();
 
-    Statement genre, item, av, kind, artist, album, composer, container, member;
-    if (!genre.prepare(db, "INSERT INTO genre_map(id,genre,genre_order) VALUES(?,?,?)", error) ||
+    Statement genre, item, av, kind, artist, album, composer, trackArtist,
+        container, member;
+    if (!genre.prepare(db,
+            "INSERT INTO genre_map(id,genre,genre_order,has_music) VALUES(?,?,?,1)", error) ||
         !item.prepare(db,
-            "INSERT INTO item(pid,media_kind,date_modified,year,remember_bookmark,"
-            "exclude_from_shuffle,artwork_status,start_time_ms,stop_time_ms,"
+            "INSERT INTO item(pid,media_kind,date_modified,year,artwork_status,artwork_cache_id,"
+            "remember_bookmark,exclude_from_shuffle,start_time_ms,stop_time_ms,"
             "total_time_ms,track_number,disc_number,genre_id,album_pid,artist_pid,"
             "composer_pid,title,artist,album,album_artist,composer,sort_title,sort_artist,"
             "sort_album,sort_album_artist,sort_composer,title_order,artist_order,album_order,"
-            "genre_order,composer_order,album_artist_order,physical_order) "
-            "VALUES(?,?,?,?,0,0,2,0,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", error) ||
+            "genre_order,composer_order,album_artist_order,physical_order,track_artist_pid) "
+            "VALUES(?,?,?,?,?,?,0,0,0,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", error) ||
         !av.prepare(db,
             "INSERT INTO avformat_info(item_pid,sub_id,audio_format,bit_rate,"
             "sample_rate,duration,gapless_heuristic_info,gapless_encoding_delay,"
@@ -445,6 +451,8 @@ bool updateLibrary(const Library& library, const fs::path& path,
         !artist.prepare(db, "INSERT OR IGNORE INTO artist(pid,kind,artwork_status,artwork_album_pid,name,name_order,sort_name,has_songs) VALUES(?,2,0,0,?,?,?,1)", error) ||
         !album.prepare(db, "INSERT OR IGNORE INTO album(pid,kind,artwork_status,artwork_item_pid,artist_pid,user_rating,name,name_order,all_compilations,feed_url,season_number,has_songs,sort_order,artist_order,artist_count_calc,item_count) VALUES(?,2,0,0,?,0,?,?,0,NULL,0,1,?,?,1,1)", error) ||
         !composer.prepare(db, "INSERT OR IGNORE INTO composer(pid,name,name_order,sort_name) VALUES(?,?,?,?)", error) ||
+        (tableExists(db, "track_artist") &&
+         !trackArtist.prepare(db, "INSERT OR IGNORE INTO track_artist(pid,name,name_order,sort_name,has_songs,has_non_compilation_tracks,album_count) VALUES(?,?,?,?,1,1,1)", error)) ||
         !container.prepare(db, "INSERT INTO container(pid,distinguished_kind,date_created,date_modified,name,name_order,parent_pid,media_kinds,workout_template_id,is_hidden,smart_is_folder) VALUES(?,0,0,0,?,?,0,?,0,?,0)", error) ||
         !member.prepare(db, "INSERT INTO item_to_container(item_pid,container_pid,physical_order,shuffle_order) VALUES(?,?,?,NULL)", error))
         return fail();
@@ -481,16 +489,20 @@ bool updateLibrary(const Library& library, const fs::path& path,
     const auto composerRanks = sortRanks([](const Track& t) -> const std::string& { return t.composer; });
 
     std::unordered_map<std::string, int> genres;
-    for (const Track& track : library.tracks)
+    std::unordered_map<std::string, std::int64_t> genreOrderByName;
+    for (std::size_t index = 0; index < library.tracks.size(); ++index) {
+        const Track& track = library.tracks[index];
+        if (!track.genre.empty()) genreOrderByName.emplace(track.genre, genreRanks[index]);
         if (!track.genre.empty() && !genres.count(track.genre)) {
             const int id = int(genres.size()) + 1;
             genres[track.genre] = id;
             sqlite3_bind_int(genre.get(), 1, id);
             bindText(genre.get(), 2, track.genre);
-            sqlite3_bind_int(genre.get(), 3, id - 1);
+            sqlite3_bind_int64(genre.get(), 3, genreOrderByName[track.genre]);
             if (!genre.run(db, error)) return fail();
             genre.reset();
         }
+    }
 
     for (std::size_t index = 0; index < library.tracks.size(); ++index) {
         const Track& track = library.tracks[index];
@@ -507,6 +519,8 @@ bool updateLibrary(const Library& library, const fs::path& path,
         sqlite3_bind_int64(item.get(), ++p, track.mediaType);
         sqlite3_bind_int64(item.get(), ++p, macTime(track.dateAdded));
         sqlite3_bind_int64(item.get(), ++p, track.year);
+        sqlite3_bind_int(item.get(), ++p, track.hasArtwork == 1 ? 1 : 2);
+        sqlite3_bind_int64(item.get(), ++p, track.mhiiLink);
         sqlite3_bind_double(item.get(), ++p, track.lengthMs);
         sqlite3_bind_double(item.get(), ++p, track.lengthMs);
         sqlite3_bind_int64(item.get(), ++p, track.trackNumber);
@@ -525,6 +539,23 @@ bool updateLibrary(const Library& library, const fs::path& path,
                                          composerRanks[index], artistRanks[index],
                                          static_cast<std::int64_t>(index)})
             sqlite3_bind_int64(item.get(), ++p, order);
+        std::uint64_t trackArtistId = 0;
+        if (tableExists(db, "track_artist") && !track.artist.empty()) {
+            const auto found = trackArtists.find(track.artist);
+            if (found != trackArtists.end()) {
+                trackArtistId = found->second;
+            } else {
+                trackArtistId = nextTrackArtistId++;
+                trackArtists.emplace(track.artist, trackArtistId);
+                sqlite3_bind_int64(trackArtist.get(), 1, sqlite3_int64(trackArtistId));
+                bindText(trackArtist.get(), 2, track.artist);
+                sqlite3_bind_int64(trackArtist.get(), 3, artistRanks[index]);
+                bindText(trackArtist.get(), 4, track.artist);
+                if (!trackArtist.run(db, error)) return fail();
+                trackArtist.reset();
+            }
+        }
+        sqlite3_bind_int64(item.get(), ++p, sqlite3_int64(trackArtistId));
         if (!item.run(db, error)) return fail();
         item.reset();
 
@@ -571,9 +602,17 @@ bool updateLibrary(const Library& library, const fs::path& path,
     if (!exec(db,
               "UPDATE album SET has_songs=1,"
               "item_count=(SELECT count(*) FROM item WHERE item.album_pid=album.pid),"
-              "artist_count_calc=(SELECT count(DISTINCT artist_pid) FROM item WHERE item.album_pid=album.pid)",
+              "artist_count_calc=(SELECT count(DISTINCT artist_pid) FROM item WHERE item.album_pid=album.pid),"
+              "artwork_item_pid=COALESCE((SELECT pid FROM item WHERE item.album_pid=album.pid AND artwork_status=1 ORDER BY track_number LIMIT 1),0)",
               error) ||
-        !exec(db, "UPDATE artist SET has_songs=1", error))
+        !exec(db, "UPDATE artist SET has_songs=1", error) ||
+        (tableExists(db, "track_artist") &&
+         !exec(db, "UPDATE track_artist SET has_songs=1,has_non_compilation_tracks=1,"
+                  "album_count=(SELECT count(DISTINCT album_pid) FROM item WHERE item.track_artist_pid=track_artist.pid)", error)) ||
+        !exec(db, "UPDATE genre_map SET has_music=1,"
+                  "artist_count_calc=(SELECT count(DISTINCT artist_pid) FROM item WHERE item.genre_id=genre_map.id),"
+                  "album_count_calc=(SELECT count(DISTINCT album_pid) FROM item WHERE item.genre_id=genre_map.id),"
+                  "compilation_count_calc=0", error))
         return fail();
 
     auto addContainer = [&](std::uint64_t id, const std::string& name,
