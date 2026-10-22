@@ -27,7 +27,7 @@ fn parse_ids(ids: &[String]) -> Result<Vec<u64>, String> {
 
 fn playlist_only_on_nano6(path: &str) -> Result<(), String> {
     if chinotto_ipod::device::is_nano6_root(Path::new(path)) {
-        Err("Nano 6 support is experimental and currently writes playlists only; song and cover changes are disabled.".into())
+        Err("Nano 6 support is experimental: adding songs and changing playlists are supported; editing or deleting songs and changing covers are disabled.".into())
     } else {
         Ok(())
     }
@@ -179,7 +179,6 @@ pub(crate) fn expand(paths: &[String]) -> Vec<PathBuf> {
 /// Copy music files (or folders of them) onto the iPod.
 #[tauri::command]
 pub async fn add_files(path: String, files: Vec<String>, playlist: Option<String>, app: AppHandle) -> Result<Response, String> {
-    playlist_only_on_nano6(&path)?;
     let playlist = playlist.map(|p| p.parse::<u64>().map_err(|_| "bad playlist id".to_string())).transpose()?;
     blocking(app, move |app| {
         let files = expand(&files);
@@ -194,6 +193,7 @@ pub async fn add_files(path: String, files: Vec<String>, playlist: Option<String
         // Converted copies live here until the iPod has its copy; then the folder goes.
         let tmp = crate::convert::TempDir::new()?;
         let tmp_dir = tmp.0.clone();
+        let nano6 = chinotto_ipod::device::is_nano6_root(Path::new(&path));
         let result = with_writer(&app, Path::new(&path), move |db| {
             let mut res = AddResult { added: Vec::new(), skipped: Vec::new() };
             let mut added_files: Vec<(u64, PathBuf)> = Vec::new();
@@ -233,7 +233,9 @@ pub async fn add_files(path: String, files: Vec<String>, playlist: Option<String
                 }
             }
             let _ = emitter.emit("add-progress", AddProgress { done: total, total, current: String::new() });
-            add_embedded_covers(db, &added_files, &mut res.skipped)?;
+            if !nano6 {
+                add_embedded_covers(db, &added_files, &mut res.skipped)?;
+            }
             if let Some(pl) = playlist {
                 let mut ids = db.playlists().into_iter().find(|p| p.id == pl).map(|p| p.tracks).unwrap_or_default();
                 ids.extend(res.added.iter().filter_map(|s| s.parse::<u64>().ok()));

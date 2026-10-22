@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -19,6 +20,24 @@ struct Nano6Playlist {
     std::size_t trackCount;
     int isMaster;
     int isSmart;
+};
+
+struct Nano6Track {
+    std::uint64_t dbid;
+    const char* title;
+    const char* artist;
+    const char* album;
+    const char* genre;
+    const char* composer;
+    const char* location;
+    std::uint32_t lengthMs;
+    std::uint32_t sizeBytes;
+    std::uint32_t trackNumber;
+    std::uint32_t discNumber;
+    std::uint32_t year;
+    std::uint32_t bitrate;
+    std::uint32_t sampleRate;
+    std::uint8_t rating;
 };
 
 namespace {
@@ -47,6 +66,8 @@ extern "C" int chinotto_nano6_stage(const char* rootText,
                                      const char* cdbStageText,
                                      const char* sqliteStageText,
                                      const char* guid,
+                                     const Nano6Track* tracks,
+                                     std::size_t trackCount,
                                      const Nano6Playlist* playlists,
                                      std::size_t playlistCount,
                                      char* error,
@@ -54,6 +75,7 @@ extern "C" int chinotto_nano6_stage(const char* rootText,
 {
     namespace fs = std::filesystem;
     if (rootText == nullptr || cdbStageText == nullptr || sqliteStageText == nullptr ||
+        (trackCount != 0 && tracks == nullptr) ||
         (playlistCount != 0 && playlists == nullptr)) {
         report(error, errorCapacity, "Missing Nano 6 path or playlist data");
         return 0;
@@ -89,7 +111,46 @@ extern "C" int chinotto_nano6_stage(const char* rootText,
     }
 
     std::unordered_map<std::uint64_t, std::uint32_t> idByDbid;
-    for (const podbox::Track& track : library.tracks) idByDbid[track.dbid] = track.id;
+    std::uint32_t nextTrackId = 1;
+    for (const podbox::Track& track : library.tracks) {
+        idByDbid[track.dbid] = track.id;
+        if (track.id >= nextTrackId && track.id != UINT32_MAX)
+            nextTrackId = track.id + 1;
+    }
+    for (std::size_t i = 0; i < trackCount; ++i) {
+        const Nano6Track& in = tracks[i];
+        if (idByDbid.count(in.dbid)) continue;
+        if (!in.dbid || in.location == nullptr || in.location[0] == '\0') {
+            report(error, errorCapacity,
+                   "A new Nano 6 song has no persistent id or device location");
+            return 0;
+        }
+        if (nextTrackId == 0 || nextTrackId == UINT32_MAX) {
+            report(error, errorCapacity, "No free Nano 6 track id is available");
+            return 0;
+        }
+        podbox::Track track;
+        track.id = nextTrackId++;
+        track.dbid = in.dbid;
+        track.title = in.title == nullptr ? "" : in.title;
+        track.artist = in.artist == nullptr ? "" : in.artist;
+        track.album = in.album == nullptr ? "" : in.album;
+        track.genre = in.genre == nullptr ? "" : in.genre;
+        track.composer = in.composer == nullptr ? "" : in.composer;
+        track.location = in.location;
+        track.lengthMs = in.lengthMs;
+        track.sizeBytes = in.sizeBytes;
+        track.trackNumber = in.trackNumber;
+        track.discNumber = in.discNumber;
+        track.year = in.year;
+        track.bitrate = in.bitrate;
+        track.sampleRate = in.sampleRate;
+        track.rating = in.rating;
+        track.mediaType = podbox::kMediaAudio;
+        track.dateAdded = std::time(nullptr);
+        library.tracks.push_back(std::move(track));
+        idByDbid[in.dbid] = library.tracks.back().id;
+    }
     std::vector<podbox::Playlist> changed;
     changed.reserve(playlistCount);
     for (std::size_t i = 0; i < playlistCount; ++i) {

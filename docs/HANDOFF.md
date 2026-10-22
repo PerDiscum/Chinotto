@@ -710,3 +710,28 @@ Devices were opened with `LIBMTP_Open_Raw_Device_Uncached`, and libmtp's `flush_
 - USB identity fallback is used when SysInfo omits the GUID. Do not write that
   value into SysInfo; it is only passed to libgpod for signing.
 - This is experimental and has not been exercised on hardware in this patch.
+
+## 0064–0066: Nano 6 database identity and playlist readback
+
+- Some Nano 6 `Library.itdb` files have a `db_info.pid` that differs from the
+  iTunesCDB header ID. This difference is valid: retain the companion database's
+  own ID while keeping its master-container ID aligned. Do not rewrite
+  `db_info.pid` from the CDB.
+- libgpod prefers the type-3 dataset whenever it exists. Nano 6 CDBs can have
+  an empty type-3 Podcasts dataset and real playlists in type 2, so prefer type
+  3 only when its playlist count is nonzero; otherwise parse type 2.
+- With the reader fix installed, playlist editing was confirmed working on the
+  user's Nano 6.
+
+## 0067: add songs to Nano 6
+
+- Song imports are enabled for Nano 6. libgpod copies the song into the iPod's
+  Music folder; the Nano staging bridge receives the in-memory track list and
+  merges new tracks into the parsed CDB before regenerating the master and user
+  playlist memberships.
+- Rebuild and sign both iTunesCDB and the companion Library/Locations SQLite
+  databases using the existing HashAB nonce. Covers, song edits, and song
+  deletion remain unavailable; do not widen those operations without separate
+  validation. Existing device data is backed up before each write.
+- This addition has compile checks only so far; it still needs a real-device
+  add-song and playback check.
