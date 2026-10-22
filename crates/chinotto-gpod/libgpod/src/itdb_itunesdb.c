@@ -3143,10 +3143,21 @@ static gboolean parse_fimp (FImport *fimp, gboolean compressed)
     parse_tracks (fimp, mhsd_1);
     if (fimp->error) return FALSE;
 
-    if (mhsd_3 != -1)
-	parse_playlists (fimp, mhsd_3);
+    if (mhsd_3 != -1) {
+        glong mhlp_3 = find_next_a_in_b (cts, "mhlp", mhsd_3, mhsd_3);
+        CHECK_ERROR (fimp, FALSE);
+        /* Modern compressed databases can contain an empty type-3 Podcasts
+         * section alongside the actual playlists in type 2. Prefer type 3
+         * only when it has playlists; otherwise fall back to type 2. */
+        if (mhlp_3 != -1 && get32lint (cts, mhlp_3 + 8) > 0)
+            parse_playlists (fimp, mhsd_3);
+        else if (mhsd_2 != -1)
+            parse_playlists (fimp, mhsd_2);
+        else
+            parse_playlists (fimp, mhsd_3);
+    }
     else if (mhsd_2 != -1)
-	parse_playlists (fimp, mhsd_2);
+        parse_playlists (fimp, mhsd_2);
     else
     {  /* Very bad: no type 2 or type 3 mhsd which should hold the
 	  playlists */
