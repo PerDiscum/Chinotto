@@ -50,7 +50,7 @@
       items: [
         { label: lib?.scanning ? t("Scanning…") : t("Scan Now"), disabled: !!lib?.scanning, action: () => store.scanLibrary(id) },
         { label: t("Read All Songs Again"), disabled: !!lib?.scanning, action: () => store.scanLibrary(id, true) },
-        { label: t("New Playlist"), action: () => store.newLibraryPlaylist(id) },
+        { label: t("New Playlist"), disabled: !store.libraryPlaylistsWritable(id), action: () => store.newLibraryPlaylist(id) },
         { label: t("Edit Library…"), action: () => (store.dialog = { kind: "library", id }) },
         { label: t("Remove Unavailable Songs"), disabled: !missing, action: () => store.removeUnavailable(id) },
         { label: "", separator: true },
@@ -59,14 +59,24 @@
     };
   }
 
-  function libPlaylistMenu(e: MouseEvent, scoped: string, name: string) {
+  function deviceLibraryMenu(e: MouseEvent, lib: string) {
     e.preventDefault();
     store.menu = {
       x: e.clientX,
       y: e.clientY,
+      items: [{ label: t("New Playlist"), disabled: !store.libraryPlaylistsWritable(lib), action: () => store.newLibraryPlaylist(lib) }],
+    };
+  }
+
+  function libPlaylistMenu(e: MouseEvent, lib: string, scoped: string, name: string) {
+    e.preventDefault();
+    const ro = !store.libraryPlaylistsWritable(lib);
+    store.menu = {
+      x: e.clientX,
+      y: e.clientY,
       items: [
-        { label: t("Rename"), action: () => (store.renaming = scoped) },
-        { label: t("Delete Playlist…"), danger: true, action: () => (store.dialog = { kind: "delete-playlist", id: scoped, name }) },
+        { label: t("Rename"), disabled: ro, action: () => (store.renaming = scoped) },
+        { label: t("Delete Playlist…"), danger: true, disabled: ro, action: () => (store.dialog = { kind: "delete-playlist", id: scoped, name }) },
       ],
     };
   }
@@ -144,10 +154,10 @@
                       class="row"
                       class:active={isLib(l.id, p.id)}
                       class:drop={store.songDrag?.target === scoped}
-                      data-drop-playlist={scoped}
+                      data-drop-playlist={store.libraryPlaylistsWritable(l.id) ? scoped : undefined}
                       onclick={() => store.showLibrary(l.id, p.id)}
-                      ondblclick={() => (store.renaming = scoped)}
-                      oncontextmenu={(e) => libPlaylistMenu(e, scoped, p.name)}
+                      ondblclick={() => store.libraryPlaylistsWritable(l.id) && (store.renaming = scoped)}
+                      oncontextmenu={(e) => libPlaylistMenu(e, l.id, scoped, p.name)}
                     >
                       <Icon name="playlist" /><span>{p.name}</span>
                     </button>
@@ -215,15 +225,31 @@
           {@const lib = d.library}
           <ul class="nested">
             <li>
-              <button class="row" class:active={isLib(lib)} class:drop={store.songDrag?.target === `player:${d.path}`} onclick={() => store.showLibrary(lib)}>
+              <button class="row" class:active={isLib(lib)} class:drop={store.songDrag?.target === `player:${d.path}`} onclick={() => store.showLibrary(lib)} oncontextmenu={(e) => deviceLibraryMenu(e, lib)}>
                 <Icon name="music" /><span>{t("Music")}</span>
               </button>
             </li>
             {#each store.libViews[lib].view.playlists.filter((p) => !p.master) as p (p.id)}
+              {@const scoped = `lib:${lib}:${p.id}`}
               <li>
-                <button class="row" class:active={isLib(lib, p.id)} onclick={() => store.showLibrary(lib, p.id)}>
-                  <Icon name="playlist" /><span>{p.name}</span>
-                </button>
+                {#if store.renaming === scoped}
+                  <div class="row active">
+                    <Icon name="playlist" />
+                    <input class="rename" value={p.name} aria-label={t("Playlist name")} use:focusSelect onkeydown={(e) => renameKey(e, scoped)} onblur={(e) => store.renaming === scoped && store.renamePlaylist(scoped, e.currentTarget.value)} />
+                  </div>
+                {:else}
+                  <button
+                    class="row"
+                    class:active={isLib(lib, p.id)}
+                    class:drop={store.songDrag?.target === scoped}
+                    data-drop-playlist={store.libraryPlaylistsWritable(lib) ? scoped : undefined}
+                    onclick={() => store.showLibrary(lib, p.id)}
+                    ondblclick={() => store.libraryPlaylistsWritable(lib) && (store.renaming = scoped)}
+                    oncontextmenu={(e) => libPlaylistMenu(e, lib, scoped, p.name)}
+                  >
+                    <Icon name="playlist" /><span>{p.name}</span>
+                  </button>
+                {/if}
               </li>
             {/each}
           </ul>

@@ -168,6 +168,8 @@ export interface LibrarySummary {
   scanning: boolean;
   /** An MSC player's songs (shown under Devices). */
   device?: string | null;
+  /** Playlist format selected for an MSC player. */
+  playlistFormat?: "m3u" | "m3u8" | "pls" | null;
 }
 
 export interface LibraryView {

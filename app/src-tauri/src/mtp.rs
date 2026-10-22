@@ -244,7 +244,12 @@ pub async fn mtp_open(key: String, app: AppHandle) -> Result<MtpInfo, String> {
         let known: std::collections::HashSet<u32> = tracks.iter().map(|t| t.id).collect();
         l.playlists = playlists
             .into_iter()
-            .map(|p| LibPlaylist { id: p.id, name: p.name, tracks: p.tracks.into_iter().filter(|t| known.contains(t)).collect() })
+            .map(|p| LibPlaylist {
+                id: p.id,
+                name: p.name,
+                tracks: p.tracks.into_iter().filter(|t| known.contains(t)).collect(),
+                file_name: None,
+            })
             .collect();
         l.next_playlist_id = l.playlists.iter().map(|p| p.id).max().unwrap_or(0) + 1;
         {

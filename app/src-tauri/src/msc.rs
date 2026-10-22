@@ -8,8 +8,8 @@
 //! others so later scans only read new or changed files); its playlists are
 //! read from the playlist files in its playlist folder.
 //!
-//! This step reads players. Copying songs to them, playlists and the
-//! per-player rules for tags and covers come next.
+//! MSC players are scanned and their M3U/M3U8 playlists can be changed on the
+//! player when its page allows changes.
 
 use std::path::{Path, PathBuf};
 
@@ -254,12 +254,14 @@ pub fn attach(app: &AppHandle, root: &Path, cfg: &MscConfig) {
                 l.name = cfg.name.clone();
                 l.folders = vec![music];
                 l.playlist_dir = Some(playlists);
+                l.playlist_format = Some(cfg.playlist_format.clone());
             }
             None => {
                 let mut l = Library::new(&cfg.name, vec![music]);
                 l.id = id.clone();
                 l.device = Some(cfg.id.clone());
                 l.playlist_dir = Some(playlists);
+                l.playlist_format = Some(cfg.playlist_format.clone());
                 libs.list.push(l);
             }
         }
@@ -298,10 +300,95 @@ pub fn import_playlists(lib: &mut Library) {
             .filter_map(|p| by_path.get(&p.to_string_lossy().to_lowercase()).copied())
             .collect();
         let name = f.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-        playlists.push(LibPlaylist { id: i as u32 + 1, name, tracks });
+        let file_name = f.file_name().map(|n| n.to_string_lossy().into_owned());
+        playlists.push(LibPlaylist { id: i as u32 + 1, name, tracks, file_name });
     }
     lib.next_playlist_id = playlists.len() as u32 + 1;
     lib.playlists = playlists;
+}
+
+/// Write the changed playlist collection back to an MSC player. Only M3U and
+/// M3U8 are writable; PLS remains readable for devices that use it.
+pub fn write_playlists(old: &Library, lib: &mut Library) -> Result<(), String> {
+    let Some(device_id) = lib.device.as_deref() else { return Ok(()) };
+    let format = lib.playlist_format.as_deref().unwrap_or("m3u8").to_ascii_lowercase();
+    if !matches!(format.as_str(), "m3u" | "m3u8") {
+        return Err("Playlist editing is available for M3U and M3U8 players".into());
+    }
+    let folder = PathBuf::from(lib.playlist_dir.as_deref().ok_or("This player has no playlist folder")?);
+    let root = lib
+        .folders
+        .first()
+        .map(PathBuf::from)
+        .and_then(|p| p.ancestors().find(|a| read_config(a).is_some_and(|c| c.id == device_id)).map(Path::to_path_buf))
+        .ok_or("This player isn't connected")?;
+    std::fs::create_dir_all(&folder).map_err(|e| format!("Couldn't open the playlist folder: {e}"))?;
+
+    let old_files: Vec<String> = old.playlists.iter().filter_map(|p| p.file_name.clone()).collect();
+    let old_keys: std::collections::HashSet<String> = old_files.iter().map(|name| name.to_lowercase()).collect();
+    let ext = if format == "m3u" { "m3u" } else { "m3u8" };
+    let mut desired = std::collections::HashSet::new();
+    let tracks: std::collections::HashMap<u32, &crate::library::LibTrack> = lib.tracks.iter().map(|t| (t.id, t)).collect();
+    let mut writes = Vec::new();
+    for playlist in &mut lib.playlists {
+        let stem = safe_playlist_stem(&playlist.name);
+        if stem.is_empty() {
+            return Err("Give the playlist a name that can be used as a file name".into());
+        }
+        let file_name = format!("{stem}.{ext}");
+        let path = folder.join(&file_name);
+        if !desired.insert(file_name.to_lowercase()) {
+            return Err(format!("Two playlists would use the file name “{file_name}”"));
+        }
+        if path.exists() && !old_keys.contains(&file_name.to_lowercase()) {
+            return Err(format!("A playlist file named “{file_name}” already exists on the player"));
+        }
+        let mut text = String::from("#EXTM3U\n");
+        for id in &playlist.tracks {
+            let track = tracks.get(id).ok_or("A playlist contains a song that isn't on this player")?;
+            let song = PathBuf::from(&track.path);
+            if !song.starts_with(&root) {
+                return Err("A playlist song is outside this player".into());
+            }
+            let relative = relative_path(&folder, &song).ok_or("A song path is outside this player")?;
+            text.push_str(&relative);
+            text.push('\n');
+        }
+        writes.push((path, text, playlist.name.clone()));
+        playlist.file_name = Some(file_name);
+    }
+    for (path, text, name) in writes {
+        std::fs::write(path, text).map_err(|e| format!("Couldn't write playlist “{name}”: {e}"))?;
+    }
+    for file_name in old_files.iter().filter(|name| !desired.contains(&name.to_lowercase())) {
+        let path = folder.join(file_name);
+        if path.is_file() {
+            std::fs::remove_file(path).map_err(|e| format!("Couldn't remove playlist file “{file_name}”: {e}"))?;
+        }
+    }
+    Ok(())
+}
+
+fn safe_playlist_stem(name: &str) -> String {
+    name.trim()
+        .chars()
+        .map(|c| if matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|') || c.is_control() { '_' } else { c })
+        .collect::<String>()
+        .trim_matches([' ', '.'])
+        .to_string()
+}
+
+/// A slash-separated path from a playlist directory to a song on this drive.
+fn relative_path(from: &Path, to: &Path) -> Option<String> {
+    let from: Vec<_> = from.components().collect();
+    let to: Vec<_> = to.components().collect();
+    let common = from.iter().zip(&to).take_while(|(a, b)| a == b).count();
+    if common == 0 {
+        return None;
+    }
+    let mut parts = vec!["..".to_string(); from.len() - common];
+    parts.extend(to[common..].iter().map(|c| c.as_os_str().to_string_lossy().into_owned()));
+    Some(parts.join("/"))
 }
 
 /// The song entries of a playlist file, as written.

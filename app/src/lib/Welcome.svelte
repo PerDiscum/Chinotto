@@ -1,6 +1,7 @@
 <script lang="ts">
   import { t, tn } from "./i18n";
   import { store } from "./store.svelte";
+  import emblem from "../assets/welcome-emblem.png";
 </script>
 
 <div class="welcome">
@@ -18,6 +19,7 @@
     </div>
   {:else}
   <div class="inner">
+    <img class="emblem" src={emblem} alt="" aria-hidden="true" />
     <h1>{t("Connect your device!")}</h1>
     <p>
       {t("Welcome to Chinotto! Ready? Plug in your digital audio player to begin! If you’re using a classic, pre-iOS Apple iPod or an MTP device (such as a Creative Zen), it will show up here automatically. If you are using an MSC device (e.g., most Sony Walkman and Sansa models), click below to add the drive manually to Chinotto.")}
@@ -41,6 +43,13 @@
   }
   .inner {
     max-width: 52ch;
+  }
+  .emblem {
+    display: block;
+    width: 160px;
+    height: 160px;
+    object-fit: contain;
+    margin: 0 auto 22px;
   }
   h1 {
     margin: 0 0 8px;
@@ -77,5 +86,10 @@
   button:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
+  }
+  @media (max-width: 760px), (max-height: 680px) {
+    .emblem {
+      display: none;
+    }
   }
 </style>

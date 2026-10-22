@@ -235,17 +235,26 @@ class Store {
     return this.libraries.filter((l) => !l.device);
   }
 
-  /** Playlists can be made and changed here (a player's are read from its files; changing them needs MTP). */
+  /** Whether playlist files can be changed for the current source. */
   get playlistsWritable(): boolean {
     const s = this.source;
-    return this.writable && !(s.kind === "library" && this.isDeviceLibrary(s.lib));
+    if (!this.writable) return false;
+    return s.kind !== "library" || this.libraryPlaylistsWritable(s.lib);
+  }
+
+  /** MSC playlists are editable only when the player is writable and uses M3U. */
+  libraryPlaylistsWritable(lib: string): boolean {
+    const player = this.playerOf(lib);
+    if (!player) return !this.isDeviceLibrary(lib);
+    const format = this.libraries.find((l) => l.id === lib)?.playlistFormat?.toLowerCase();
+    return player.kind === "msc" && !!this.playerStates[player.path]?.writable && (format === "m3u" || format === "m3u8");
   }
 
   /** The regular (non-library, non-smart) playlist being shown, if any. */
   get editablePlaylist() {
     const s = this.source;
     if (s.kind === "library") {
-      if (this.isDeviceLibrary(s.lib)) return null;
+      if (!this.libraryPlaylistsWritable(s.lib)) return null;
       const p = this.libView?.view.playlists.find((x) => x.id === s.id);
       return p && !p.master ? p : null;
     }
@@ -1327,7 +1336,7 @@ class Store {
 
   /** Songs can be dragged into a new order: an editable playlist, in its own order, unfiltered. */
   get canReorder(): boolean {
-    return !!this.editablePlaylist && this.writable && this.sortKey === "order" && this.sortDir === 1 && !this.search && !this.browserFiltering;
+    return !!this.editablePlaylist && this.playlistsWritable && this.sortKey === "order" && this.sortDir === 1 && !this.search && !this.browserFiltering;
   }
 
   /** Move the selected songs of the shown playlist to before position `at` (in the playlist). */

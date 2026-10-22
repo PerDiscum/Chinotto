@@ -104,6 +104,9 @@ pub struct LibPlaylist {
     pub id: u32,
     pub name: String,
     pub tracks: Vec<u32>,
+    /// MSC playlist filename on the player, if it was imported from a file.
+    #[serde(default)]
+    pub file_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -123,6 +126,8 @@ pub struct Library {
     pub device: Option<String>,
     /// MSC player: the folder its playlist files are read from.
     pub playlist_dir: Option<String>,
+    /// MSC player's selected format for writing playlists.
+    pub playlist_format: Option<String>,
     /// Never saved (an MTP device's songs, read from it while it's open).
     #[serde(skip)]
     pub ephemeral: bool,
@@ -146,6 +151,7 @@ pub struct Summary {
     pub last_scan: Option<i64>,
     /// An MSC player's songs, shown under Devices rather than Libraries.
     pub device: Option<String>,
+    pub playlist_format: Option<String>,
 }
 
 fn now() -> i64 {
@@ -174,6 +180,7 @@ impl Library {
             songs: self.tracks.len(),
             last_scan: self.last_scan,
             device: self.device.clone(),
+            playlist_format: self.playlist_format.clone(),
         }
     }
 
@@ -198,7 +205,7 @@ impl Library {
         self.next_playlist_id = self.next_playlist_id.max(1);
         let id = self.next_playlist_id;
         self.next_playlist_id += 1;
-        self.playlists.push(LibPlaylist { id, name: name.to_string(), tracks });
+        self.playlists.push(LibPlaylist { id, name: name.to_string(), tracks, file_name: None });
         self.prune_playlists();
         id
     }

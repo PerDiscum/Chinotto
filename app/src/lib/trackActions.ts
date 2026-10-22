@@ -50,6 +50,7 @@ export function songMenu(e: MouseEvent, track: Track, tracks: Track[]) {
   // Songs on a player set up as a drive.
   const player = src.kind === "library" ? store.playerOf(src.lib) : undefined;
   const canDelete = player?.kind === "msc" || player?.kind === "mtp";
+  const canEditPlaylists = !player || (player.kind === "msc" && store.playlistsWritable);
   if (src.kind === "scratch") {
     // Opened from outside the libraries: play, look, save, copy to the iPod, or take off the list.
     store.menu = {
@@ -79,18 +80,17 @@ export function songMenu(e: MouseEvent, track: Track, tracks: Track[]) {
       { label: t("Song Details"), action: () => (store.dialog = { kind: "info" }) },
       { label: n > 1 ? t("Save As Zip…") : t("Save As…"), action: () => store.exportSongs(store.selectedTracks) },
       { label: "", separator: true },
-      // A player's playlists aren't changed here (they need MTP).
-      ...(player
-        ? []
-        : [
+      ...(canEditPlaylists
+        ? [
             {
               label: t("Add to Playlist"),
-              disabled: ro || !targets.length,
+              disabled: !store.playlistsWritable || !targets.length,
               submenu: targets.map((p) => ({ label: p.name, action: () => store.addToPlaylist(p.id, dbids) })),
             },
-            { label: t("New Playlist from Selection"), disabled: ro, action: () => store.newPlaylist(true) },
+            { label: t("New Playlist from Selection"), disabled: !store.playlistsWritable, action: () => store.newPlaylist(true) },
             { label: "", separator: true },
-          ]),
+          ]
+        : []),
       ...(pl ? [{ label: t("Remove from “{name}”", { name: pl.name }), disabled: ro, action: () => store.removeFromPlaylist(pl.id, [...store.selected]) }] : []),
       ...(!onIpod ? ipodCopy(dbids) : []),
       ...playerCopies(dbids, src.kind === "library" ? src.lib : null),

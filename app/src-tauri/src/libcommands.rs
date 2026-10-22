@@ -430,10 +430,31 @@ fn cover_jpeg(bytes: &[u8], px: u32) -> Option<Vec<u8>> {
 
 /// Run `f` on library `id`, save it, and tell the window.
 pub(crate) fn change<T>(app: &AppHandle, id: &str, f: impl FnOnce(&mut Library) -> Result<T, String>) -> Result<T, String> {
+    change_inner(app, id, f, false)
+}
+
+fn change_playlists<T>(app: &AppHandle, id: &str, f: impl FnOnce(&mut Library) -> Result<T, String>) -> Result<T, String> {
+    change_inner(app, id, f, true)
+}
+
+fn change_inner<T>(
+    app: &AppHandle,
+    id: &str,
+    f: impl FnOnce(&mut Library) -> Result<T, String>,
+    write_playlists: bool,
+) -> Result<T, String> {
     let r = {
         let state = app.state::<AppState>();
         let mut libs = state.libraries.lock().unwrap();
-        let r = f(libs.get_mut(id)?)?;
+        let lib = libs.get_mut(id)?;
+        let old = lib.clone();
+        let r = f(lib)?;
+        if write_playlists && lib.device.is_some() {
+            if let Err(e) = crate::msc::write_playlists(&old, lib) {
+                *lib = old;
+                return Err(e);
+            }
+        }
         libs.save(id)?;
         r
     };
@@ -448,13 +469,13 @@ fn playlist_id(s: &str) -> Result<u32, String> {
 
 #[tauri::command]
 pub fn lib_create_playlist(lib: String, name: String, ids: Vec<u32>, app: AppHandle) -> Result<String, String> {
-    change(&app, &lib, |l| Ok(format!("p{}", l.new_playlist(name.trim(), ids))))
+    change_playlists(&app, &lib, |l| Ok(format!("p{}", l.new_playlist(name.trim(), ids))))
 }
 
 #[tauri::command]
 pub fn lib_rename_playlist(lib: String, id: String, name: String, app: AppHandle) -> Result<(), String> {
     let pid = playlist_id(&id)?;
-    change(&app, &lib, |l| {
+    change_playlists(&app, &lib, |l| {
         let p = l.playlists.iter_mut().find(|p| p.id == pid).ok_or("No such playlist")?;
         p.name = name.trim().to_string();
         Ok(())
@@ -464,7 +485,7 @@ pub fn lib_rename_playlist(lib: String, id: String, name: String, app: AppHandle
 #[tauri::command]
 pub fn lib_delete_playlist(lib: String, id: String, app: AppHandle) -> Result<(), String> {
     let pid = playlist_id(&id)?;
-    change(&app, &lib, |l| {
+    change_playlists(&app, &lib, |l| {
         l.playlists.retain(|p| p.id != pid);
         Ok(())
     })
@@ -473,7 +494,7 @@ pub fn lib_delete_playlist(lib: String, id: String, app: AppHandle) -> Result<()
 #[tauri::command]
 pub fn lib_set_playlist_tracks(lib: String, id: String, ids: Vec<u32>, app: AppHandle) -> Result<(), String> {
     let pid = playlist_id(&id)?;
-    change(&app, &lib, |l| {
+    change_playlists(&app, &lib, |l| {
         l.playlists.iter_mut().find(|p| p.id == pid).ok_or("No such playlist")?.tracks = ids;
         l.prune_playlists();
         Ok(())
@@ -484,7 +505,7 @@ pub fn lib_set_playlist_tracks(lib: String, id: String, ids: Vec<u32>, app: AppH
 #[tauri::command]
 pub fn lib_remove_tracks(lib: String, ids: Vec<u32>, app: AppHandle) -> Result<usize, String> {
     let ids: HashSet<u32> = ids.into_iter().collect();
-    change(&app, &lib, |l| Ok(l.remove_tracks(&ids)))
+    change_playlists(&app, &lib, |l| Ok(l.remove_tracks(&ids)))
 }
 
 /// A cover for embedding: shrunk by the 600 px rule, JPEG or PNG.
