@@ -26,11 +26,12 @@ uint64_t chinotto_usb_fingerprint(void) {
   return h ^ (uint64_t)n;
 }
 
-/* Whether the USB device at bus/address offers an MTP interface: one (any
- * configuration or setting) of class "still image" (6) or vendor-specific
- * (255) with the three endpoints MTP uses. Read from the descriptors the
- * system already has; the device isn't opened. A player in mass-storage mode
- * has only a class 8 interface, even when libmtp knows its USB ID. */
+/* Whether the USB device at bus/address may offer MTP: it has an interface
+ * (any configuration or setting) that isn't mass storage. Read from the
+ * descriptors the system already has; the device isn't opened. A player in
+ * mass-storage mode has only class 8 interfaces, even when libmtp knows its
+ * USB ID. (Checking for the MTP interface itself is too strict: players
+ * describe it differently.) */
 int chinotto_has_mtp_interface(uint32_t bus, uint8_t address) {
   if (!ctx && libusb_init(&ctx) != 0) return 1; /* can't tell: don't hide it */
   libusb_device **list;
@@ -48,7 +49,7 @@ int chinotto_has_mtp_interface(uint32_t bus, uint8_t address) {
       for (int j = 0; j < cfg->bNumInterfaces && !found; j++)
         for (int k = 0; k < cfg->interface[j].num_altsetting; k++) {
           const struct libusb_interface_descriptor *intf = &cfg->interface[j].altsetting[k];
-          if (intf->bNumEndpoints == 3 && (intf->bInterfaceClass == 6 || intf->bInterfaceClass == 255)) { found = 1; break; }
+          if (intf->bInterfaceClass != 8) { found = 1; break; }
         }
       libusb_free_config_descriptor(cfg);
     }

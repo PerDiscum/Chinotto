@@ -655,7 +655,7 @@ mhii_link 416), validated at runtime against the engine's JSON.
 
 ## 0054: MTP only when the device offers it
 
-`chinotto_has_mtp_interface` (shim.c) reads the USB descriptors (without opening the device) and `detect()` skips devices with no interface of class 6 or 255 with 3 endpoints. A player in mass-storage mode (NWZ-E344 on a Mac, Sansa on "Auto Detect") keeps its USB ID, which libmtp knows, so it used to be listed as MTP as well as a drive, and opening it failed ("in use"). Now it appears only as the drive. To test MTP on the Sansa: SanDisk firmware, Settings → USB Mode → MTP.
+`chinotto_has_mtp_interface` (shim.c) reads the USB descriptors (without opening the device) and `detect()` skips devices whose interfaces are all mass storage (class 8). (0057: checking for class 6/255 with 3 endpoints hid the NWZ-E344 in MTP mode on Linux.) A player in mass-storage mode (NWZ-E344 on a Mac, Sansa on "Auto Detect") keeps its USB ID, which libmtp knows, so it used to be listed as MTP as well as a drive, and opening it failed ("in use"). Now it appears only as the drive. To test MTP on the Sansa: SanDisk firmware, Settings → USB Mode → MTP.
 
 ## 0055: copying to and deleting from MTP devices
 
@@ -669,3 +669,8 @@ mhii_link 416), validated at runtime against the engine's JSON.
 
 - A file that disappears while its tags are read (a player unplugged mid-scan) is stored with mtime 0, so the next scan reads it again instead of keeping the file-name-only tags.
 - "Read All Songs Again" (library and player menus in the sidebar): `scan_library(id, full: true)` re-reads every file's tags, not only new and changed ones.
+
+## 0057: Walkman in MTP mode listed again; Add Drive refuses MTP paths
+
+- The MTP filter now only hides devices that are mass storage and nothing else.
+- Add Drive with a file-manager MTP path (gvfs `…/gvfs/mtp:host=…`) says to open the device under Devices instead.

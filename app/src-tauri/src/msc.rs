@@ -157,6 +157,10 @@ pub struct DriveInfo {
 /// What's on a drive the user picked with Add Drive.
 #[tauri::command]
 pub fn msc_inspect(path: String) -> Result<DriveInfo, String> {
+    // The file manager's view of an MTP device (Linux: …/gvfs/mtp:host=…).
+    if path.contains("/gvfs/mtp:") || path.contains("/kio") && path.contains("mtp") {
+        return Err("This is an MTP device, not a drive: Chinotto opens it itself. Click it under Devices in the sidebar (unmount it in the file manager first if it doesn't appear).".into());
+    }
     let root = PathBuf::from(&path);
     if !root.is_dir() {
         return Err(format!("{path} isn't there"));
