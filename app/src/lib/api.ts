@@ -1,7 +1,7 @@
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import type { Conversion, AddProgress, AddResult, DeviceInfo, IpodView, LibrarySummary, LibraryView, ScanProgress, Track, TrackChanges, WriteResult, SetupInfo, SetupResult, DriveInfo, MscConfig, PlayerState, CopyResult } from "./types";
+import type { Conversion, AddProgress, AddResult, DeviceInfo, IpodView, LibrarySummary, LibraryView, ScanProgress, Track, TrackChanges, WriteResult, SetupInfo, SetupResult, DriveInfo, MscConfig, PlayerState, CopyResult, MtpInfo } from "./types";
 
 export const listDevices = () => invoke<DeviceInfo[]>("list_devices");
 export const addFolder = (path: string) => invoke<DeviceInfo>("add_folder", { path });
@@ -182,3 +182,8 @@ export const mscAllow = (path: string, allow: boolean) => invoke<PlayerState>("m
 export const mscSetConversion = (path: string, conversion: Conversion) => invoke<PlayerState>("msc_set_conversion", { path, conversion });
 export const mscAdd = (path: string, dbids: string[], files: string[]) => invoke<CopyResult>("msc_add", { path, dbids, files });
 export const mscDelete = (path: string, ids: number[]) => invoke<string[]>("msc_delete", { path, ids });
+
+// ---- MTP devices ----
+export const mtpOpen = (key: string) => invoke<MtpInfo>("mtp_open", { key });
+export const mtpClose = (key: string) => invoke<void>("mtp_close", { key });
+export const mtpInfo = (key: string) => invoke<MtpInfo | null>("mtp_info", { key });

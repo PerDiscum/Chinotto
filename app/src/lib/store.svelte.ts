@@ -312,9 +312,16 @@ class Store {
 
   private devicesChanged(list: DeviceInfo[]) {
     const before = new Set(this.devices.map((d) => d.path));
+    // An open MTP device keeps its details; one unplugged is forgotten.
+    this.mtpInfos = Object.fromEntries(Object.entries(this.mtpInfos).filter(([k]) => list.some((d) => d.path === k)));
+    list = list.map((d) => {
+      const i = this.mtpInfos[d.path];
+      return i ? { ...d, library: i.library, volume: i.name, capacity: i.capacity, free: i.free } : d;
+    });
     this.devices = list;
     // Players set up as drives: their songs (and playlists, for the sidebar).
     for (const d of list) if (d.kind === "msc" && d.library && !this.libViews[d.library]) void this.loadPlayer(d.library);
+    if (!list.some((d) => d.kind === "mtp")) this.mtpInfos = {};
     for (const d of list) if (d.kind === "msc" && !this.playerStates[d.path]) void this.loadPlayerState(d.path);
     // The player being shown was unplugged.
     const s = this.source;
@@ -406,6 +413,41 @@ class Store {
       this.busy = null;
       this.progress = null;
     }
+  }
+
+  /** Open MTP devices' details, by key ("mtp:<bus>-<dev>"). */
+  mtpInfos = $state<Record<string, import("./types").MtpInfo>>({});
+
+  /** Open an MTP device (reading its songs takes a moment) and show its page. */
+  async openMtp(key: string) {
+    if (this.opening) return;
+    if (this.mtpInfos[key]) return this.select({ kind: "player", path: key });
+    this.opening = key;
+    this.error = null;
+    try {
+      const info = await api.mtpOpen(key);
+      // Only one MTP device is open at a time.
+      this.mtpInfos = { [key]: info };
+      this.devices = this.devices.map((d) => (d.path === key ? { ...d, library: info.library, volume: info.name, capacity: info.capacity, free: info.free } : d.kind === "mtp" ? { ...d, library: null } : d));
+      this.libraries = await api.listLibraries();
+      await this.loadLibrary(info.library);
+      this.select({ kind: "player", path: key });
+    } catch (e) {
+      this.error = String(e);
+    } finally {
+      this.opening = null;
+    }
+  }
+
+  /** Let go of an MTP device so other programs can use it. */
+  async closeMtp(key: string) {
+    const lib = this.mtpInfos[key]?.library;
+    await api.mtpClose(key);
+    this.mtpInfos = {};
+    this.devices = this.devices.map((d) => (d.path === key ? { ...d, library: null } : d));
+    const s = this.source;
+    if ((s.kind === "player" && s.path === key) || (s.kind === "library" && s.lib === lib)) this.select({ kind: "none" });
+    this.libraries = await api.listLibraries();
   }
 
   /** Players' page settings (Allow changes, conversion), by path. */
@@ -778,6 +820,7 @@ class Store {
     // Songs on a player: delete them from it (asks first).
     const s = this.source;
     const player = s.kind === "library" ? this.playerOf(s.lib) : undefined;
+    if (player?.kind === "mtp") return; // deleting from MTP devices comes later
     if (player && this.selected.size) return void (this.dialog = { kind: "delete-player-songs", path: player.path, ids: [...this.selected] });
     if (!this.writable || !this.selected.size) return;
     const pl = this.editablePlaylist;

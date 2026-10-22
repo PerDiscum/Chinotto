@@ -44,7 +44,11 @@ impl Libraries {
 
     pub(crate) fn save(&self, id: &str) -> Result<(), String> {
         let dir = self.dir.as_deref().ok_or("No place to keep libraries")?;
-        self.list.iter().find(|l| l.id == id).ok_or("No such library")?.save(dir)
+        let lib = self.list.iter().find(|l| l.id == id).ok_or("No such library")?;
+        if lib.ephemeral {
+            return Ok(());
+        }
+        lib.save(dir)
     }
 
     fn summaries(&self) -> Vec<LibrarySummary> {
@@ -83,6 +87,10 @@ pub fn start_scan(app: &AppHandle, id: &str) {
             return;
         }
         let Some(lib) = libs.list.iter().find(|l| l.id == id).cloned() else { return };
+        // An MTP device's songs come from the device, not from scanning folders.
+        if lib.ephemeral {
+            return;
+        }
         libs.scanning.insert(id.to_string());
         lib
     };
@@ -342,6 +350,12 @@ pub fn track_file(app: &AppHandle, dbid: &str) -> Result<PathBuf, String> {
     let libs = state.libraries.lock().unwrap();
     let lib = libs.list.iter().find(|l| l.id == lib_id).ok_or("That library doesn't exist any more")?;
     let t = lib.track(tid).ok_or("That song isn't in the library any more")?;
+    if lib.ephemeral && t.path.starts_with("mtp:") {
+        // On an MTP device: copied into a cache folder to be played or copied.
+        let p = t.path.clone();
+        drop(libs);
+        return crate::mtp::fetch(app, &p);
+    }
     let path = PathBuf::from(&t.path);
     if !path.is_file() {
         let folder = lib.folder_of(&t.path).unwrap_or("its folder");

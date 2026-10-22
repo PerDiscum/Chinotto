@@ -14,8 +14,8 @@ export interface DeviceInfo {
   manual: boolean;
   /** An iPod without a database: it needs setting up first. */
   needsSetup: boolean;
-  /** "ipod", or "msc" for a player set up as a drive. */
-  kind: "ipod" | "msc";
+  /** "ipod", "msc" for a player set up as a drive, or "mtp". */
+  kind: "ipod" | "msc" | "mtp";
   /** MSC player: the library listing its songs. */
   library: string | null;
 }
@@ -255,4 +255,17 @@ export interface CopyResult {
   added: number;
   already: number;
   skipped: string[];
+}
+
+/** An open MTP device (see mtp.rs). */
+export interface MtpInfo {
+  name: string;
+  model: string | null;
+  manufacturer: string | null;
+  serial: string | null;
+  battery: number | null;
+  capacity: number;
+  free: number;
+  songs: number;
+  library: string;
 }

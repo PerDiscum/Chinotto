@@ -178,7 +178,8 @@ pub fn start_watcher(app: AppHandle) {
         let mut last: Vec<(String, bool)> = Vec::new();
         loop {
             let manual = app.state::<AppState>().manual_roots();
-            let list = app.state::<AppState>().scanner.lock().unwrap().scan(&manual);
+            let mut list = app.state::<AppState>().scanner.lock().unwrap().scan(&manual);
+            list.extend(crate::mtp::poll(&app));
             let paths: Vec<(String, bool)> = list.iter().map(|d| (d.path.clone(), d.needs_setup)).collect();
             if paths != last {
                 // Players set up as drives: point their song lists at where they are now.

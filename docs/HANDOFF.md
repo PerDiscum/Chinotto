@@ -239,6 +239,32 @@ Everything decided and learned so far, so work can continue in a new session.
 
 Order chosen: confirm editing on the nano → **playback** (done) → artwork (done) → icon chooser → shuffle/repeat → playlist reordering → column browser fixes and Format/Bitrate columns → media library.
 
+## MTP, step 1: finding, reading, playing (patch 0053)
+
+- crates/chinotto-mtp: bundled libmtp 1.1.23 + libusb 1.0.29 built with cc
+  (see its README for the configuration and the small changes: Apple
+  devices never probed; hand-written gphoto2-endian.h). Rust API: detect,
+  Device::open (uncached), names/serial/battery/storages, tracks (with
+  metadata), playlists, download. shim.c: a USB fingerprint (no device
+  opened) so `detect` (which probes) runs only when USB devices change;
+  a layout test checks the Rust struct declarations against C.
+- app mtp.rs: the watcher adds MTP devices (`kind: "mtp"`, path
+  "mtp:<bus>-<devnum>", picture guessed from the name). Clicking one opens it
+  (mtp_open) — one at a time; it's held until "Let Other Programs Use It" or
+  unplug — and its tracks/playlists become an ephemeral Library ("m<bus>x<dev>",
+  `ephemeral`: never saved or scanned). Playing copies the song to
+  <temp>/chinotto-mtp/<key>/ first (`mtp::fetch`, via track_file).
+  MtpPage shows name, model, serial, battery, capacity, contents.
+- Read-only for now: no copying to MTP, no deleting, no playlist changes,
+  no covers shown (album art via LIBMTP_Get_Representative_Sample later).
+- Platform notes: macOS's ptpcamerad (Image Capture) or Android File
+  Transfer may hold the device → open fails with an explanation. Linux:
+  the file manager (gvfs-mtp) holds it when it's mounted there; users need
+  udev rules giving access (distros' libmtp package; the .deb recommends
+  libmtp-common).
+- Untested on real devices (none in the build sandbox), and the macOS build
+  of libusb's darwin backend is only exercised by CI.
+
 ## Drag scrolling; Greek on Walkmans (patch 0051)
 
 - While a song or album is dragged, the list it came from is held where it

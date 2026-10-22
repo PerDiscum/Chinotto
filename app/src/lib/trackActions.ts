@@ -49,6 +49,8 @@ export function songMenu(e: MouseEvent, track: Track, tracks: Track[]) {
   const onIpod = src.kind !== "library" && src.kind !== "scratch";
   // Songs on a player set up as a drive.
   const player = src.kind === "library" ? store.playerOf(src.lib) : undefined;
+  // MTP devices are read-only for now.
+  const canDelete = player?.kind === "msc";
   if (src.kind === "scratch") {
     // Opened from outside the libraries: play, look, save, copy to the iPod, or take off the list.
     store.menu = {
@@ -93,7 +95,7 @@ export function songMenu(e: MouseEvent, track: Track, tracks: Track[]) {
       ...(pl ? [{ label: t("Remove from “{name}”", { name: pl.name }), disabled: ro, action: () => store.removeFromPlaylist(pl.id, [...store.selected]) }] : []),
       ...(!onIpod ? ipodCopy(dbids) : []),
       ...playerCopies(dbids, src.kind === "library" ? src.lib : null),
-      ...(!onIpod && player
+      ...(!onIpod && player && canDelete
         ? [
             {
               label: tn(n, "Delete Song from {name}…", "Delete {n} Songs from {name}…", { name: player.volume }),

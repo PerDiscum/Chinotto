@@ -56,7 +56,8 @@
           "udisks2"
         ],
         "recommends": [
-          "ffmpeg"
+          "ffmpeg",
+          "libmtp-common"
         ]
       }
     },

@@ -31,6 +31,8 @@ pub struct AppState {
     pub libraries: Mutex<crate::libcommands::Libraries>,
     /// Songs opened from outside the libraries.
     pub scratch: Mutex<crate::scratch::Scratch>,
+    /// MTP devices found, and the one open.
+    pub mtp: crate::mtp::Shared,
 }
 
 /// Saved between runs in the app's config folder (settings.json).

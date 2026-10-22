@@ -1,0 +1,13 @@
+[package]
+name = "chinotto-mtp"
+description = "MTP players (Creative Zen, SanDisk, Sony Walkman, Android…) through bundled builds of libmtp and libusb"
+edition.workspace = true
+# Our Rust code is MIT; the bundled libmtp and libusb are LGPL-2.1-or-later.
+license = "MIT AND LGPL-2.1-or-later"
+version.workspace = true
+links = "mtp"
+
+[dependencies]
+
+[build-dependencies]
+cc = "1"

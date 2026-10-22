@@ -16,6 +16,7 @@ tauri-build = { version = "2.5", features = [] }
 chinotto-ipod = { path = "../../crates/chinotto-ipod" }
 chinotto-gpod = { path = "../../crates/chinotto-gpod" }
 chinotto-player = { path = "../../crates/chinotto-player" }
+chinotto-mtp = { path = "../../crates/chinotto-mtp" }
 lofty = "0.25"
 unicode-normalization = "0.1"
 tauri = { version = "2.12", features = [] }

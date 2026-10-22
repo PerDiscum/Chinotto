@@ -171,14 +171,16 @@
           class="row device"
           class:active={(isOpen(d.path) && store.source.kind === "device") || (store.source.kind === "player" && store.source.path === d.path)}
           class:drop={store.songDrag?.target === `player:${d.path}`}
-          data-drop-playlist={d.library ? `player:${d.path}` : undefined}
+          data-drop-playlist={d.kind === "msc" ? `player:${d.path}` : undefined}
           oncontextmenu={(e) => {
             e.preventDefault();
             const lib = d.library;
             store.menu = {
               x: e.clientX,
               y: e.clientY,
-              items: lib
+              items: d.kind === "mtp"
+                ? [{ label: t("Let Other Programs Use It"), disabled: !store.mtpInfos[d.path], action: () => store.closeMtp(d.path) }]
+                : lib
                 ? [
                     { label: t("Scan Now"), action: () => store.scanLibrary(lib) },
                     { label: t("Player Settings…"), action: () => (store.dialog = { kind: "msc", path: d.path }) },
@@ -191,7 +193,8 @@
         >
           <button
             class="name"
-            onclick={() => (d.library ? store.select({ kind: "player", path: d.path }) : isOpen(d.path) ? store.select({ kind: "device" }) : store.open(d.path))}
+            onclick={() =>
+              d.kind === "mtp" ? store.openMtp(d.path) : d.library ? store.select({ kind: "player", path: d.path }) : isOpen(d.path) ? store.select({ kind: "device" }) : store.open(d.path)}
             title={d.path}
           >
             {#if deviceImage(store.iconFor(d))}<img class="dev" src={deviceImage(store.iconFor(d))} alt="" />{:else}<Icon name="ipod" />{/if}

@@ -532,6 +532,7 @@ dependencies = [
  "base64 0.22.1",
  "chinotto-gpod",
  "chinotto-ipod",
+ "chinotto-mtp",
  "chinotto-player",
  "image",
  "libc",
@@ -561,6 +562,13 @@ dependencies = [
 [[package]]
 name = "chinotto-ipod"
 version = "0.1.0"
+
+[[package]]
+name = "chinotto-mtp"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
 
 [[package]]
 name = "chinotto-player"

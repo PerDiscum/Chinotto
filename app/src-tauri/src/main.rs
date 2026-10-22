@@ -10,6 +10,7 @@ mod export;
 mod libcommands;
 mod library;
 mod msc;
+mod mtp;
 mod playback;
 mod scratch;
 mod setup;
@@ -53,6 +54,9 @@ fn main() {
             commands::open_ipod,
             setup::setup_info,
             msc::msc_inspect,
+            mtp::mtp_open,
+            mtp::mtp_close,
+            mtp::mtp_info,
             msc::msc_save,
             msc::msc_state,
             msc::msc_allow,

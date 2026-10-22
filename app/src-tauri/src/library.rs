@@ -123,6 +123,9 @@ pub struct Library {
     pub device: Option<String>,
     /// MSC player: the folder its playlist files are read from.
     pub playlist_dir: Option<String>,
+    /// Never saved (an MTP device's songs, read from it while it's open).
+    #[serde(skip)]
+    pub ephemeral: bool,
 }
 
 #[derive(Serialize, Clone)]
