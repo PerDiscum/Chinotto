@@ -49,6 +49,7 @@
       y: e.clientY,
       items: [
         { label: lib?.scanning ? t("Scanning…") : t("Scan Now"), disabled: !!lib?.scanning, action: () => store.scanLibrary(id) },
+        { label: t("Read All Songs Again"), disabled: !!lib?.scanning, action: () => store.scanLibrary(id, true) },
         { label: t("New Playlist"), action: () => store.newLibraryPlaylist(id) },
         { label: t("Edit Library…"), action: () => (store.dialog = { kind: "library", id }) },
         { label: t("Remove Unavailable Songs"), disabled: !missing, action: () => store.removeUnavailable(id) },
@@ -183,6 +184,7 @@
                 : lib
                 ? [
                     { label: t("Scan Now"), action: () => store.scanLibrary(lib) },
+                    { label: t("Read All Songs Again"), action: () => store.scanLibrary(lib, true) },
                     { label: t("Player Settings…"), action: () => (store.dialog = { kind: "msc", path: d.path }) },
                   ]
                 : d.needsSetup

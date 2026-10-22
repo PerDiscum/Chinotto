@@ -664,3 +664,8 @@ mhii_link 416), validated at runtime against the engine's JSON.
 - Opening on Linux: if it fails, Chinotto unmounts gvfs's mtp:// mounts (`gio mount -u`) and tries once more.
 - Editing songs on an MTP device isn't possible yet (`edit_rules` says so).
 - Tested so far: NWZ-E344 offers MTP to Linux (disk to the Mac). The Sansa e260 v2 (with the Rockbox bootloader) doesn't answer MTP's OpenSession on either, with Fedora's libmtp too.
+
+## 0056: reading songs again after an interrupted scan
+
+- A file that disappears while its tags are read (a player unplugged mid-scan) is stored with mtime 0, so the next scan reads it again instead of keeping the file-name-only tags.
+- "Read All Songs Again" (library and player menus in the sidebar): `scan_library(id, full: true)` re-reads every file's tags, not only new and changed ones.

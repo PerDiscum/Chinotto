@@ -766,9 +766,10 @@ class Store {
     }
   }
 
-  async scanLibrary(id: string) {
+  /** Scan a library's folders; `full` reads every song's tags again. */
+  async scanLibrary(id: string, full = false) {
     try {
-      await api.scanLibrary(id);
+      await api.scanLibrary(id, full);
     } catch (e) {
       this.error = String(e);
     }

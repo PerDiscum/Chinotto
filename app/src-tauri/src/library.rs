@@ -342,9 +342,9 @@ pub(crate) fn read_track(path: &Path, cover_dirs: &mut HashMap<PathBuf, bool>) -
 }
 
 /// Bring `lib` up to date with its folders. Only new and changed files (by
-/// size and modification time) have their tags read. `progress(done, total,
-/// current)` is called as files are read.
-pub fn scan(lib: &mut Library, mut progress: impl FnMut(usize, usize, &str)) -> ScanResult {
+/// size and modification time) have their tags read, or every file when
+/// `full`. `progress(done, total, current)` is called as files are read.
+pub fn scan(lib: &mut Library, full: bool, mut progress: impl FnMut(usize, usize, &str)) -> ScanResult {
     let mut res = ScanResult::default();
     let mut found: Vec<(PathBuf, u64, i64)> = Vec::new();
     let mut reachable: Vec<String> = Vec::new();
@@ -369,7 +369,7 @@ pub fn scan(lib: &mut Library, mut progress: impl FnMut(usize, usize, &str)) -> 
             Some(&i) => {
                 seen[i] = true;
                 let t = &lib.tracks[i];
-                t.size != *size || t.mtime != *mtime
+                full || t.size != *size || t.mtime != *mtime
             }
             None => true,
         })
@@ -382,10 +382,13 @@ pub fn scan(lib: &mut Library, mut progress: impl FnMut(usize, usize, &str)) -> 
         let path = p.to_string_lossy().into_owned();
         progress(n, total, p.file_name().and_then(|s| s.to_str()).unwrap_or(""));
         let (tags, cover) = read_track(p, &mut cover_dirs);
+        // Gone while it was read (a player unplugged mid-scan): no time, so
+        // the next scan reads it again rather than keeping these tags.
+        let mtime = if p.exists() { *mtime } else { 0 };
         if let Some(&i) = by_path.get(&path) {
             let t = &mut lib.tracks[i];
             t.size = *size;
-            t.mtime = *mtime;
+            t.mtime = mtime;
             t.tags = tags;
             t.cover = cover;
             res.updated += 1;
@@ -394,7 +397,7 @@ pub fn scan(lib: &mut Library, mut progress: impl FnMut(usize, usize, &str)) -> 
                 id: lib.next_id,
                 path,
                 size: *size,
-                mtime: *mtime,
+                mtime,
                 added: now(),
                 play_count: 0,
                 rating: 0,
@@ -451,24 +454,24 @@ mod tests {
         std::fs::write(b.join("three.wma"), b"x").unwrap();
         std::fs::write(b.join("notes.txt"), b"ignored").unwrap();
         let mut lib = Library::new("Test", vec![a.to_string_lossy().into(), b.to_string_lossy().into()]);
-        let r = scan(&mut lib, |_, _, _| {});
+        let r = scan(&mut lib, false, |_, _, _| {});
         assert_eq!((r.added, lib.tracks.len()), (3, 3));
         // Unreadable files are listed by name.
         assert!(lib.tracks.iter().any(|t| t.tags.title.as_deref() == Some("three") && t.tags.kind == "Windows Media audio file"));
 
         // Unchanged files aren't read again.
-        let r = scan(&mut lib, |_, _, _| {});
+        let r = scan(&mut lib, false, |_, _, _| {});
         assert_eq!((r.added, r.updated, r.removed), (0, 0, 0));
 
         // Folder b "unplugged": its song stays.
         let b_moved = b.with_extension("away");
         std::fs::rename(&b, &b_moved).unwrap();
-        let r = scan(&mut lib, |_, _, _| {});
+        let r = scan(&mut lib, false, |_, _, _| {});
         assert_eq!((r.removed, r.unavailable_folders, lib.tracks.len()), (0, 1, 3));
 
         // A file deleted from a reachable folder goes.
         std::fs::remove_file(a.join("two.flac")).unwrap();
-        let r = scan(&mut lib, |_, _, _| {});
+        let r = scan(&mut lib, false, |_, _, _| {});
         assert_eq!((r.removed, lib.tracks.len()), (1, 2));
 
         // Asked to: songs of the missing folder go.

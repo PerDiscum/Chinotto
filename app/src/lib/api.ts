@@ -116,7 +116,7 @@ export const createLibrary = (name: string, folders: string[]) => invoke<string>
 export const updateLibrary = (id: string, name: string | null, folders: string[] | null) =>
   invoke<void>("update_library", { id, name, folders });
 export const deleteLibrary = (id: string) => invoke<void>("delete_library", { id });
-export const scanLibrary = (id: string) => invoke<void>("scan_library", { id });
+export const scanLibrary = (id: string, full = false) => invoke<void>("scan_library", { id, full });
 export const removeUnavailable = (id: string) => invoke<number>("remove_unavailable", { id });
 export const libraryView = (id: string) => invoke<LibraryView>("library_view", { id });
 export const onLibrariesChanged = (f: (l: LibrarySummary[]) => void) => listen<LibrarySummary[]>("libraries-changed", (e) => f(e.payload));

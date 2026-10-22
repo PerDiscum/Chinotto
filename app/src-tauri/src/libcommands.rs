@@ -80,6 +80,11 @@ fn emit_list(app: &AppHandle) {
 
 /// Scan a library in the background (nothing happens if it's already scanning).
 pub fn start_scan(app: &AppHandle, id: &str) {
+    scan_with(app, id, false);
+}
+
+/// A scan; `full` reads every file's tags again, not only new and changed ones.
+pub fn scan_with(app: &AppHandle, id: &str, full: bool) {
     let snapshot = {
         let state = app.state::<AppState>();
         let mut libs = state.libraries.lock().unwrap();
@@ -100,7 +105,7 @@ pub fn start_scan(app: &AppHandle, id: &str) {
         let mut lib = snapshot;
         let id = lib.id.clone();
         let mut last = Instant::now();
-        let result = library::scan(&mut lib, |done, total, current| {
+        let result = library::scan(&mut lib, full, |done, total, current| {
             if done == total || last.elapsed() > Duration::from_millis(250) {
                 last = Instant::now();
                 let _ = app.emit("library-progress", Progress { id: &id, done, total, current });
@@ -233,8 +238,8 @@ pub fn delete_library(id: String, app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn scan_library(id: String, app: AppHandle) {
-    start_scan(&app, &id);
+pub fn scan_library(id: String, full: Option<bool>, app: AppHandle) {
+    scan_with(&app, &id, full.unwrap_or(false));
 }
 
 #[tauri::command]
