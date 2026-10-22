@@ -121,7 +121,7 @@ Bytes mhit(const Track& t, std::uint64_t fallbackDbid) {
     // Start from the header this track arrived with, so every field PodBox
     // does not model — artwork references, gapless data, sort keys — survives.
     // Only a freshly imported track needs one built from nothing.
-    Bytes b = t.rawHeader.empty() ? chunk("mhit", 0x148)
+    Bytes b = t.rawHeader.empty() ? chunk("mhit", 0x270)
                                   : Bytes(t.rawHeader.begin(), t.rawHeader.end());
     // Patch only within the header we actually have.
     auto put32 = [&b](std::size_t off, std::uint32_t v) {
@@ -132,6 +132,9 @@ Bytes mhit(const Track& t, std::uint64_t fallbackDbid) {
     };
     auto put8 = [&b](std::size_t off, std::uint8_t v) {
         if (off + 1 <= b.size()) set8(b, off, v);
+    };
+    auto put16 = [&b](std::size_t off, std::uint16_t v) {
+        if (off + 2 <= b.size()) set16(b, off, v);
     };
     set32(b, 16, t.id);
     put32(20, 1);  // visible
@@ -152,6 +155,10 @@ Bytes mhit(const Track& t, std::uint64_t fallbackDbid) {
     put32(104, toMacTime(t.dateAdded));
     put64(112, t.dbid ? t.dbid : fallbackDbid);
     put32(208, t.mediaType ? t.mediaType : 1);
+    put16(124, t.artworkCount);
+    put32(128, t.artworkSize);
+    put8(164, t.hasArtwork);
+    put32(352, t.mhiiLink);
 
     std::uint32_t nMhods = 0;
     Bytes body;

@@ -104,6 +104,10 @@ void parseTracks(const Buf& b, size_t mhlt, Library& lib) {
         t.year = b.u32(pos + 52);
         t.bitrate = b.u32(pos + 56);
         t.sampleRate = b.u32(pos + 60) >> 16;
+        t.artworkCount = b.u16(pos + 124);
+        t.artworkSize = b.u32(pos + 128);
+        t.hasArtwork = b.u8(pos + 164);
+        t.mhiiLink = b.u32(pos + 352);
         t.playCount = b.u32(pos + 80);
         t.discNumber = b.u32(pos + 92);
         if (const std::uint32_t added = b.u32(pos + 104))

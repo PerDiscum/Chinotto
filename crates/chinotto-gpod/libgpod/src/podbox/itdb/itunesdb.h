@@ -42,6 +42,10 @@ struct Track {
     std::uint32_t year = 0;
     std::uint32_t bitrate = 0;
     std::uint32_t sampleRate = 0;
+    std::uint16_t artworkCount = 0;
+    std::uint32_t artworkSize = 0;
+    std::uint8_t hasArtwork = 2;
+    std::uint32_t mhiiLink = 0;
     std::uint32_t playCount = 0;
     std::uint8_t rating = 0;      // 0-100, 20 per star
     std::uint32_t mediaType = 1;  // see kMedia* below

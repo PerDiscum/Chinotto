@@ -27,7 +27,7 @@ fn parse_ids(ids: &[String]) -> Result<Vec<u64>, String> {
 
 fn playlist_only_on_nano6(path: &str) -> Result<(), String> {
     if chinotto_ipod::device::is_nano6_root(Path::new(path)) {
-        Err("Nano 6 support is experimental: adding songs and changing playlists are supported; editing or deleting songs and changing covers are disabled.".into())
+        Err("Nano 6 support is experimental: adding songs, changing playlists, and changing covers are supported; editing or deleting songs is disabled.".into())
     } else {
         Ok(())
     }
@@ -193,7 +193,6 @@ pub async fn add_files(path: String, files: Vec<String>, playlist: Option<String
         // Converted copies live here until the iPod has its copy; then the folder goes.
         let tmp = crate::convert::TempDir::new()?;
         let tmp_dir = tmp.0.clone();
-        let nano6 = chinotto_ipod::device::is_nano6_root(Path::new(&path));
         let result = with_writer(&app, Path::new(&path), move |db| {
             let mut res = AddResult { added: Vec::new(), skipped: Vec::new() };
             let mut added_files: Vec<(u64, PathBuf)> = Vec::new();
@@ -233,9 +232,7 @@ pub async fn add_files(path: String, files: Vec<String>, playlist: Option<String
                 }
             }
             let _ = emitter.emit("add-progress", AddProgress { done: total, total, current: String::new() });
-            if !nano6 {
-                add_embedded_covers(db, &added_files, &mut res.skipped)?;
-            }
+            add_embedded_covers(db, &added_files, &mut res.skipped)?;
             if let Some(pl) = playlist {
                 let mut ids = db.playlists().into_iter().find(|p| p.id == pl).map(|p| p.tracks).unwrap_or_default();
                 ids.extend(res.added.iter().filter_map(|s| s.parse::<u64>().ok()));
@@ -352,7 +349,6 @@ pub async fn set_playlist_tracks(path: String, id: String, ids: Vec<String>, app
 /// Give songs a cover from an image file (shrunk by the 600 px rule).
 #[tauri::command]
 pub async fn set_artwork(path: String, ids: Vec<String>, image: String, app: AppHandle) -> Result<Response, String> {
-    playlist_only_on_nano6(&path)?;
     let ids = parse_ids(&ids)?;
     blocking(app, move |app| {
         let bytes = std::fs::read(&image).map_err(|e| format!("Couldn't open the image: {e}"))?;
@@ -371,7 +367,6 @@ pub async fn set_artwork(path: String, ids: Vec<String>, image: String, app: App
 /// Take songs' covers off (the thumbnails stay in the iPod's cover files, unused).
 #[tauri::command]
 pub async fn remove_artwork(path: String, ids: Vec<String>, app: AppHandle) -> Result<Response, String> {
-    playlist_only_on_nano6(&path)?;
     let ids = parse_ids(&ids)?;
     blocking(app, move |app| with_writer(&app, Path::new(&path), |db| db.edit(&ids, &[Field::Artwork(None)]).map_err(|e| e.to_string())))
         .await

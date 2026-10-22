@@ -315,6 +315,13 @@ pub fn cover_formats(gen: &Generation) -> Option<(&'static [crate::artworkdb::Fo
     const CLASSIC_FILES: &[(u32, u32)] = &[(1055, 32768), (1060, 204800), (1061, 6050), (1068, 32768), (1069, 40328)];
     const NANO: &[F] = &[F { format: 1027, width: 100, height: 100, size: 20000 }, F { format: 1031, width: 42, height: 42, size: 3528 }];
     const NANO_FILES: &[(u32, u32)] = &[(1027, 20000), (1031, 3528)];
+    const NANO6: &[F] = &[
+        F { format: 1085, width: 88, height: 88, size: 15488 },
+        F { format: 1073, width: 240, height: 240, size: 115200 },
+        F { format: 1074, width: 50, height: 50, size: 5000 },
+        F { format: 1089, width: 58, height: 58, size: 6728 },
+    ];
+    const NANO6_FILES: &[(u32, u32)] = &[(1085, 15488), (1073, 115200), (1074, 5000), (1089, 6728)];
     const VIDEO: &[F] =
         &[F { format: 1028, width: 100, height: 100, size: 20000 }, F { format: 1029, width: 200, height: 200, size: 80000 }];
     const VIDEO_FILES: &[(u32, u32)] = &[(1028, 20000), (1029, 80000)];
@@ -323,6 +330,7 @@ pub fn cover_formats(gen: &Generation) -> Option<(&'static [crate::artworkdb::Fo
     Some(match gen.icon {
         "ipod-6g" | "ipod-7g" | "ipod-nano-3g" => (CLASSIC, CLASSIC_FILES),
         "ipod-nano-1g" | "ipod-nano-2g" => (NANO, NANO_FILES),
+        "ipod-nano-6g" => (NANO6, NANO6_FILES),
         "ipod-5g" | "ipod-5g-u2" => (VIDEO, VIDEO_FILES),
         _ if gen.name.contains("photo") => (PHOTO, PHOTO_FILES),
         _ => return None,
