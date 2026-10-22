@@ -33,11 +33,32 @@ extern "C" {
         cdb_stage: *const c_char,
         sqlite_stage: *const c_char,
         guid: *const c_char,
+        tracks: *const Nano6TrackInput,
+        track_count: usize,
         playlists: *const Nano6PlaylistInput,
         playlist_count: usize,
         error: *mut c_char,
         error_capacity: usize,
     ) -> i32;
+}
+
+#[repr(C)]
+struct Nano6TrackInput {
+    dbid: u64,
+    title: *const c_char,
+    artist: *const c_char,
+    album: *const c_char,
+    genre: *const c_char,
+    composer: *const c_char,
+    location: *const c_char,
+    length_ms: u32,
+    size_bytes: u32,
+    track_number: u32,
+    disc_number: u32,
+    year: u32,
+    bitrate: u32,
+    sample_rate: u32,
+    rating: u8,
 }
 
 #[repr(C)]
@@ -48,6 +69,15 @@ struct Nano6PlaylistInput {
     track_count: usize,
     is_master: i32,
     is_smart: i32,
+}
+
+struct Nano6TrackStrings {
+    title: CString,
+    artist: CString,
+    album: CString,
+    genre: CString,
+    composer: CString,
+    location: CString,
 }
 
 /// How many database backups [`Database::save`] keeps on the iPod.
@@ -167,6 +197,7 @@ pub struct TrackInfo {
     pub bpm: i16,
     // Technical details (filled from the file when adding).
     pub length_ms: i32,
+    pub size_bytes: u32,
     pub bitrate_kbps: i32,
     pub sample_rate: u32,
     /// Description shown as "Kind", e.g. "MPEG audio file", "AAC audio file".
@@ -494,7 +525,7 @@ impl Database {
                 .as_deref()
                 .ok_or_else(|| Error("Nano 6 needs its USB FireWire ID before Chinotto can save changes".into()))?;
             if !self.pending_deletes.is_empty() {
-                return Err(Error("Experimental Nano 6 support currently saves playlist changes only; song deletion is disabled".into()));
+                return Err(Error("Experimental Nano 6 support can add songs and change playlists, but song deletion is disabled".into()));
             }
             let backup = backup_nano6(&self.root)?;
             let cdb_stage = backup.join("iTunesCDB staged");
@@ -503,6 +534,38 @@ impl Database {
             let cdb_stage_c = CString::new(cdb_stage.to_string_lossy().as_bytes()).map_err(|_| Error("bad staging path".into()))?;
             let sqlite_stage_c = CString::new(sqlite_stage.to_string_lossy().as_bytes()).map_err(|_| Error("bad staging path".into()))?;
             let id_c = CString::new(id).map_err(|_| Error("bad FireWire ID".into()))?;
+            let track_infos: Vec<TrackInfo> = self.track_ids().into_iter()
+                .map(|id| self.track(id).ok_or_else(|| Error(format!("Couldn't read track {id} for Nano 6 save"))))
+                .collect::<Result<_>>()?;
+            let track_strings: Vec<Nano6TrackStrings> = track_infos.iter().map(|track| {
+                let make = |value: Option<&str>| CString::new(value.unwrap_or_default())
+                    .map_err(|_| Error("track metadata contains a NUL byte".into()));
+                Ok(Nano6TrackStrings {
+                    title: make(track.title.as_deref())?,
+                    artist: make(track.artist.as_deref())?,
+                    album: make(track.album.as_deref())?,
+                    genre: make(track.genre.as_deref())?,
+                    composer: make(track.composer.as_deref())?,
+                    location: make(track.ipod_path.as_deref())?,
+                })
+            }).collect::<Result<_>>()?;
+            let track_input: Vec<Nano6TrackInput> = track_infos.iter().zip(&track_strings).map(|(track, strings)| Nano6TrackInput {
+                dbid: track.dbid,
+                title: strings.title.as_ptr(),
+                artist: strings.artist.as_ptr(),
+                album: strings.album.as_ptr(),
+                genre: strings.genre.as_ptr(),
+                composer: strings.composer.as_ptr(),
+                location: strings.location.as_ptr(),
+                length_ms: track.length_ms.max(0) as u32,
+                size_bytes: track.size_bytes,
+                track_number: track.track_nr.max(0) as u32,
+                disc_number: track.disc_nr.max(0) as u32,
+                year: track.year.max(0) as u32,
+                bitrate: track.bitrate_kbps.max(0) as u32,
+                sample_rate: track.sample_rate,
+                rating: track.rating.min(100) as u8,
+            }).collect();
             let playlists = self.playlists();
             let names: Vec<CString> = playlists
                 .iter()
@@ -528,6 +591,8 @@ impl Database {
                     cdb_stage_c.as_ptr(),
                     sqlite_stage_c.as_ptr(),
                     id_c.as_ptr(),
+                    track_input.as_ptr(),
+                    track_input.len(),
                     input.as_ptr(),
                     input.len(),
                     message.as_mut_ptr(),
@@ -687,6 +752,7 @@ unsafe fn read_track(t: *mut Itdb_Track) -> TrackInfo {
         compilation: t.compilation != 0,
         bpm: t.BPM,
         length_ms: t.tracklen,
+        size_bytes: t.size,
         bitrate_kbps: t.bitrate,
         sample_rate: t.samplerate as u32,
         filetype: get_str(t.filetype),
