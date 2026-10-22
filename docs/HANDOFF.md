@@ -239,6 +239,24 @@ Everything decided and learned so far, so work can continue in a new session.
 
 Order chosen: confirm editing on the nano → **playback** (done) → artwork (done) → icon chooser → shuffle/repeat → playlist reordering → column browser fixes and Format/Bitrate columns → media library.
 
+## Same rules everywhere; Sansa covers (patch 0048)
+
+- Any song can be dragged, from any source and view (song list, album panel,
+  album covers, artist/genre/composer views); the drop target decides and
+  says why when it can't (iPod changes off, a library playlist given another
+  library's songs, player changes off — msc_add's error).
+- Song menu everywhere: Copy to <iPod> (Music or a playlist) and Copy to
+  <player> for each player; iPod songs can be copied to players
+  (msc_add resolves iPod dbids via playback::track_file). Player songs: no
+  playlist items; Delete key / menu → Delete from <player>….
+- Album panel rows: Enter, ↑/↓ (⇧ extends), Delete like the song list.
+- Sansa e200 profile: `small_covers: (300, 30 000 bytes)` → the embedded
+  cover is re-encoded as a baseline JPEG ≤ 300 px and ≤ 30 KB (falling back to
+  the folder's cover), plus ID3v2.3. From forum reports (a 300×300, 29 KB
+  cover showed; 455×455, 42 KB didn't). Unconfirmed on the device.
+- Part files while copying are `.<name>.part.<ext>` (the tag code goes by
+  the extension).
+
 ## MSC players, step 2: player page, copying, deleting (patch 0047)
 
 - PlayerPage (source `{kind: "player", path}`; clicking the player in the

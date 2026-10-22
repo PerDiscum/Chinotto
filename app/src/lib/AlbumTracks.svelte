@@ -17,8 +17,19 @@
       store.clickTrack(t.id, tracks, e);
     }
   }
+  // The same keys as the song list: Enter plays, arrows move (⇧ extends), Delete removes.
   function key(e: KeyboardEvent, i: number) {
-    if (e.key === "Enter") void store.playList(tracks, i);
+    if (e.key === "Enter") {
+      e.preventDefault();
+      void store.playList(tracks, i);
+    } else if (e.key === "Delete" || e.key === "Backspace") {
+      e.preventDefault();
+      store.removeSelected();
+    } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const n = store.moveSelection(tracks, e.key === "ArrowDown" ? 1 : -1, e.shiftKey);
+      if (n !== null) ((e.currentTarget as HTMLElement).parentElement?.children[n] as HTMLElement | undefined)?.focus();
+    }
   }
 </script>
 

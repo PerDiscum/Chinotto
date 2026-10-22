@@ -13,6 +13,22 @@ export function playSelected(tracks: Track[]) {
   if (i >= 0) void store.playList(tracks, i);
 }
 
+/** "Copy to <iPod>" (its Music or one of its playlists), when an iPod is open. */
+function ipodCopy(dbids: string[]) {
+  const ipod = store.ipod;
+  if (!ipod) return [];
+  return [
+    {
+      label: t("Copy to {name}", { name: ipod.name }),
+      disabled: !ipod.writable,
+      submenu: [
+        { label: t("Music"), action: () => store.copyToIpod(dbids, null) },
+        ...ipod.playlists.filter((p) => !p.master && !p.smart).map((p) => ({ label: p.name, action: () => store.copyToIpod(dbids, p.id) })),
+      ],
+    },
+  ];
+}
+
 /** "Copy to <player>" for each player set up as a drive (not the one shown). */
 function playerCopies(dbids: string[], shownLib: string | null) {
   return store.devices
@@ -42,9 +58,7 @@ export function songMenu(e: MouseEvent, track: Track, tracks: Track[]) {
         { label: t("Play"), action: () => playSelected(tracks) },
         { label: t("Song Details"), action: () => (store.dialog = { kind: "info" }) },
         { label: n > 1 ? t("Save As Zip…") : t("Save As…"), action: () => store.exportSongs(store.selectedTracks) },
-        ...(store.ipod
-          ? [{ label: t("Copy to {name}", { name: store.ipod.name }), disabled: !store.ipod.writable, action: () => store.copyToIpod(dbids, null) }]
-          : []),
+        ...ipodCopy(dbids),
         ...playerCopies(dbids, null),
         { label: "", separator: true },
         { label: t("Remove from Scratch"), action: () => store.removeFromScratch([...store.selected]) },
@@ -77,19 +91,8 @@ export function songMenu(e: MouseEvent, track: Track, tracks: Track[]) {
             { label: "", separator: true },
           ]),
       ...(pl ? [{ label: t("Remove from “{name}”", { name: pl.name }), disabled: ro, action: () => store.removeFromPlaylist(pl.id, [...store.selected]) }] : []),
-      ...(!onIpod && store.ipod
-        ? [
-            {
-              label: t("Copy to {name}", { name: store.ipod.name }),
-              disabled: !store.ipod.writable,
-              submenu: [
-                { label: t("Music"), action: () => store.copyToIpod(dbids, null) },
-                ...store.ipod.playlists.filter((p) => !p.master && !p.smart).map((p) => ({ label: p.name, action: () => store.copyToIpod(dbids, p.id) })),
-              ],
-            },
-          ]
-        : []),
-      ...(!onIpod ? playerCopies(dbids, src.kind === "library" ? src.lib : null) : []),
+      ...(!onIpod ? ipodCopy(dbids) : []),
+      ...playerCopies(dbids, src.kind === "library" ? src.lib : null),
       ...(!onIpod && player
         ? [
             {
@@ -126,8 +129,9 @@ export function startSongDrag(
   tracks: Track[],
   insertionAt: ((x: number, y: number) => number | null) | null = null,
 ) {
-  // Scratch songs can be dragged too (onto the iPod).
-  if (e.button !== 0 || !(store.writable || store.source.kind === "scratch")) return;
+  // Any song can be dragged (to copy it somewhere); where it's dropped decides
+  // what happens, and says so when it can't.
+  if (e.button !== 0) return;
   const x0 = e.clientX, y0 = e.clientY;
   const move = (m: MouseEvent) => {
     if (!store.songDrag) {
@@ -157,7 +161,6 @@ export function startSongDrag(
  */
 export function startAlbumDrag(e: MouseEvent, tracks: Track[]) {
   if (e.button !== 0 || (isMac && e.ctrlKey) || !tracks.length) return;
-  if (!store.writable) return;
   const x0 = e.clientX, y0 = e.clientY;
   const move = (m: MouseEvent) => {
     if (!store.songDrag) {

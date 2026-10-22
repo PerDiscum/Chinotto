@@ -64,6 +64,9 @@ pub struct Profile {
     pub plays: &'static [&'static str],
     /// Its tags must be ID3v2.3 for covers to show.
     pub id3v23: bool,
+    /// It only shows small embedded covers: at most this many pixels a side
+    /// and bytes (they're re-encoded as plain, "baseline" JPEGs).
+    pub small_covers: Option<(u32, usize)>,
 }
 
 /// Known players and where they keep things. "Other" fits most players.
@@ -77,6 +80,7 @@ pub fn profiles() -> Vec<Profile> {
         playlist_format,
         plays,
         id3v23,
+        small_covers: None,
     };
     vec![
         p("sony-nwz", "Sony Walkman NWZ (E, S, A series…)", "sony-nwz", "MUSIC", "MUSIC", "m3u8", &["mp3", "aac", "wma", "wav"], true),
@@ -90,7 +94,12 @@ pub fn profiles() -> Vec<Profile> {
             &["mp3", "aac", "alac", "flac", "wma", "wav", "aiff", "aif"],
             true,
         ),
-        p("sansa-e200", "SanDisk Sansa e200", "sansa-e200", "Music", "Music", "m3u", &["mp3", "wma", "wav"], false),
+        // The e200 shows embedded covers up to about 32 KB (a 300×300 one did, a
+        // 455×455 one of 42 KB didn't, as reported on SanDisk's and JRiver's forums).
+        Profile {
+            small_covers: Some((300, 30_000)),
+            ..p("sansa-e200", "SanDisk Sansa e200", "sansa-e200", "Music", "Music", "m3u", &["mp3", "wma", "wav"], true)
+        },
         p("sansa-clip", "SanDisk Sansa Clip / Fuze", "sansa-clip", "Music", "Music", "m3u", &["mp3", "wma", "wav", "flac", "ogg"], false),
         p("other", "Other player", "generic", "Music", "Playlists", "m3u8", &["mp3", "aac", "wav"], false),
     ]
@@ -428,7 +437,14 @@ pub async fn msc_add(path: String, dbids: Vec<String>, files: Vec<String>, app: 
         let mut res = CopyResult::default();
         let mut sources: Vec<PathBuf> = Vec::new();
         for d in &dbids {
-            let f = if d.starts_with("scratch:") { crate::scratch::track_file(&app, d) } else { crate::libcommands::track_file(&app, d) };
+            let f = if d.starts_with("scratch:") {
+                crate::scratch::track_file(&app, d)
+            } else if d.starts_with("lib:") {
+                crate::libcommands::track_file(&app, d)
+            } else {
+                // A song on the open iPod.
+                d.parse::<u64>().map_err(|_| "bad id".to_string()).and_then(|id| crate::playback::track_file(&app, id))
+            };
             match f {
                 Ok(f) => sources.push(f),
                 Err(e) => res.skipped.push(e),
@@ -472,7 +488,7 @@ pub async fn msc_add(path: String, dbids: Vec<String>, files: Vec<String>, app: 
                     n += 1;
                 }
             }
-            if let Err(e) = copy_in(f, &dest, profile.id3v23) {
+            if let Err(e) = copy_in(f, &dest, &profile) {
                 res.skipped.push(format!("{name}: {e}"));
                 continue;
             }
@@ -489,10 +505,13 @@ pub async fn msc_add(path: String, dbids: Vec<String>, files: Vec<String>, app: 
 
 /// Copy `from` to `to` through a hidden part file, so a half-copied song
 /// never has its real name.
-fn copy_in(from: &Path, to: &Path, id3v23: bool) -> Result<(), String> {
+fn copy_in(from: &Path, to: &Path, profile: &Profile) -> Result<(), String> {
     let dir = to.parent().ok_or("bad place")?;
     std::fs::create_dir_all(dir).map_err(|e| format!("couldn't create {} ({e})", dir.display()))?;
-    let part = dir.join(format!(".{}.part", to.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()));
+    // Hidden, and keeping its extension (the tag code goes by it).
+    let stem = to.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let ext = to.extension().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let part = dir.join(format!(".{stem}.part.{ext}"));
     std::fs::copy(from, &part).map_err(|e| {
         let _ = std::fs::remove_file(&part);
         if e.raw_os_error() == Some(28) {
@@ -501,7 +520,12 @@ fn copy_in(from: &Path, to: &Path, id3v23: bool) -> Result<(), String> {
             format!("couldn't copy it ({e})")
         }
     })?;
-    if id3v23 && to.extension().is_some_and(|e| e.eq_ignore_ascii_case("mp3")) {
+    let mp3 = to.extension().is_some_and(|e| e.eq_ignore_ascii_case("mp3"));
+    if let (Some((px, max)), true) = (profile.small_covers, mp3) {
+        // Not fatal either: without it, only the cover is missing.
+        let _ = shrink_cover(&part, px, max);
+    }
+    if profile.id3v23 && mp3 {
         // Not fatal: the song plays either way.
         let _ = crate::tagwrite::resave_id3v23(&part);
     }
@@ -509,6 +533,39 @@ fn copy_in(from: &Path, to: &Path, id3v23: bool) -> Result<(), String> {
         let _ = std::fs::remove_file(&part);
         format!("couldn't finish copying it ({e})")
     })
+}
+
+/// Replace the song's cover with a baseline JPEG of at most `px` a side and
+/// `max` bytes (lower quality until it fits). Songs without one get the
+/// folder's cover picture.
+fn shrink_cover(file: &Path, px: u32, max: usize) -> Result<(), String> {
+    let bytes = crate::tags::embedded_cover(file)
+        .or_else(|| crate::library::folder_cover(file.parent()?).and_then(|p| std::fs::read(p).ok()))
+        .ok_or("no cover")?;
+    let img = crate::cover::decode(&bytes)?;
+    let small = if img.width() > px || img.height() > px { img.resize(px, px, image::imageops::FilterType::Lanczos3) } else { img };
+    let rgb = small.to_rgb8();
+    let mut jpeg = Vec::new();
+    for q in [90u8, 80, 70, 60, 50, 40] {
+        jpeg.clear();
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, q).encode_image(&rgb).map_err(|e| e.to_string())?;
+        if jpeg.len() <= max {
+            break;
+        }
+    }
+    if bytes.len() <= max && bytes.starts_with(&[0xFF, 0xD8]) && !is_progressive(&bytes) && img_fits(&bytes, px) {
+        return Ok(()); // already fine
+    }
+    crate::tagwrite::write(file, &[], Some(&crate::tagwrite::CoverChange::Set(jpeg, lofty::picture::MimeType::Jpeg)))
+}
+
+/// A progressive JPEG (SOF2 marker), which many old players can't show.
+fn is_progressive(jpeg: &[u8]) -> bool {
+    jpeg.windows(2).any(|w| w == [0xFF, 0xC2])
+}
+
+fn img_fits(bytes: &[u8], px: u32) -> bool {
+    crate::cover::decode(bytes).is_ok_and(|i| i.width() <= px && i.height() <= px)
 }
 
 /// Delete songs (the player library's song ids) from the player. Only files
@@ -611,11 +668,26 @@ mod tests {
         )
         .unwrap();
         let to = dir.join("A/B/01 T.mp3");
-        copy_in(&from, &to, true).unwrap();
+        let nwz = profiles().into_iter().find(|p| p.key == "sony-nwz").unwrap();
+        copy_in(&from, &to, &nwz).unwrap();
         let head = std::fs::read(&to).unwrap();
         assert_eq!((&head[..3], head[3]), (&b"ID3"[..], 3));
         assert!(crate::tags::embedded_cover(&to).is_some());
         assert_eq!(std::fs::read_dir(to.parent().unwrap()).unwrap().count(), 1, "no part file left");
+        // For the Sansa e200: a big cover becomes a small baseline JPEG.
+        let big = {
+            let img = image::RgbImage::from_fn(900, 900, |x, y| image::Rgb([(x % 256) as u8, (y % 256) as u8, ((x * y) % 256) as u8]));
+            let mut v = Vec::new();
+            image::DynamicImage::ImageRgb8(img).write_to(&mut std::io::Cursor::new(&mut v), image::ImageFormat::Png).unwrap();
+            v
+        };
+        crate::tagwrite::write(&from, &[], Some(&crate::tagwrite::CoverChange::Set(big, lofty::picture::MimeType::Png))).unwrap();
+        let e200 = profiles().into_iter().find(|p| p.key == "sansa-e200").unwrap();
+        let to2 = dir.join("C/02 T.mp3");
+        copy_in(&from, &to2, &e200).unwrap();
+        let cover = crate::tags::embedded_cover(&to2).unwrap();
+        assert!(cover.starts_with(&[0xFF, 0xD8]) && cover.len() <= 30_000 && !is_progressive(&cover), "{} bytes", cover.len());
+        assert!(img_fits(&cover, 300));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

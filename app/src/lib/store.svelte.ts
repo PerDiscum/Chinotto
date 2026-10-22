@@ -763,6 +763,10 @@ class Store {
   /** Delete key / menu: in a playlist, take songs out of it; elsewhere, delete from the iPod (asks first). */
   removeSelected() {
     if (this.source.kind === "scratch" && this.selected.size) return void this.removeFromScratch([...this.selected]);
+    // Songs on a player: delete them from it (asks first).
+    const s = this.source;
+    const player = s.kind === "library" ? this.playerOf(s.lib) : undefined;
+    if (player && this.selected.size) return void (this.dialog = { kind: "delete-player-songs", path: player.path, ids: [...this.selected] });
     if (!this.writable || !this.selected.size) return;
     const pl = this.editablePlaylist;
     if (pl) void this.removeFromPlaylist(pl.id, [...this.selected]);
@@ -819,15 +823,19 @@ class Store {
   /** Add songs to a playlist: an iPod playlist id, or "lib:<library>:<playlist>". */
   async addToPlaylist(id: string, dbids: string[]) {
     // Dropped on a player: copy the songs onto it.
-    if (id.startsWith("player:")) return this.copyToPlayer(id.slice(7), dbids.filter((d) => d.startsWith("lib:") || d.startsWith("scratch:")));
+    if (id.startsWith("player:")) return this.copyToPlayer(id.slice(7), dbids);
     if (id.startsWith("lib:")) {
-      const t = this.libPlaylist(id);
-      if (!t) return;
+      const lp = this.libPlaylist(id);
+      if (!lp) return;
       // Only the same library's songs (copying between libraries isn't a thing).
-      const add = dbids.filter((d) => d.startsWith(`lib:${t.lib}:`)).map(libSongId);
-      const have = new Set(t.pl.trackIds);
+      const add = dbids.filter((d) => d.startsWith(`lib:${lp.lib}:`)).map(libSongId);
+      if (!add.length) {
+        this.error = t("A library's playlists can only hold songs from that library.");
+        return;
+      }
+      const have = new Set(lp.pl.trackIds);
       const fresh = add.filter((x) => !have.has(x));
-      if (fresh.length) await this.libChange(() => api.libSetPlaylistTracks(t.lib, t.pl.id, [...t.pl.trackIds, ...fresh]));
+      if (fresh.length) await this.libChange(() => api.libSetPlaylistTracks(lp.lib, lp.pl.id, [...lp.pl.trackIds, ...fresh]));
       return;
     }
     // Library or Scratch songs onto the iPod ("ipod:music", or one of its playlists): copy them over.
@@ -925,7 +933,11 @@ class Store {
    * aren't copied again; formats the iPod can't play are reported.
    */
   async copyToIpod(dbids: string[], playlist: string | null) {
-    if (!this.ipod?.writable) return;
+    if (!this.ipod) return;
+    if (!this.ipod.writable) {
+      this.error = t("Changes to this iPod are switched off. Turn on “Allow changes” on its page first.");
+      return;
+    }
     const songs = dbids.map((d) => this.trackByDbid(d)).filter((t): t is Track => !!t && !!t.location && !t.unavailable);
     const same = (a: Track, b: Track) =>
       (a.title ?? "") === (b.title ?? "") && (a.artist ?? "") === (b.artist ?? "") && (a.album ?? "") === (b.album ?? "") && Math.abs(a.lengthMs - b.lengthMs) < 2000;
