@@ -652,7 +652,9 @@ pub fn after_edit(file: &Path, profile: &Profile, cover: Option<&crate::tagwrite
 }
 
 /// Greek letters without their accents (tonos, dialytika, and the polytonic
-/// marks); everything else, final sigma included, as it is.
+/// marks), and final sigma ς as σ (these Walkmans don't show ς); everything
+/// else as it is. The Greek question mark (;) becomes a plain semicolon by
+/// itself (Unicode treats them as the same character).
 pub fn plain_greek(s: &str) -> String {
     use unicode_normalization::char::is_combining_mark;
     use unicode_normalization::UnicodeNormalization;
@@ -669,7 +671,7 @@ pub fn plain_greek(s: &str) -> String {
             out.push(c);
         }
     }
-    out.nfc().collect()
+    out.nfc().map(|c| if c == 'ς' { 'σ' } else { c }).collect()
 }
 
 /// The text fields of `info`, without Greek accents.
@@ -863,8 +865,9 @@ mod tests {
 
     #[test]
     fn greek_without_accents() {
-        assert_eq!(plain_greek("Φοίβος Δεληβοριάς - Χάλια - Κάθε Σεπτέμβρη"), "Φοιβος Δεληβοριας - Χαλια - Καθε Σεπτεμβρη");
-        assert_eq!(plain_greek("ΐ ϋ Ώρα ἄνθρωπος"), "ι υ Ωρα ανθρωπος");
+        assert_eq!(plain_greek("Φοίβος Δεληβοριάς - Χάλια - Κάθε Σεπτέμβρη"), "Φοιβοσ Δεληβοριασ - Χαλια - Καθε Σεπτεμβρη");
+        assert_eq!(plain_greek("Τι κάνεις\u{37e}"), "Τι κανεισ;");
+        assert_eq!(plain_greek("ΐ ϋ Ώρα ἄνθρωπος"), "ι υ Ωρα ανθρωποσ");
         // Other languages keep their accents.
         assert_eq!(plain_greek("Björk – Café"), "Björk – Café");
     }

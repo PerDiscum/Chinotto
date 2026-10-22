@@ -248,7 +248,8 @@ Order chosen: confirm editing on the nano → **playback** (done) → artwork (d
   to the sidebar scrolled it.
 - Sony profiles (NWZ, NW-A10/A20 — not the Android ones) have
   `plain_greek`: Greek letters lose their accents (tonos, dialytika,
-  polytonic marks; final ς kept) in tags and folder names when copying and
+  polytonic marks; final ς → σ; the Greek question mark becomes ";" by
+  Unicode normalisation) in tags and folder names when copying and
   after edits (`msc::plain_greek`, NFD + drop marks after Greek letters).
 
 ## Editing on players, progress names, conversion rules (patch 0050)
