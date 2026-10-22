@@ -51,14 +51,26 @@ struct Nano6TrackInput {
     genre: *const c_char,
     composer: *const c_char,
     location: *const c_char,
+    album_artist: *const c_char,
+    comment: *const c_char,
+    grouping: *const c_char,
+    sort_title: *const c_char,
+    sort_artist: *const c_char,
+    sort_album: *const c_char,
+    sort_album_artist: *const c_char,
+    sort_composer: *const c_char,
     length_ms: u32,
     size_bytes: u32,
     track_number: u32,
+    track_count: u32,
     disc_number: u32,
+    disc_count: u32,
     year: u32,
     bitrate: u32,
     sample_rate: u32,
     rating: u8,
+    compilation: u8,
+    bpm: u16,
     artwork_count: u16,
     artwork_size: u32,
     has_artwork: u8,
@@ -82,6 +94,14 @@ struct Nano6TrackStrings {
     genre: CString,
     composer: CString,
     location: CString,
+    album_artist: CString,
+    comment: CString,
+    grouping: CString,
+    sort_title: CString,
+    sort_artist: CString,
+    sort_album: CString,
+    sort_album_artist: CString,
+    sort_composer: CString,
 }
 
 /// How many database backups [`Database::save`] keeps on the iPod.
@@ -532,9 +552,6 @@ impl Database {
                 .firewire_guid
                 .as_deref()
                 .ok_or_else(|| Error("Nano 6 needs its USB FireWire ID before Chinotto can save changes".into()))?;
-            if !self.pending_deletes.is_empty() {
-                return Err(Error("Experimental Nano 6 support can add songs and change playlists, but song deletion is disabled".into()));
-            }
             let backup = backup_nano6(&self.root)?;
             let cdb_stage = backup.join("iTunesCDB staged");
             let sqlite_stage = backup.join("SQLite staged");
@@ -560,6 +577,14 @@ impl Database {
                         genre: make(track.genre.as_deref())?,
                         composer: make(track.composer.as_deref())?,
                         location: make(track.ipod_path.as_deref())?,
+                        album_artist: make(track.album_artist.as_deref())?,
+                        comment: make(track.comment.as_deref())?,
+                        grouping: make(track.grouping.as_deref())?,
+                        sort_title: make(track.sort_title.as_deref())?,
+                        sort_artist: make(track.sort_artist.as_deref())?,
+                        sort_album: make(track.sort_album.as_deref())?,
+                        sort_album_artist: make(track.sort_album_artist.as_deref())?,
+                        sort_composer: make(track.sort_composer.as_deref())?,
                     })
                 })
                 .collect::<Result<_>>()?;
@@ -574,14 +599,26 @@ impl Database {
                     genre: strings.genre.as_ptr(),
                     composer: strings.composer.as_ptr(),
                     location: strings.location.as_ptr(),
+                    album_artist: strings.album_artist.as_ptr(),
+                    comment: strings.comment.as_ptr(),
+                    grouping: strings.grouping.as_ptr(),
+                    sort_title: strings.sort_title.as_ptr(),
+                    sort_artist: strings.sort_artist.as_ptr(),
+                    sort_album: strings.sort_album.as_ptr(),
+                    sort_album_artist: strings.sort_album_artist.as_ptr(),
+                    sort_composer: strings.sort_composer.as_ptr(),
                     length_ms: track.length_ms.max(0) as u32,
                     size_bytes: track.size_bytes,
                     track_number: track.track_nr.max(0) as u32,
+                    track_count: track.track_count.max(0) as u32,
                     disc_number: track.disc_nr.max(0) as u32,
+                    disc_count: track.disc_count.max(0) as u32,
                     year: track.year.max(0) as u32,
                     bitrate: track.bitrate_kbps.max(0) as u32,
                     sample_rate: track.sample_rate,
                     rating: track.rating.min(100) as u8,
+                    compilation: track.compilation as u8,
+                    bpm: track.bpm.max(0) as u16,
                     artwork_count: track.artwork_count,
                     artwork_size: track.artwork_size,
                     has_artwork: track.has_artwork,
@@ -623,7 +660,7 @@ impl Database {
             };
             if ok == 0 {
                 let detail = unsafe { CStr::from_ptr(message.as_ptr()) }.to_string_lossy();
-                return Err(Error(format!("Nano 6 playlist update was not installed: {detail}")));
+                return Err(Error(format!("Nano 6 database update was not installed: {detail}")));
             }
             let live_cdb = self.root.join("iPod_Control/iTunes/iTunesCDB");
             let old_cdb = backup.join("iTunesCDB-before-swap");

@@ -25,14 +25,6 @@ fn parse_ids(ids: &[String]) -> Result<Vec<u64>, String> {
     ids.iter().map(|s| s.parse::<u64>().map_err(|_| format!("bad id {s}"))).collect()
 }
 
-fn playlist_only_on_nano6(path: &str) -> Result<(), String> {
-    if chinotto_ipod::device::is_nano6_root(Path::new(path)) {
-        Err("Nano 6 support is experimental: adding songs, changing playlists, and changing covers are supported; editing or deleting songs is disabled.".into())
-    } else {
-        Ok(())
-    }
-}
-
 /// Run `f` against the writer for the iPod at `root`, save, and return the new view
 /// (plus anything `f` wants to report, as `extra`).
 fn with_writer<T: Serialize>(app: &AppHandle, root: &Path, f: impl FnOnce(&mut Database) -> Result<T, String>) -> Result<Response, String> {
@@ -129,7 +121,6 @@ pub(crate) fn fields(changes: &HashMap<String, Value>) -> Result<Vec<Field>, Str
 
 #[tauri::command]
 pub async fn edit_tracks(path: String, ids: Vec<String>, changes: HashMap<String, Value>, app: AppHandle) -> Result<Response, String> {
-    playlist_only_on_nano6(&path)?;
     let ids = parse_ids(&ids)?;
     let fields = fields(&changes)?;
     blocking(app, move |app| with_writer(&app, Path::new(&path), |db| db.edit(&ids, &fields).map_err(|e| e.to_string()))).await
@@ -138,7 +129,6 @@ pub async fn edit_tracks(path: String, ids: Vec<String>, changes: HashMap<String
 /// Remove songs from the iPod (library and all playlists); their files are deleted after the save.
 #[tauri::command]
 pub async fn delete_tracks(path: String, ids: Vec<String>, app: AppHandle) -> Result<Response, String> {
-    playlist_only_on_nano6(&path)?;
     let ids = parse_ids(&ids)?;
     blocking(app, move |app| with_writer(&app, Path::new(&path), |db| db.remove_tracks(&ids).map_err(|e| e.to_string()))).await
 }

@@ -482,11 +482,18 @@ bool updateLibrary(const Library& library, const fs::path& path,
         }
         return ranks;
     };
-    const auto titleRanks = sortRanks([](const Track& t) -> const std::string& { return t.title; });
-    const auto artistRanks = sortRanks([](const Track& t) -> const std::string& { return t.artist; });
-    const auto albumRanks = sortRanks([](const Track& t) -> const std::string& { return t.album; });
+    auto effectiveSort = [](const std::string& sort, const std::string& value) -> const std::string& {
+        return sort.empty() ? value : sort;
+    };
+    const auto titleRanks = sortRanks([&](const Track& t) -> const std::string& { return effectiveSort(t.sortTitle, t.title); });
+    const auto artistRanks = sortRanks([&](const Track& t) -> const std::string& { return effectiveSort(t.sortArtist, t.artist); });
+    const auto albumRanks = sortRanks([&](const Track& t) -> const std::string& { return effectiveSort(t.sortAlbum, t.album); });
     const auto genreRanks = sortRanks([](const Track& t) -> const std::string& { return t.genre; });
-    const auto composerRanks = sortRanks([](const Track& t) -> const std::string& { return t.composer; });
+    const auto composerRanks = sortRanks([&](const Track& t) -> const std::string& { return effectiveSort(t.sortComposer, t.composer); });
+    const auto albumArtistRanks = sortRanks([&](const Track& t) -> const std::string& {
+        const std::string& albumArtist = t.albumArtist.empty() ? t.artist : t.albumArtist;
+        return effectiveSort(t.sortAlbumArtist, albumArtist);
+    });
 
     std::unordered_map<std::string, int> genres;
     std::unordered_map<std::string, std::int64_t> genreOrderByName;
@@ -513,6 +520,12 @@ bool updateLibrary(const Library& library, const fs::path& path,
             idFor(albums, "album", albumKey);
         const std::uint64_t composerId = idFor(composers, "composer", track.composer);
         const std::uint32_t marker = fileMarker(track);
+        const std::string& albumArtist = track.albumArtist.empty() ? track.artist : track.albumArtist;
+        const std::string& sortTitle = effectiveSort(track.sortTitle, track.title);
+        const std::string& sortArtist = effectiveSort(track.sortArtist, track.artist);
+        const std::string& sortAlbum = effectiveSort(track.sortAlbum, track.album);
+        const std::string& sortAlbumArtist = effectiveSort(track.sortAlbumArtist, albumArtist);
+        const std::string& sortComposer = effectiveSort(track.sortComposer, track.composer);
 
         int p = 0;
         sqlite3_bind_int64(item.get(), ++p, sqlite3_int64(track.dbid));
@@ -530,9 +543,9 @@ bool updateLibrary(const Library& library, const fs::path& path,
         sqlite3_bind_int64(item.get(), ++p, sqlite3_int64(artistId));
         sqlite3_bind_int64(item.get(), ++p, sqlite3_int64(composerId));
         for (const std::string* text : {&track.title, &track.artist, &track.album,
-                                        &track.artist, &track.composer, &track.title,
-                                        &track.artist, &track.album, &track.artist,
-                                        &track.composer})
+                                        &albumArtist, &track.composer, &sortTitle,
+                                        &sortArtist, &sortAlbum, &sortAlbumArtist,
+                                        &sortComposer})
             bindText(item.get(), ++p, *text);
         for (const std::int64_t order : {titleRanks[index], artistRanks[index],
                                          albumRanks[index], genreRanks[index],
@@ -551,7 +564,7 @@ bool updateLibrary(const Library& library, const fs::path& path,
             sqlite3_bind_int64(trackArtist.get(), 1, sqlite3_int64(trackArtistId));
             bindText(trackArtist.get(), 2, track.artist);
             sqlite3_bind_int64(trackArtist.get(), 3, artistRanks[index]);
-            bindText(trackArtist.get(), 4, track.artist);
+            bindText(trackArtist.get(), 4, sortArtist);
             if (!trackArtist.run(db, error)) return fail();
             trackArtist.reset();
         }
@@ -575,7 +588,7 @@ bool updateLibrary(const Library& library, const fs::path& path,
             sqlite3_bind_int64(artist.get(), 1, sqlite3_int64(artistId));
             bindText(artist.get(), 2, track.artist);
             sqlite3_bind_int64(artist.get(), 3, artistRanks[index]);
-            bindText(artist.get(), 4, track.artist);
+            bindText(artist.get(), 4, sortArtist);
             if (!artist.run(db, error)) return fail();
             artist.reset();
         }
@@ -585,7 +598,7 @@ bool updateLibrary(const Library& library, const fs::path& path,
             bindText(album.get(), 3, track.album);
             sqlite3_bind_int64(album.get(), 4, albumRanks[index]);
             sqlite3_bind_int64(album.get(), 5, albumRanks[index]);
-            sqlite3_bind_int64(album.get(), 6, artistRanks[index]);
+            sqlite3_bind_int64(album.get(), 6, albumArtistRanks[index]);
             if (!album.run(db, error)) return fail();
             album.reset();
         }

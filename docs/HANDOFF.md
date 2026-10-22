@@ -770,3 +770,13 @@ Devices were opened with `LIBMTP_Open_Raw_Device_Uncached`, and libmtp's `flush_
 
 - Format the Nano 6 FFI code with rustfmt and remove a redundant struct default
   update so CI can proceed through Rust formatting and Clippy.
+
+## 0072: enable Nano 6 song editing and deletion
+
+- Allow the existing edit and delete commands on Nano 6. Refresh modeled CDB
+  track fields for existing persistent IDs, remove deleted tracks from the CDB,
+  and drop deleted IDs from retained playlists before staging both databases.
+- Keep CDB sort keys and editable text/numeric metadata synchronized with the
+  companion SQLite indexes. Song files are still removed only after both
+  staged databases are installed successfully.
+- Nano 6 metadata edits and deletion still require a real-device check.

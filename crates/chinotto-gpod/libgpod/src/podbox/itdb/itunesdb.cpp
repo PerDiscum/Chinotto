@@ -97,10 +97,12 @@ void parseTracks(const Buf& b, size_t mhlt, Library& lib) {
         Track t;
         if (b.has(pos, ihLen)) t.rawHeader.assign(&b.d[pos], &b.d[pos] + ihLen);
         t.id = b.u32(pos + 16);
+        t.compilation = b.u8(pos + 30);
         t.rating = b.u8(pos + 31);
         t.sizeBytes = b.u32(pos + 36);
         t.lengthMs = b.u32(pos + 40);
         t.trackNumber = b.u32(pos + 44);
+        t.trackCount = b.u32(pos + 48);
         t.year = b.u32(pos + 52);
         t.bitrate = b.u32(pos + 56);
         t.sampleRate = b.u32(pos + 60) >> 16;
@@ -110,6 +112,8 @@ void parseTracks(const Buf& b, size_t mhlt, Library& lib) {
         t.mhiiLink = b.u32(pos + 352);
         t.playCount = b.u32(pos + 80);
         t.discNumber = b.u32(pos + 92);
+        t.discCount = b.u32(pos + 96);
+        t.bpm = b.u16(pos + 122);
         if (const std::uint32_t added = b.u32(pos + 104))
             t.dateAdded = std::int64_t(added) - kMacToUnixEpoch;
         t.dbid = std::uint64_t(b.u32(pos + 112)) |
@@ -126,7 +130,15 @@ void parseTracks(const Buf& b, size_t mhlt, Library& lib) {
                 case 3: t.album = readMhodString(b, mpos, mtLen); break;
                 case 4: t.artist = readMhodString(b, mpos, mtLen); break;
                 case 5: t.genre = readMhodString(b, mpos, mtLen); break;
+                case 8: t.comment = readMhodString(b, mpos, mtLen); break;
+                case 13: t.grouping = readMhodString(b, mpos, mtLen); break;
                 case 12: t.composer = readMhodString(b, mpos, mtLen); break;
+                case 22: t.albumArtist = readMhodString(b, mpos, mtLen); break;
+                case 23: t.sortArtist = readMhodString(b, mpos, mtLen); break;
+                case 27: t.sortTitle = readMhodString(b, mpos, mtLen); break;
+                case 28: t.sortAlbum = readMhodString(b, mpos, mtLen); break;
+                case 29: t.sortAlbumArtist = readMhodString(b, mpos, mtLen); break;
+                case 30: t.sortComposer = readMhodString(b, mpos, mtLen); break;
                 default:
                     // Not understood, so kept byte-for-byte rather than lost.
                     if (b.has(mpos, mtLen)) {
