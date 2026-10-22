@@ -414,21 +414,6 @@ bool updateLibrary(const Library& library, const fs::path& path,
 
     if (!begin(db, error)) return false;
     auto fail = [&] { rollback(db); return false; };
-    // Some nano 6 libraries have valid, independently generated db_info ids
-    // that differ from the iTunesCDB header and master playlist. The companion
-    // database is rebuilt from the CDB below, so make its root ids agree with
-    // that source before inserting the matching container rows.
-    {
-        Statement updateInfo;
-        if (!updateInfo.prepare(
-                db, "UPDATE db_info SET pid=?,primary_container_pid=?", error))
-            return fail();
-        sqlite3_bind_int64(updateInfo.get(), 1,
-                           sqlite3_int64(library.databaseDbid));
-        sqlite3_bind_int64(updateInfo.get(), 2,
-                           sqlite3_int64(library.masterDbid));
-        if (!updateInfo.run(db, error)) return fail();
-    }
     const char* cleared[] = {
         "item_to_container", "item_to_album", "item_to_artist",
         "item_to_composer", "container_seed", "video_characteristics",
