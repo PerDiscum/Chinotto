@@ -120,7 +120,7 @@ mod ffi {
     extern "C" {
         pub fn LIBMTP_Init();
         pub fn LIBMTP_Detect_Raw_Devices(list: *mut *mut LIBMTP_raw_device_t, n: *mut c_int) -> c_int;
-        pub fn LIBMTP_Open_Raw_Device_Uncached(raw: *mut LIBMTP_raw_device_t) -> *mut LIBMTP_mtpdevice_t;
+        pub fn LIBMTP_Open_Raw_Device(raw: *mut LIBMTP_raw_device_t) -> *mut LIBMTP_mtpdevice_t;
         pub fn LIBMTP_Release_Device(d: *mut LIBMTP_mtpdevice_t);
         pub fn LIBMTP_Get_Manufacturername(d: *mut LIBMTP_mtpdevice_t) -> *mut c_char;
         pub fn LIBMTP_Get_Modelname(d: *mut LIBMTP_mtpdevice_t) -> *mut c_char;
@@ -377,7 +377,9 @@ impl Device {
             for i in 0..n.max(0) as usize {
                 let r = unsafe { list.add(i) };
                 if unsafe { (*r).bus_location == raw.bus && (*r).devnum == raw.devnum } {
-                    dev = unsafe { ffi::LIBMTP_Open_Raw_Device_Uncached(r) };
+                    // Cached: libmtp's track and playlist lists need the object
+                    // list it caches (uncached, they come back empty).
+                    dev = unsafe { ffi::LIBMTP_Open_Raw_Device(r) };
                     break;
                 }
             }

@@ -680,3 +680,7 @@ mhii_link 416), validated at runtime against the engine's JSON.
 The NWZ-E344 has a single USB interface, class 8 (mass storage), and still answers MTP on it: on Linux libmtp unloads usb-storage (its device flags say to) and talks MTP over the same endpoints, and the Walkman then shows "USB (MTP)". macOS's mass-storage driver can't be unloaded (claim fails with -3), so the class-8-only filter now applies on macOS only. On Linux, opening such a player over MTP takes it away as a drive until it's replugged.
 
 The Sansa e260 v2 here (Rockbox bootloader installed) isn't a guide for MTP: it doesn't answer OpenSession anywhere. The NWZ-E344 on Linux is the MTP test device.
+
+## 0059: songs already on an MTP device are listed
+
+Devices were opened with `LIBMTP_Open_Raw_Device_Uncached`, and libmtp's `flush_handles` does nothing on uncached devices, so `Get_Tracklisting` and `Get_Playlist_List` found no objects: only songs Chinotto had just sent showed. Now `LIBMTP_Open_Raw_Device` (cached). Opening reads every object's metadata once (the NWZ-E344 with ~1,000 songs: a few seconds); songs sent afterwards are added to the cache by libmtp.
