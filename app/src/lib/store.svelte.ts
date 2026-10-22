@@ -431,12 +431,22 @@ class Store {
       this.devices = this.devices.map((d) => (d.path === key ? { ...d, library: info.library, volume: info.name, capacity: info.capacity, free: info.free } : d.kind === "mtp" ? { ...d, library: null } : d));
       this.libraries = await api.listLibraries();
       await this.loadLibrary(info.library);
+      await this.loadPlayerState(key);
       this.select({ kind: "player", path: key });
     } catch (e) {
       this.error = String(e);
     } finally {
       this.opening = null;
     }
+  }
+
+  /** After copying to or deleting from an open MTP device: its songs and free space again. */
+  private async refreshMtp(key: string) {
+    const info = await api.mtpInfo(key).catch(() => null);
+    if (!info) return;
+    this.mtpInfos = { ...this.mtpInfos, [key]: info };
+    this.devices = this.devices.map((d) => (d.path === key ? { ...d, capacity: info.capacity, free: info.free } : d));
+    await this.reloadLibrary(info.library);
   }
 
   /** Let go of an MTP device so other programs can use it. */
@@ -491,6 +501,7 @@ class Store {
     this.error = null;
     try {
       const r = await api.mscAdd(path, dbids, files);
+      if (d?.kind === "mtp") await this.refreshMtp(path);
       const lines = [...r.skipped];
       if (r.already) lines.unshift(tn(r.already, "{n} song was already on the player.", "{n} songs were already on the player."));
       if (r.skipped.length) this.dialog = { kind: "report", title: tn(r.added, "{n} song copied", "{n} songs copied"), lines };
@@ -511,6 +522,7 @@ class Store {
     this.dialog = null;
     try {
       const problems = await api.mscDelete(path, ids);
+      if (path.startsWith("mtp:")) await this.refreshMtp(path);
       this.selected = new Set();
       if (problems.length) this.dialog = { kind: "report", title: tn(problems.length, "{n} file couldn't be deleted", "{n} files couldn't be deleted"), lines: problems };
     } catch (e) {
@@ -820,7 +832,6 @@ class Store {
     // Songs on a player: delete them from it (asks first).
     const s = this.source;
     const player = s.kind === "library" ? this.playerOf(s.lib) : undefined;
-    if (player?.kind === "mtp") return; // deleting from MTP devices comes later
     if (player && this.selected.size) return void (this.dialog = { kind: "delete-player-songs", path: player.path, ids: [...this.selected] });
     if (!this.writable || !this.selected.size) return;
     const pl = this.editablePlaylist;

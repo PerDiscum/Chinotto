@@ -366,15 +366,18 @@ fn conversion_for(app: &AppHandle, cfg: &MscConfig, profile: &Profile) -> crate:
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlayerState {
-    writable: bool,
-    conversion: crate::convert::Conversion,
+    pub(crate) writable: bool,
+    pub(crate) conversion: crate::convert::Conversion,
     /// The formats it plays, for the page ("MP3, AAC, WMA, WAV").
-    plays: Vec<&'static str>,
-    aac: bool,
+    pub(crate) plays: Vec<&'static str>,
+    pub(crate) aac: bool,
 }
 
 #[tauri::command]
 pub fn msc_state(path: String, app: AppHandle) -> Result<PlayerState, String> {
+    if path.starts_with("mtp:") {
+        return crate::mtp::player_state(&path, &app);
+    }
     let (_, cfg, profile) = player(&path)?;
     let state = app.state::<AppState>();
     Ok(PlayerState {
@@ -387,6 +390,10 @@ pub fn msc_state(path: String, app: AppHandle) -> Result<PlayerState, String> {
 
 #[tauri::command]
 pub fn msc_allow(path: String, allow: bool, app: AppHandle) -> Result<PlayerState, String> {
+    if path.starts_with("mtp:") {
+        app.state::<AppState>().set_writable(&crate::mtp::identity_of(&path, &app)?, allow)?;
+        return crate::mtp::player_state(&path, &app);
+    }
     let (_, cfg, _) = player(&path)?;
     app.state::<AppState>().set_writable(&identity(&cfg), allow)?;
     msc_state(path, app)
@@ -394,13 +401,17 @@ pub fn msc_allow(path: String, allow: bool, app: AppHandle) -> Result<PlayerStat
 
 #[tauri::command]
 pub fn msc_set_conversion(path: String, conversion: crate::convert::Conversion, app: AppHandle) -> Result<PlayerState, String> {
+    if path.starts_with("mtp:") {
+        app.state::<AppState>().set_conversion(&crate::mtp::identity_of(&path, &app)?, conversion)?;
+        return crate::mtp::player_state(&path, &app);
+    }
     let (_, cfg, _) = player(&path)?;
     app.state::<AppState>().set_conversion(&identity(&cfg), conversion)?;
     msc_state(path, app)
 }
 
 /// Characters FAT drives (and Windows) don't allow, and names they choke on.
-fn fat_name(s: &str, max: usize) -> String {
+pub(crate) fn fat_name(s: &str, max: usize) -> String {
     let c: String = s.chars().map(|c| if "/\\:*?\"<>|".contains(c) || c.is_control() { '_' } else { c }).collect();
     let c: String = c.trim().trim_end_matches('.').chars().take(max).collect();
     let c = c.trim().to_string();
@@ -432,16 +443,42 @@ fn place(music: &Path, info: &chinotto_gpod::TrackInfo, file: &Path) -> PathBuf 
 #[derive(Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct CopyResult {
-    added: usize,
+    pub(crate) added: usize,
     /// Already on the player (same place, same size).
-    already: usize,
-    skipped: Vec<String>,
+    pub(crate) already: usize,
+    pub(crate) skipped: Vec<String>,
+}
+
+/// The files of songs (library, Scratch or iPod songs by dbid) and of the
+/// music among `files` (files and folders); songs that can't be found go to
+/// `skipped`.
+pub(crate) fn sources(app: &AppHandle, dbids: &[String], files: &[String], skipped: &mut Vec<String>) -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = Vec::new();
+    for d in dbids {
+        let f = if d.starts_with("scratch:") {
+            crate::scratch::track_file(app, d)
+        } else if d.starts_with("lib:") {
+            crate::libcommands::track_file(app, d)
+        } else {
+            // A song on the open iPod.
+            d.parse::<u64>().map_err(|_| "bad id".to_string()).and_then(|id| crate::playback::track_file(app, id))
+        };
+        match f {
+            Ok(f) => out.push(f),
+            Err(e) => skipped.push(e),
+        }
+    }
+    out.extend(crate::write::expand(files).into_iter().filter(|f| crate::tags::library_kind(f).is_some()));
+    out
 }
 
 /// Copy songs (library or Scratch songs by dbid, and/or files and folders)
 /// onto the player, converting what it can't play.
 #[tauri::command]
 pub async fn msc_add(path: String, dbids: Vec<String>, files: Vec<String>, app: AppHandle) -> Result<CopyResult, String> {
+    if path.starts_with("mtp:") {
+        return crate::mtp::add(path, dbids, files, app).await;
+    }
     tauri::async_runtime::spawn_blocking(move || {
         let (root, cfg, profile) = player(&path)?;
         let state = app.state::<AppState>();
@@ -451,22 +488,7 @@ pub async fn msc_add(path: String, dbids: Vec<String>, files: Vec<String>, app: 
         let conv = conversion_for(&app, &cfg, &profile);
         let music = root.join(&cfg.music_folder);
         let mut res = CopyResult::default();
-        let mut sources: Vec<PathBuf> = Vec::new();
-        for d in &dbids {
-            let f = if d.starts_with("scratch:") {
-                crate::scratch::track_file(&app, d)
-            } else if d.starts_with("lib:") {
-                crate::libcommands::track_file(&app, d)
-            } else {
-                // A song on the open iPod.
-                d.parse::<u64>().map_err(|_| "bad id".to_string()).and_then(|id| crate::playback::track_file(&app, id))
-            };
-            match f {
-                Ok(f) => sources.push(f),
-                Err(e) => res.skipped.push(e),
-            }
-        }
-        sources.extend(crate::write::expand(&files).into_iter().filter(|f| crate::tags::library_kind(f).is_some()));
+        let sources = sources(&app, &dbids, &files, &mut res.skipped);
         let tmp = crate::convert::TempDir::new()?;
         let total = sources.len();
         for (i, src) in sources.iter().enumerate() {
@@ -524,7 +546,7 @@ pub async fn msc_add(path: String, dbids: Vec<String>, files: Vec<String>, app: 
 
 /// Copy `from` to `to` through a hidden part file, so a half-copied song
 /// never has its real name.
-fn copy_in(from: &Path, to: &Path, profile: &Profile) -> Result<(), String> {
+pub(crate) fn copy_in(from: &Path, to: &Path, profile: &Profile) -> Result<(), String> {
     let dir = to.parent().ok_or("bad place")?;
     std::fs::create_dir_all(dir).map_err(|e| format!("couldn't create {} ({e})", dir.display()))?;
     // Hidden, and keeping its extension (the tag code goes by it).
@@ -615,6 +637,9 @@ pub fn edit_rules(app: &AppHandle, lib: &str) -> Result<Option<Profile>, String>
         let Some(d) = l.device.clone() else { return Ok(None) };
         (d, l.folders.first().cloned().unwrap_or_default())
     };
+    if device.starts_with("mtp:") {
+        return Err("Songs on MTP devices can't be changed yet.".into());
+    }
     if !app.state::<AppState>().is_writable(&format!("msc:{device}")) {
         return Err("Changes to this player are switched off. Turn on “Allow changes” on its page first.".into());
     }
@@ -675,7 +700,7 @@ pub fn plain_greek(s: &str) -> String {
 }
 
 /// The text fields of `info`, without Greek accents.
-fn plain_greek_info(info: &mut chinotto_gpod::TrackInfo) {
+pub(crate) fn plain_greek_info(info: &mut chinotto_gpod::TrackInfo) {
     for f in [
         &mut info.title,
         &mut info.artist,
@@ -728,6 +753,9 @@ fn plain_greek_tags(file: &Path) -> Result<(), String> {
 /// inside its music folder are touched; folders left empty go too.
 #[tauri::command]
 pub fn msc_delete(path: String, ids: Vec<u32>, app: AppHandle) -> Result<Vec<String>, String> {
+    if path.starts_with("mtp:") {
+        return crate::mtp::delete(&path, &ids, &app);
+    }
     let (root, cfg, _) = player(&path)?;
     let state = app.state::<AppState>();
     if !state.is_writable(&identity(&cfg)) {

@@ -656,3 +656,11 @@ mhii_link 416), validated at runtime against the engine's JSON.
 ## 0054: MTP only when the device offers it
 
 `chinotto_has_mtp_interface` (shim.c) reads the USB descriptors (without opening the device) and `detect()` skips devices with no interface of class 6 or 255 with 3 endpoints. A player in mass-storage mode (NWZ-E344 on a Mac, Sansa on "Auto Detect") keeps its USB ID, which libmtp knows, so it used to be listed as MTP as well as a drive, and opening it failed ("in use"). Now it appears only as the drive. To test MTP on the Sansa: SanDisk firmware, Settings → USB Mode → MTP.
+
+## 0055: copying to and deleting from MTP devices
+
+- chinotto-mtp: `Device::send_track` (LIBMTP_Send_Track_From_File, parent 0 = the device's music folder), `delete`, `supported_filetypes`, `filetype_for` (an .m4a goes as M4A, MP4 or AAC, whichever the device lists); errors carry libmtp's own message.
+- mtp.rs: `add` and `delete`, reached through `msc_add` / `msc_delete` / `msc_state` / `msc_allow` / `msc_set_conversion` when the path starts with "mtp:", so the page, drag and drop, menus and the delete dialog are the MSC ones. Settings are kept under "mtp:<vid>:<pid>". What it plays comes from the file types it lists; the rules (ID3v2.3, plain Greek, small covers) from the MSC profile for its model (`profile_for`), without folder.jpg. Covers are embedded only; MTP album objects (representative samples) come with playlists. A song already on it (same title, artist and album) isn't sent again.
+- Opening on Linux: if it fails, Chinotto unmounts gvfs's mtp:// mounts (`gio mount -u`) and tries once more.
+- Editing songs on an MTP device isn't possible yet (`edit_rules` says so).
+- Tested so far: NWZ-E344 offers MTP to Linux (disk to the Mac). The Sansa e260 v2 (with the Rockbox bootloader) doesn't answer MTP's OpenSession on either, with Fedora's libmtp too.

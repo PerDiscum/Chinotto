@@ -3,8 +3,9 @@
   import { store } from "./store.svelte";
   import { bytes, longDuration } from "./format";
   import { deviceImage } from "./deviceImages";
+  import ConversionSettings from "./ConversionSettings.svelte";
 
-  // The page of an open MTP device (read-only for now).
+  // The page of an open MTP device.
   let { path }: { path: string } = $props();
 
   const d = $derived(store.devices.find((x) => x.path === path));
@@ -29,6 +30,9 @@
   );
   const pct = (v: number) => (stats.cap ? (v / stats.cap) * 100 : 0);
   const playlists = $derived(view?.playlists.filter((p) => !p.master).length ?? 0);
+  const st = $derived(store.playerStates[path]);
+  const NAMES: Record<string, string> = { mp3: "MP3", aac: "AAC", flac: "FLAC", wma: "WMA", wav: "WAV", ogg: "Ogg Vorbis" };
+  const plays = $derived((st?.plays ?? []).map((p) => NAMES[p] ?? p.toUpperCase()).join(", "));
 </script>
 
 {#if d && info}
@@ -42,10 +46,12 @@
           {#if info.serial}<dt>{t("Serial number")}</dt><dd>{info.serial}</dd>{/if}
           {#if info.battery != null}<dt>{t("Battery")}</dt><dd>{info.battery}%</dd>{/if}
           <dt>{t("Contents")}</dt><dd>{tn(stats.songs, "{n} song", "{n} songs")}, {longDuration(stats.ms)}, {tn(playlists, "{n} playlist", "{n} playlists")}</dd>
+          {#if plays}<dt>{t("Plays")}</dt><dd>{plays}</dd>{/if}
           <dt>{t("Connection")}</dt><dd>MTP</dd>
         </dl>
         <div class="actions">
-          <button onclick={() => store.closeMtp(path)}>{t("Let Other Programs Use It")}</button>
+          <button onclick={() => store.closeMtp(path)} disabled={!!store.busy}>{t("Let Other Programs Use It")}</button>
+          {#if st?.writable}<button onclick={() => store.pickAndCopyToPlayer(path)} disabled={!!store.busy}>{t("Add Songs…")}</button>{/if}
         </div>
       </section>
       <div class="picture">
@@ -53,8 +59,25 @@
       </div>
     </div>
     <section class="summary">
+      {#if st}
+        <div class="changes">
+          <label class="switch">
+            <input type="checkbox" role="switch" checked={st.writable} onchange={(e) => store.setPlayerAllow(path, e.currentTarget.checked)} disabled={!!store.busy} />
+            <span class="track" aria-hidden="true"><span class="knob"></span></span>
+            {t("Allow changes to this device.")}
+          </label>
+          <p class="note">
+            {#if st.writable}
+              {t("Chinotto can copy songs to this device over MTP (drag them onto it in the sidebar, or use Add Songs…) and delete them from it. Its playlists can't be changed yet.")}
+            {:else}
+              {t("Chinotto only reads this device. Turn this on to copy songs to it and delete them. The setting is remembered for this device only.")}
+            {/if}
+          </p>
+          <ConversionSettings conversion={st.conversion} plays={st.plays} device={t("player")} disabled={!!store.busy} onchange={(c) => store.setPlayerConversion(path, c)} />
+        </div>
+      {/if}
       <p class="note">
-        {t("Chinotto reads this device over MTP: its songs and playlists are shown, and songs play (they're copied to the computer first). Copying songs to it, changing them and its playlists come next. While Chinotto has it open, other programs can't use it.")}
+        {t("Songs on it play after they're copied to the computer. While Chinotto has it open, other programs can't use it.")}
       </p>
     </section>
     {#if stats.cap}
@@ -225,5 +248,53 @@
     height: 10px;
     border-radius: 3px;
     box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.15);
+  }
+  .switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .switch input {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+  }
+  .switch .track {
+    position: relative;
+    width: 34px;
+    height: 20px;
+    border-radius: 10px;
+    background: var(--cap-other);
+    transition: background 0.15s;
+  }
+  .switch .knob {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
+    transition: transform 0.15s;
+  }
+  .switch input:checked + .track {
+    background: var(--accent);
+  }
+  .switch input:checked + .track .knob {
+    transform: translateX(14px);
+  }
+  .switch input:focus-visible + .track {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .switch .track,
+    .switch .knob {
+      transition: none;
+    }
   }
 </style>

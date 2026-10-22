@@ -4,14 +4,16 @@
 //! device's own database each time it's opened).
 //!
 //! Songs are played by copying them from the device into a cache folder
-//! first. This step reads devices; copying to them comes next.
+//! first. Songs are copied to the device with the same rules as to MSC
+//! players (conversion, Greek letters, ID3v2.3 and small covers by model),
+//! and can be deleted from it. Playlists on the device come next.
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use chinotto_mtp::{Device, RawDevice};
 use serde::Serialize;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 use crate::devices::DeviceInfo;
 use crate::library::{LibPlaylist, LibTrack, Library, Tags};
@@ -28,6 +30,14 @@ struct Opened {
     key: String,
     dev: Device,
     info: MtpInfo,
+    /// "mtp:<vid>:<pid>": its Allow changes and conversion settings.
+    identity: String,
+    /// What it plays (from the file types it lists).
+    plays: Vec<&'static str>,
+    /// libmtp's file types it lists.
+    filetypes: Vec<i32>,
+    /// Rules for what's copied to it (by model).
+    profile: crate::msc::Profile,
 }
 
 #[derive(Serialize, Clone, Default)]
@@ -81,6 +91,65 @@ fn icon_for(r: &RawDevice) -> &'static str {
     "generic"
 }
 
+/// What a device plays, from libmtp's file types ("aac" for .m4a).
+fn plays_of(types: &[i32]) -> Vec<&'static str> {
+    let mut out = Vec::new();
+    for (t, name) in [(2, "mp3"), (34, "aac"), (6, "aac"), (30, "aac"), (3, "wma"), (1, "wav"), (32, "flac"), (4, "ogg")] {
+        if types.contains(&t) && !out.contains(&name) {
+            out.push(name);
+        }
+    }
+    out
+}
+
+/// The rules for songs copied to the device, by model (the MSC player
+/// profiles: Walkmans want ID3v2.3 and plain Greek, Sansas small covers).
+/// No folder.jpg: over MTP there are no folders of our own.
+fn profile_for(r: &RawDevice) -> crate::msc::Profile {
+    let key = match icon_for(r) {
+        "sony-nwz" => "sony-nwz",
+        i if i.starts_with("sansa-") => "sansa-e200",
+        _ => "other",
+    };
+    let mut p = crate::msc::profiles().into_iter().find(|p| p.key == key).unwrap_or_else(|| crate::msc::profiles().pop().unwrap());
+    p.folder_jpg = false;
+    p
+}
+
+fn identity(r: &RawDevice) -> String {
+    format!("mtp:{:04x}:{:04x}", r.vendor_id, r.product_id)
+}
+
+/// A song on the device as a library song.
+fn lib_track(key: &str, t: &chinotto_mtp::Track) -> LibTrack {
+    let file = t.filename.clone().unwrap_or_else(|| format!("{}.mp3", t.id));
+    LibTrack {
+        id: t.id,
+        path: format!("{key}/{}/{file}", t.id),
+        size: t.size,
+        mtime: t.modified,
+        added: t.modified,
+        play_count: t.play_count,
+        rating: (t.rating / 20).min(5) as u8,
+        played: None,
+        cover: false,
+        tags: Tags {
+            title: t.title.clone().or_else(|| t.filename.clone()),
+            artist: t.artist.clone(),
+            album: t.album.clone(),
+            genre: t.genre.clone(),
+            composer: t.composer.clone(),
+            year: t.year().max(0) as u32,
+            track_nr: t.track_nr as u32,
+            length_ms: t.duration_ms,
+            bitrate: t.bitrate / 1000,
+            sample_rate: t.sample_rate,
+            kind: format!("{} audio file", chinotto_mtp::filetype_name(t.filetype)),
+            ..Default::default()
+        },
+    }
+}
+
 fn describe(r: &RawDevice, open: Option<&Opened>) -> DeviceInfo {
     let key = r.key();
     let info = open.filter(|o| o.key == key).map(|o| &o.info);
@@ -91,7 +160,7 @@ fn describe(r: &RawDevice, open: Option<&Opened>) -> DeviceInfo {
         model: r.product.clone(),
         model_number: None,
         icon: icon_for(r).to_string(),
-        identity: Some(format!("mtp:{:04x}:{:04x}", r.vendor_id, r.product_id)),
+        identity: Some(identity(r)),
         capacity: info.map(|i| i.capacity).unwrap_or(0),
         free: info.map(|i| i.free).unwrap_or(0),
         // MTP devices aren't ejected: closing them in Chinotto is enough.
@@ -138,10 +207,20 @@ pub async fn mtp_open(key: String, app: AppHandle) -> Result<MtpInfo, String> {
             }
             m.found.iter().find(|r| r.key() == key).cloned().ok_or("That device isn't connected any more")?
         };
-        let mut dev = Device::open(&raw).map_err(|e| e.to_string())?;
+        let mut dev = match Device::open(&raw) {
+            Ok(d) => d,
+            // On Linux, the desktop's own MTP service (GNOME's gvfs, KDE's
+            // kiod) usually has it: ask it to let go, then try again.
+            Err(e) if release_from_desktop() => {
+                std::thread::sleep(std::time::Duration::from_millis(1500));
+                Device::open(&raw).map_err(|_| e.to_string())?
+            }
+            Err(e) => return Err(e.to_string()),
+        };
         let storages = dev.storages();
         let tracks = dev.tracks(|_, _| {});
         let playlists = dev.playlists();
+        let filetypes = dev.supported_filetypes();
         let lib = lib_id(&key);
         let name = dev.friendly_name().or_else(|| dev.model()).unwrap_or_else(|| describe(&raw, None).volume);
         let info = MtpInfo {
@@ -159,37 +238,7 @@ pub async fn mtp_open(key: String, app: AppHandle) -> Result<MtpInfo, String> {
         l.id = lib.clone();
         l.device = Some(key.clone());
         l.ephemeral = true;
-        l.tracks = tracks
-            .iter()
-            .map(|t| {
-                let file = t.filename.clone().unwrap_or_else(|| format!("{}.mp3", t.id));
-                LibTrack {
-                    id: t.id,
-                    path: format!("{key}/{}/{file}", t.id),
-                    size: t.size,
-                    mtime: t.modified,
-                    added: t.modified,
-                    play_count: t.play_count,
-                    rating: (t.rating / 20).min(5) as u8,
-                    played: None,
-                    cover: false,
-                    tags: Tags {
-                        title: t.title.clone().or_else(|| t.filename.clone()),
-                        artist: t.artist.clone(),
-                        album: t.album.clone(),
-                        genre: t.genre.clone(),
-                        composer: t.composer.clone(),
-                        year: t.year().max(0) as u32,
-                        track_nr: t.track_nr as u32,
-                        length_ms: t.duration_ms,
-                        bitrate: t.bitrate / 1000,
-                        sample_rate: t.sample_rate,
-                        kind: format!("{} audio file", chinotto_mtp::filetype_name(t.filetype)),
-                        ..Default::default()
-                    },
-                }
-            })
-            .collect();
+        l.tracks = tracks.iter().map(|t| lib_track(&key, t)).collect();
         let known: std::collections::HashSet<u32> = tracks.iter().map(|t| t.id).collect();
         l.playlists = playlists
             .into_iter()
@@ -201,7 +250,12 @@ pub async fn mtp_open(key: String, app: AppHandle) -> Result<MtpInfo, String> {
             libs.list.retain(|x| x.id != lib);
             libs.list.push(l);
         }
-        state.mtp.lock().unwrap().open = Some(Opened { key, dev, info: info.clone() });
+        let profile = profile_for(&raw);
+        let mut plays = plays_of(&filetypes);
+        if plays.is_empty() {
+            plays = profile.plays.to_vec();
+        }
+        state.mtp.lock().unwrap().open = Some(Opened { key, dev, info: info.clone(), identity: identity(&raw), plays, filetypes, profile });
         Ok(info)
     })
     .await
@@ -253,3 +307,237 @@ pub fn fetch(app: &AppHandle, path: &str) -> Result<PathBuf, String> {
 
 /// For MutexGuard type in AppState.
 pub type Shared = Mutex<MtpState>;
+
+/// Ask the desktop's MTP service to let go of MTP devices (Linux: unmount
+/// the mtp:// mounts that `gio` lists). Whether there were any.
+#[cfg(target_os = "linux")]
+fn release_from_desktop() -> bool {
+    use std::process::Command;
+    let Ok(out) = Command::new("gio").args(["mount", "-l"]).output() else { return false };
+    let text = String::from_utf8_lossy(&out.stdout);
+    let mut uris: Vec<String> = text
+        .lines()
+        .filter_map(|l| l.find("mtp://").map(|i| l[i..].split_whitespace().next().unwrap_or("").to_string()))
+        .filter(|u| u.len() > "mtp://".len())
+        .collect();
+    uris.sort();
+    uris.dedup();
+    for u in &uris {
+        let _ = Command::new("gio").args(["mount", "-u", u]).status();
+    }
+    !uris.is_empty()
+}
+
+#[cfg(not(target_os = "linux"))]
+fn release_from_desktop() -> bool {
+    false
+}
+
+/// The settings identity ("mtp:<vid>:<pid>") of a connected device.
+pub fn identity_of(key: &str, app: &AppHandle) -> Result<String, String> {
+    let state = app.state::<AppState>();
+    let m = state.mtp.lock().unwrap();
+    m.found.iter().find(|r| r.key() == key).map(identity).ok_or_else(|| "That device isn't connected any more".into())
+}
+
+const SWITCHED_OFF: &str = "Changes to this player are switched off. Turn on “Allow changes” on its page first.";
+
+/// The conversion for the device: AAC only if it plays AAC (else MP3 320).
+fn conversion(app: &AppHandle, identity: &str, plays: &[&str]) -> crate::convert::Conversion {
+    let mut c = app.state::<AppState>().conversion(identity);
+    if c.format.starts_with("aac") && !plays.contains(&"aac") {
+        c.format = "mp3_320".into();
+    }
+    c
+}
+
+/// Its page settings (the device must be open).
+pub fn player_state(key: &str, app: &AppHandle) -> Result<crate::msc::PlayerState, String> {
+    let state = app.state::<AppState>();
+    let (identity, plays) = {
+        let m = state.mtp.lock().unwrap();
+        let o = m.open.as_ref().filter(|o| o.key == key).ok_or("Open the device first")?;
+        (o.identity.clone(), o.plays.clone())
+    };
+    Ok(crate::msc::PlayerState {
+        writable: state.is_writable(&identity),
+        conversion: conversion(app, &identity, &plays),
+        aac: plays.contains(&"aac"),
+        plays,
+    })
+}
+
+/// Free space again, after copying or deleting.
+fn refresh_space(o: &mut Opened) {
+    let storages = o.dev.storages();
+    if !storages.is_empty() {
+        o.info.capacity = storages.iter().map(|s| s.capacity).sum();
+        o.info.free = storages.iter().map(|s| s.free).sum();
+    }
+}
+
+fn same_song(title: &Option<String>, artist: &Option<String>, album: &Option<String>) -> (String, String, String) {
+    let n = |s: &Option<String>| s.as_deref().unwrap_or("").trim().to_lowercase();
+    (n(title), n(artist), n(album))
+}
+
+/// Copy songs (dbids) and files onto the open device, converting what it
+/// can't play and following its model's rules for tags and covers.
+pub async fn add(key: String, dbids: Vec<String>, files: Vec<String>, app: AppHandle) -> Result<crate::msc::CopyResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let (identity, plays, filetypes, profile, lib) = {
+            let m = state.mtp.lock().unwrap();
+            let o = m.open.as_ref().filter(|o| o.key == key).ok_or("That device isn't open any more")?;
+            (o.identity.clone(), o.plays.clone(), o.filetypes.clone(), o.profile.clone(), o.info.library.clone())
+        };
+        if !state.is_writable(&identity) {
+            return Err(SWITCHED_OFF.to_string());
+        }
+        let conv = conversion(&app, &identity, &plays);
+        let mut res = crate::msc::CopyResult::default();
+        // Before the device is locked: songs on it are fetched through it.
+        let sources = crate::msc::sources(&app, &dbids, &files, &mut res.skipped);
+        let mut on_device: std::collections::HashSet<(String, String, String)> = {
+            let libs = state.libraries.lock().unwrap();
+            libs.list
+                .iter()
+                .find(|l| l.id == lib)
+                .map(|l| l.tracks.iter().map(|t| same_song(&t.tags.title, &t.tags.artist, &t.tags.album)).collect())
+                .unwrap_or_default()
+        };
+        let tmp = crate::convert::TempDir::new()?;
+        let total = sources.len();
+        for (i, src) in sources.iter().enumerate() {
+            let name = src.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            let _ = app.emit("add-progress", crate::write::AddProgress { done: i, total, current: crate::tags::label(src) });
+            let converted;
+            let f = if let Some(target) = conv.plan(src, &plays) {
+                match crate::convert::convert(src, &tmp.0, &target, i) {
+                    Ok(c) => {
+                        converted = c;
+                        &converted
+                    }
+                    Err(e) => {
+                        res.skipped.push(format!("{name}: couldn't convert it ({e})"));
+                        continue;
+                    }
+                }
+            } else {
+                src
+            };
+            let mut info = crate::tags::read(f).unwrap_or_default();
+            if profile.plain_greek {
+                crate::msc::plain_greek_info(&mut info);
+            }
+            let id3 = same_song(&info.title, &info.artist, &info.album);
+            if !id3.0.is_empty() && on_device.contains(&id3) {
+                res.already += 1;
+                continue;
+            }
+            // A copy with the model's rules (tags, cover), then sent.
+            let ext = f.extension().and_then(|e| e.to_str()).unwrap_or("mp3").to_ascii_lowercase();
+            let ready = tmp.0.join(format!("send-{i}.{ext}"));
+            if let Err(e) = crate::msc::copy_in(f, &ready, &profile) {
+                res.skipped.push(format!("{name}: {e}"));
+                continue;
+            }
+            let title = info
+                .title
+                .clone()
+                .unwrap_or_else(|| Path::new(&name).file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default());
+            let file_name = if info.track_nr > 0 {
+                format!("{:02} {}.{ext}", info.track_nr, crate::msc::fat_name(&title, 80))
+            } else {
+                format!("{}.{ext}", crate::msc::fat_name(&title, 80))
+            };
+            let new = chinotto_mtp::NewTrack {
+                title: Some(title),
+                artist: info.artist.clone(),
+                album: info.album.clone(),
+                genre: info.genre.clone(),
+                composer: info.composer.clone(),
+                year: info.year.max(0) as u32,
+                track_nr: info.track_nr.clamp(0, u16::MAX as i32) as u16,
+                duration_ms: info.length_ms.max(0) as u32,
+                filename: file_name.clone(),
+                filetype: chinotto_mtp::filetype_for(&ext, &filetypes),
+            };
+            let size = std::fs::metadata(&ready).map(|m| m.len()).unwrap_or(0);
+            let sent = {
+                let mut m = state.mtp.lock().unwrap();
+                let Some(o) = m.open.as_mut().filter(|o| o.key == key) else {
+                    return Err("The device was closed while copying".into());
+                };
+                o.dev.send_track(&ready, &new, |_, _| {})
+            };
+            let _ = std::fs::remove_file(&ready);
+            match sent {
+                Ok(id) => {
+                    res.added += 1;
+                    on_device.insert(id3);
+                    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
+                    let t = chinotto_mtp::Track {
+                        id,
+                        title: new.title.clone(),
+                        artist: new.artist.clone(),
+                        album: new.album.clone(),
+                        genre: new.genre.clone(),
+                        composer: new.composer.clone(),
+                        date: (new.year > 0).then(|| new.year.to_string()),
+                        filename: Some(file_name),
+                        track_nr: new.track_nr,
+                        duration_ms: new.duration_ms,
+                        sample_rate: info.sample_rate,
+                        bitrate: info.bitrate_kbps.max(0) as u32 * 1000,
+                        size,
+                        modified: now,
+                        filetype: new.filetype,
+                        ..Default::default()
+                    };
+                    let mut libs = state.libraries.lock().unwrap();
+                    if let Some(l) = libs.list.iter_mut().find(|l| l.id == lib) {
+                        l.tracks.push(lib_track(&key, &t));
+                    }
+                }
+                Err(e) => res.skipped.push(format!("{name}: {e}")),
+            }
+        }
+        let _ = app.emit("add-progress", crate::write::AddProgress { done: total, total, current: String::new() });
+        drop(tmp);
+        if let Some(o) = state.mtp.lock().unwrap().open.as_mut().filter(|o| o.key == key) {
+            refresh_space(o);
+        }
+        Ok(res)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Delete songs (the device library's song ids, which are the device's own
+/// ids) from the open device.
+pub fn delete(key: &str, ids: &[u32], app: &AppHandle) -> Result<Vec<String>, String> {
+    let state = app.state::<AppState>();
+    let mut m = state.mtp.lock().unwrap();
+    let o = m.open.as_mut().filter(|o| o.key == key).ok_or("That device isn't open any more")?;
+    if !state.is_writable(&o.identity) {
+        return Err(SWITCHED_OFF.into());
+    }
+    let lib = o.info.library.clone();
+    let mut problems = Vec::new();
+    let mut gone = Vec::new();
+    for &id in ids {
+        match o.dev.delete(id) {
+            Ok(()) => gone.push(id),
+            Err(e) => problems.push(format!("{id}: {e}")),
+        }
+    }
+    refresh_space(o);
+    drop(m);
+    let mut libs = state.libraries.lock().unwrap();
+    if let Some(l) = libs.list.iter_mut().find(|l| l.id == lib) {
+        l.tracks.retain(|t| !gone.contains(&t.id));
+        l.prune_playlists();
+    }
+    Ok(problems)
+}

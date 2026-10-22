@@ -171,7 +171,7 @@
           class="row device"
           class:active={(isOpen(d.path) && store.source.kind === "device") || (store.source.kind === "player" && store.source.path === d.path)}
           class:drop={store.songDrag?.target === `player:${d.path}`}
-          data-drop-playlist={d.kind === "msc" ? `player:${d.path}` : undefined}
+          data-drop-playlist={d.kind === "msc" || (d.kind === "mtp" && d.library) ? `player:${d.path}` : undefined}
           oncontextmenu={(e) => {
             e.preventDefault();
             const lib = d.library;

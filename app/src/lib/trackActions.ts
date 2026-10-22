@@ -29,10 +29,10 @@ function ipodCopy(dbids: string[]) {
   ];
 }
 
-/** "Copy to <player>" for each player set up as a drive (not the one shown). */
+/** "Copy to <player>" for each player set up as a drive or open over MTP (not the one shown). */
 function playerCopies(dbids: string[], shownLib: string | null) {
   return store.devices
-    .filter((d) => d.kind === "msc" && d.library !== shownLib)
+    .filter((d) => (d.kind === "msc" || (d.kind === "mtp" && !!d.library)) && d.library !== shownLib)
     .map((d) => ({ label: t("Copy to {name}", { name: d.volume }), action: () => store.copyToPlayer(d.path, dbids) }));
 }
 
@@ -49,8 +49,7 @@ export function songMenu(e: MouseEvent, track: Track, tracks: Track[]) {
   const onIpod = src.kind !== "library" && src.kind !== "scratch";
   // Songs on a player set up as a drive.
   const player = src.kind === "library" ? store.playerOf(src.lib) : undefined;
-  // MTP devices are read-only for now.
-  const canDelete = player?.kind === "msc";
+  const canDelete = player?.kind === "msc" || player?.kind === "mtp";
   if (src.kind === "scratch") {
     // Opened from outside the libraries: play, look, save, copy to the iPod, or take off the list.
     store.menu = {

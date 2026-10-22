@@ -140,6 +140,18 @@ mod ffi {
             cb: Progress,
             data: *const c_void,
         ) -> c_int;
+        pub fn LIBMTP_new_track_t() -> *mut LIBMTP_track_t;
+        pub fn LIBMTP_Send_Track_From_File(
+            d: *mut LIBMTP_mtpdevice_t,
+            path: *const c_char,
+            t: *mut LIBMTP_track_t,
+            cb: Progress,
+            data: *const c_void,
+        ) -> c_int;
+        pub fn LIBMTP_Delete_Object(d: *mut LIBMTP_mtpdevice_t, id: u32) -> c_int;
+        pub fn LIBMTP_Get_Supported_Filetypes(d: *mut LIBMTP_mtpdevice_t, types: *mut *mut u16, len: *mut u16) -> c_int;
+        pub fn LIBMTP_Get_Errorstack(d: *mut LIBMTP_mtpdevice_t) -> *mut LIBMTP_error_t;
+        pub fn strdup(s: *const c_char) -> *mut c_char;
         pub fn chinotto_usb_fingerprint() -> u64;
         pub fn chinotto_has_mtp_interface(bus: u32, address: u8) -> c_int;
         pub fn chinotto_mtp_layout(which: c_int) -> usize;
@@ -299,6 +311,37 @@ pub fn filetype_name(t: i32) -> &'static str {
     }
 }
 
+/// libmtp's file type for a file extension, among the types the device
+/// takes (an .m4a goes as M4A, MP4 or AAC, whichever it lists).
+pub fn filetype_for(ext: &str, supported: &[i32]) -> i32 {
+    match ext.to_ascii_lowercase().as_str() {
+        "wav" => 1,
+        "mp3" => 2,
+        "wma" => 3,
+        "ogg" | "oga" => 4,
+        "flac" => 32,
+        "aac" => 30,
+        "m4a" | "m4b" | "mp4" => [34, 6, 30].into_iter().find(|t| supported.contains(t)).unwrap_or(34),
+        _ => 7, // undefined audio
+    }
+}
+
+/// What to send with a song: its tags as the device's database keeps them.
+#[derive(Debug, Clone, Default)]
+pub struct NewTrack {
+    pub title: Option<String>,
+    pub artist: Option<String>,
+    pub album: Option<String>,
+    pub genre: Option<String>,
+    pub composer: Option<String>,
+    pub year: u32,
+    pub track_nr: u16,
+    pub duration_ms: u32,
+    /// The name it gets on the device.
+    pub filename: String,
+    pub filetype: i32,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Playlist {
     pub id: u32,
@@ -340,7 +383,7 @@ impl Device {
         }
         if dev.is_null() {
             return Err(Error(
-                "Couldn't open the device. Another program may be using it: on macOS, Image Capture or Android File Transfer; on Linux, the file manager (unmount it there first)."
+                "Couldn't open the device. Another program may be using it (on macOS, Image Capture or Android File Transfer; on Linux, the file manager), or the device didn't answer (some older players' MTP doesn't work with every computer: use its USB drive mode instead)."
                     .into(),
             ));
         }
@@ -452,6 +495,97 @@ impl Device {
         out
     }
 
+    /// The file types the device says it takes (libmtp's numbers).
+    pub fn supported_filetypes(&mut self) -> Vec<i32> {
+        let mut types: *mut u16 = ptr::null_mut();
+        let mut len: u16 = 0;
+        let mut out = Vec::new();
+        unsafe {
+            if ffi::LIBMTP_Get_Supported_Filetypes(self.d, &mut types, &mut len) == 0 && !types.is_null() {
+                out = std::slice::from_raw_parts(types, len as usize).iter().map(|&t| t as i32).collect();
+            }
+            if !types.is_null() {
+                ffi::free(types as *mut c_void);
+            }
+            ffi::LIBMTP_Clear_Errorstack(self.d);
+        }
+        out
+    }
+
+    /// The device's last error message (and the error list is cleared).
+    fn take_error(&mut self, fallback: &str) -> Error {
+        let msg = unsafe {
+            let e = ffi::LIBMTP_Get_Errorstack(self.d);
+            let m = if e.is_null() { None } else { text((*e).error_text) };
+            ffi::LIBMTP_Clear_Errorstack(self.d);
+            m
+        };
+        Error(match msg {
+            Some(m) => format!("{fallback} ({m})"),
+            None => fallback.into(),
+        })
+    }
+
+    /// Send a song file to the device (into its music folder); its new id.
+    /// `progress(sent, total)` while sending.
+    pub fn send_track(&mut self, file: &Path, info: &NewTrack, mut progress: impl FnMut(u64, u64)) -> Result<u32> {
+        unsafe extern "C" fn cb(sent: u64, total: u64, data: *const c_void) -> c_int {
+            let f = &mut *(data as *mut &mut dyn FnMut(u64, u64));
+            f(sent, total);
+            0
+        }
+        let size = std::fs::metadata(file).map_err(|e| Error(e.to_string()))?.len();
+        let c_path = CString::new(file.to_string_lossy().as_bytes()).map_err(|_| Error("bad path".into()))?;
+        // Strings libmtp frees with the track (so they're its own copies).
+        let dup = |s: &Option<String>| -> *mut c_char {
+            match s.as_deref().and_then(|s| CString::new(s.replace('\0', "")).ok()) {
+                Some(c) => unsafe { ffi::strdup(c.as_ptr()) },
+                None => ptr::null_mut(),
+            }
+        };
+        let mut f: &mut dyn FnMut(u64, u64) = &mut progress;
+        let data = &mut f as *mut &mut dyn FnMut(u64, u64) as *const c_void;
+        unsafe {
+            let t = ffi::LIBMTP_new_track_t();
+            if t.is_null() {
+                return Err(Error("out of memory".into()));
+            }
+            let r = &mut *t;
+            r.title = dup(&info.title);
+            r.artist = dup(&info.artist);
+            r.album = dup(&info.album);
+            r.genre = dup(&info.genre);
+            r.composer = dup(&info.composer);
+            r.date = if info.year > 0 { dup(&Some(format!("{:04}0101T0000.0", info.year))) } else { ptr::null_mut() };
+            r.filename = dup(&Some(info.filename.clone()));
+            r.tracknumber = info.track_nr;
+            r.duration = info.duration_ms;
+            r.filesize = size;
+            r.filetype = info.filetype;
+            // 0: libmtp picks the default storage and music folder.
+            r.parent_id = 0;
+            r.storage_id = 0;
+            let rc = ffi::LIBMTP_Send_Track_From_File(self.d, c_path.as_ptr(), t, Some(cb), data);
+            let id = r.item_id;
+            ffi::LIBMTP_destroy_track_t(t);
+            if rc != 0 {
+                return Err(self.take_error("The device didn't take the song"));
+            }
+            ffi::LIBMTP_Clear_Errorstack(self.d);
+            Ok(id)
+        }
+    }
+
+    /// Delete a track (or a playlist, or any object) from the device.
+    pub fn delete(&mut self, id: u32) -> Result<()> {
+        if unsafe { ffi::LIBMTP_Delete_Object(self.d, id) } == 0 {
+            unsafe { ffi::LIBMTP_Clear_Errorstack(self.d) };
+            Ok(())
+        } else {
+            Err(self.take_error("The device didn't delete it"))
+        }
+    }
+
     /// Copy a track from the device to a file on the computer.
     pub fn download(&mut self, id: u32, to: &Path) -> Result<()> {
         let c = CString::new(to.to_string_lossy().as_bytes()).map_err(|_| Error("bad path".into()))?;
@@ -490,5 +624,13 @@ mod tests {
         let _ = usb_fingerprint();
         let found = detect();
         assert!(found.iter().all(|d| d.key().starts_with("mtp:")));
+    }
+
+    #[test]
+    fn file_types() {
+        assert_eq!(filetype_for("MP3", &[]), 2);
+        assert_eq!(filetype_for("m4a", &[2, 6]), 6);
+        assert_eq!(filetype_for("m4a", &[2, 34, 6]), 34);
+        assert_eq!(filetype_for("m4a", &[2]), 34);
     }
 }
