@@ -147,3 +147,50 @@ fn tag_text(record: &[u8], offset: usize, expected: &[u8; 4], size: usize) -> Op
     let text = String::from_utf16_lossy(&units).trim().to_string();
     (!text.is_empty()).then_some(text)
 }
+
+/// Prepare one track-table record from a known-good device record.
+///
+/// OpenMG records contain opaque fields that are not understood yet, so this
+/// deliberately starts from a template captured from the same device family.
+/// It is only a building block for an off-device database generator: callers
+/// must not append this record to a mounted Walkman until all related index and
+/// tree tables can be updated together.
+#[allow(dead_code)]
+pub(crate) fn prepare_track_record(
+    template: &[u8],
+    title: &str,
+    artist: &str,
+    album: &str,
+    genre: &str,
+    length_ms: u32,
+) -> Result<[u8; 656], String> {
+    const TAG_SIZE: usize = 128;
+    if template.len() != 656 {
+        return Err("OpenMG track template must be exactly 656 bytes.".into());
+    }
+    let mut record = [0u8; 656];
+    record.copy_from_slice(template);
+    record[8..12].copy_from_slice(&length_ms.to_be_bytes());
+    write_tag(&mut record, 16, b"TIT2", title, TAG_SIZE)?;
+    write_tag(&mut record, 16 + TAG_SIZE, b"TPE1", artist, TAG_SIZE)?;
+    write_tag(&mut record, 16 + TAG_SIZE * 2, b"TALB", album, TAG_SIZE)?;
+    write_tag(&mut record, 16 + TAG_SIZE * 3, b"TCON", genre, TAG_SIZE)?;
+    Ok(record)
+}
+
+fn write_tag(record: &mut [u8], offset: usize, id: &[u8; 4], value: &str, size: usize) -> Result<(), String> {
+    let block = record.get_mut(offset..offset + size).ok_or_else(|| "OpenMG tag block is outside the track record.".to_string())?;
+    let encoded: Vec<u16> = value.encode_utf16().collect();
+    let capacity = (size - 6) / 2;
+    if encoded.len() > capacity {
+        return Err(format!("OpenMG tag value exceeds the {capacity}-character device limit."));
+    }
+    block.fill(0);
+    block[..4].copy_from_slice(id);
+    block[4..6].copy_from_slice(&[0, 2]);
+    for (index, unit) in encoded.into_iter().enumerate() {
+        let start = 6 + index * 2;
+        block[start..start + 2].copy_from_slice(&unit.to_be_bytes());
+    }
+    Ok(())
+}
