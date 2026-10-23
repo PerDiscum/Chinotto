@@ -215,6 +215,34 @@ pub(crate) fn prepare_album_summary_record(
     Ok(record)
 }
 
+/// Prepare one album node in the OpenMG hierarchy table from a matching row.
+/// The album summary and hierarchy tables use separate artwork filenames, so
+/// the caller must provide both picture descriptors for this hierarchy row.
+#[allow(dead_code)]
+pub(crate) fn prepare_album_hierarchy_record(
+    template: &[u8],
+    album: &str,
+    artwork_metadata: &[u8],
+) -> Result<[u8; 528], String> {
+    if template.len() != 528 {
+        return Err("OpenMG album-hierarchy template must be exactly 528 bytes.".into());
+    }
+    if artwork_metadata.len() != 256
+        || artwork_metadata.get(0..4) != Some(&b"PICP"[..])
+        || artwork_metadata.get(4..6) != Some(&[0, 2][..])
+        || artwork_metadata.get(128..132) != Some(&b"PIC0"[..])
+        || artwork_metadata.get(132..134) != Some(&[0, 2][..])
+    {
+        return Err("OpenMG album-hierarchy artwork metadata must contain 128-byte PICP and PIC0 tags.".into());
+    }
+    let mut record = [0u8; 528];
+    record.copy_from_slice(template);
+    write_tag(&mut record, 16, b"TIT2", album, 128)?;
+    write_tag(&mut record, 144, b"XSOT", album, 128)?;
+    record[272..528].copy_from_slice(artwork_metadata);
+    Ok(record)
+}
+
 fn write_tag(record: &mut [u8], offset: usize, id: &[u8; 4], value: &str, size: usize) -> Result<(), String> {
     let block = record.get_mut(offset..offset + size).ok_or_else(|| "OpenMG tag block is outside the track record.".to_string())?;
     let encoded: Vec<u16> = value.encode_utf16().collect();

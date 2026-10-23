@@ -956,3 +956,14 @@ Devices were opened with `LIBMTP_Open_Raw_Device_Uncached`, and libmtp's `flush_
   row. This prevents the helper from silently carrying another album's art
   references. Image allocation and file generation remain unimplemented, and
   OpenMG transfer stays disabled.
+
+## 0087: prepare OpenMG album hierarchy rows
+
+- The ten-row `03GINF2D.DAT` hierarchy table contains separate 528-byte album
+  rows with `TIT2`, `XSOT`, `PICP`, and `PIC0` tags. Its artwork points to
+  `IT*` image files under `20P*` directories, while the combined album-summary
+  table points to corresponding `1G*` image files.
+- Add an in-memory encoder for an album hierarchy row. It updates the title and
+  sort-title tags and requires correctly tagged 128-byte `PICP` and `PIC0`
+  descriptors from the new album. It does not allocate image names, update the
+  hierarchy indexes, generate images, or write to the device.
