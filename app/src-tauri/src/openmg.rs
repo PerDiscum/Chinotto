@@ -1,4 +1,9 @@
-//! Read-only access to the small, tagged track table used by Sony OpenMG Walkmans.
+//! Sony OpenMG Walkmans (NW-S700 series…): the songs on the device page, and
+//! adding songs. The formats are in the chinotto-omg crate; this module
+//! converts what the Walkman can't play, and changes the device safely:
+//! every table and picture folder is backed up first (on the Walkman, in
+//! "Chinotto Backups"), the new ones are staged beside OMGAUDIO and swapped
+//! in, and a failure puts the backup back.
 
 use std::collections::HashMap;
 use std::io::Read;
@@ -148,164 +153,368 @@ fn tag_text(record: &[u8], offset: usize, expected: &[u8; 4], size: usize) -> Op
     (!text.is_empty()).then_some(text)
 }
 
-/// Prepare one track-table record from a known-good device record.
-///
-/// OpenMG records contain opaque fields that are not understood yet, so this
-/// deliberately starts from a template captured from the same device family.
-/// It is only a building block for an off-device database generator: callers
-/// must not append this record to a mounted Walkman until all related index and
-/// tree tables can be updated together.
-#[allow(dead_code)]
-pub(crate) fn prepare_track_record(
-    template: &[u8],
-    title: &str,
-    artist: &str,
-    album: &str,
-    genre: &str,
-    length_ms: u32,
-) -> Result<[u8; 656], String> {
-    const TAG_SIZE: usize = 128;
-    if template.len() != 656 {
-        return Err("OpenMG track template must be exactly 656 bytes.".into());
-    }
-    let mut record = [0u8; 656];
-    record.copy_from_slice(template);
-    record[8..12].copy_from_slice(&length_ms.to_be_bytes());
-    write_tag(&mut record, 16, b"TIT2", title, TAG_SIZE)?;
-    write_tag(&mut record, 16 + TAG_SIZE, b"TPE1", artist, TAG_SIZE)?;
-    write_tag(&mut record, 16 + TAG_SIZE * 2, b"TALB", album, TAG_SIZE)?;
-    write_tag(&mut record, 16 + TAG_SIZE * 3, b"TCON", genre, TAG_SIZE)?;
-    Ok(record)
+// ---- Adding songs ----
+
+use std::path::PathBuf;
+
+use chinotto_omg::db::{Art, Database, Song};
+use chinotto_omg::oma;
+use tauri::{AppHandle, Emitter, Manager};
+
+use crate::state::AppState;
+
+const SWITCHED_OFF: &str = "Changes to this Walkman are switched off. Turn on “Allow changes” on its page first.";
+const BACKUPS: &str = "Chinotto Backups";
+const STAGING: &str = ".chinotto-omg-staging";
+/// Songs live in 10F00…; only that first folder (255 songs) is confirmed.
+const MAX_SONGS: usize = 0xFF;
+
+/// The settings identity of the Walkman at `root` (its volume name).
+pub fn identity(root: &Path) -> String {
+    format!("openmg:{}", root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default())
 }
 
-/// Prepare a one-value artist, album, or genre row from a matching table row.
-#[allow(dead_code)]
-pub(crate) fn prepare_group_value_record(template: &[u8], value: &str, group_duration_ms: u32) -> Result<Vec<u8>, String> {
-    if template.len() != 144 {
-        return Err("OpenMG group-value template must be exactly 144 bytes.".into());
+/// Its page settings: Allow changes (songs always go as MP3).
+pub fn state(root: &Path, app: &AppHandle) -> msc::PlayerState {
+    msc::PlayerState {
+        writable: app.state::<AppState>().is_writable(&identity(root)),
+        conversion: crate::convert::Conversion { format: "mp3_320".into(), ..Default::default() },
+        plays: vec!["mp3"],
+        aac: false,
     }
-    let mut record = template.to_vec();
-    record[8..12].copy_from_slice(&group_duration_ms.to_be_bytes());
-    write_tag(&mut record, 16, b"TIT2", value, 128)?;
-    Ok(record)
 }
 
-/// Prepare the combined album, artist, and genre row from a matching row.
-#[allow(dead_code)]
-pub(crate) fn prepare_album_summary_record(
-    template: &[u8],
-    album: &str,
-    artist: &str,
-    genre: &str,
-    album_duration_ms: u32,
-    artwork_metadata: &[u8],
-) -> Result<Vec<u8>, String> {
-    if template.len() != 0x310 {
-        return Err("OpenMG album-summary template must be exactly 784 bytes.".into());
-    }
-    if artwork_metadata.len() != 384 {
-        return Err("OpenMG album artwork metadata must be exactly 384 bytes.".into());
-    }
-    let mut record = template.to_vec();
-    record[8..12].copy_from_slice(&album_duration_ms.to_be_bytes());
-    write_tag(&mut record, 16, b"TIT2", album, 128)?;
-    write_tag(&mut record, 144, b"TPE1", artist, 128)?;
-    write_tag(&mut record, 272, b"TCON", genre, 128)?;
-    record[400..784].copy_from_slice(artwork_metadata);
-    Ok(record)
+/// An album's three pictures (200, 96 and 32 pixels, baseline JPEG) from a cover.
+fn art_from(cover: &[u8]) -> Option<Art> {
+    let img = crate::cover::decode(cover).ok()?;
+    let jpeg = |px: u32| -> Option<Vec<u8>> {
+        let small = img.resize_to_fill(px, px, image::imageops::FilterType::Lanczos3).to_rgb8();
+        let mut out = Vec::new();
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, 85).encode_image(&small).ok()?;
+        Some(out)
+    };
+    Some(Art { large: jpeg(200)?, medium: jpeg(96)?, small: jpeg(32)? })
 }
 
-/// Prepare one album node in the OpenMG hierarchy table from a matching row.
-/// The album summary and hierarchy tables use separate artwork filenames, so
-/// the caller must provide both picture descriptors for this hierarchy row.
-#[allow(dead_code)]
-pub(crate) fn prepare_album_hierarchy_record(
-    template: &[u8],
-    album: &str,
-    artwork_metadata: &[u8],
-) -> Result<[u8; 528], String> {
-    if template.len() != 528 {
-        return Err("OpenMG album-hierarchy template must be exactly 528 bytes.".into());
-    }
-    if artwork_metadata.len() != 256
-        || artwork_metadata.get(0..4) != Some(&b"PICP"[..])
-        || artwork_metadata.get(4..6) != Some(&[0, 2][..])
-        || artwork_metadata.get(128..132) != Some(&b"PIC0"[..])
-        || artwork_metadata.get(132..134) != Some(&[0, 2][..])
-    {
-        return Err("OpenMG album-hierarchy artwork metadata must contain 128-byte PICP and PIC0 tags.".into());
-    }
-    let mut record = [0u8; 528];
-    record.copy_from_slice(template);
-    write_tag(&mut record, 16, b"TIT2", album, 128)?;
-    write_tag(&mut record, 144, b"XSOT", album, 128)?;
-    record[272..528].copy_from_slice(artwork_metadata);
-    Ok(record)
+fn same_song(s: &Song) -> (String, String, String) {
+    (s.title.to_lowercase(), s.artist.to_lowercase(), s.album.to_lowercase())
 }
 
-fn write_tag(record: &mut [u8], offset: usize, id: &[u8; 4], value: &str, size: usize) -> Result<(), String> {
-    let block = record.get_mut(offset..offset + size).ok_or_else(|| "OpenMG tag block is outside the track record.".to_string())?;
-    let encoded: Vec<u16> = value.encode_utf16().collect();
-    let capacity = (size - 6) / 2;
-    if encoded.len() > capacity {
-        return Err(format!("OpenMG tag value exceeds the {capacity}-character device limit."));
+/// Copy songs (dbids) and files to the Walkman at `path`: converted to MP3
+/// when needed, written as .OMA files, then the database rebuilt.
+pub async fn add(path: String, dbids: Vec<String>, files: Vec<String>, app: AppHandle) -> Result<msc::CopyResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let root = PathBuf::from(&path);
+        if !msc::is_openmg_root(&root) {
+            return Err("This drive is not a recognized Sony OpenMG Walkman.".into());
+        }
+        if !app.state::<AppState>().is_writable(&identity(&root)) {
+            return Err(SWITCHED_OFF.into());
+        }
+        let omg = root.join("OMGAUDIO");
+        let mut db = Database::read(&omg).map_err(|e| format!("Couldn't read the Walkman's database: {e}"))?;
+        let mut res = msc::CopyResult::default();
+        let sources = msc::sources(&app, &dbids, &files, &mut res.skipped);
+        // Tags first, so an album's songs go in order (the Walkman lists
+        // an album's songs in the order they were added).
+        let mut todo: Vec<(PathBuf, chinotto_gpod::TrackInfo)> =
+            sources.into_iter().map(|src| (src.clone(), crate::tags::read(&src).unwrap_or_default())).collect();
+        todo.sort_by_key(|(_, i)| (i.album.clone().unwrap_or_default().to_lowercase(), i.disc_nr, i.track_nr));
+        let mut on_device: std::collections::HashSet<_> = db.songs.iter().map(same_song).collect();
+        let before = db.songs.len();
+        let mut written: Vec<PathBuf> = Vec::new();
+        let tmp = crate::convert::TempDir::new()?;
+        let total = todo.len();
+        for (i, (src, info)) in todo.iter().enumerate() {
+            let name = src.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            let _ = app.emit("add-progress", crate::write::AddProgress { done: i, total, current: crate::tags::label(src) });
+            let text =
+                |v: &Option<String>, unknown: &str| v.as_deref().map(str::trim).filter(|v| !v.is_empty()).unwrap_or(unknown).to_string();
+            let stem = src.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            let tags = oma::Tags {
+                title: text(&info.title, &stem),
+                artist: text(&info.artist, "Unknown Artist"),
+                album: text(&info.album, "Unknown Album"),
+                genre: text(&info.genre, "Unknown Genre"),
+                year: (info.year > 0).then_some(info.year as u32),
+            };
+            let mut song = Song {
+                title: chinotto_omg::fit(&tags.title),
+                artist: chinotto_omg::fit(&tags.artist),
+                album: chinotto_omg::fit(&tags.album),
+                genre: chinotto_omg::fit(&tags.genre),
+                year: tags.year,
+                ..Default::default()
+            };
+            if !on_device.insert(same_song(&song)) {
+                res.already += 1;
+                continue;
+            }
+            if db.songs.len() >= MAX_SONGS {
+                res.skipped.push(format!("{name}: this version of Chinotto adds up to {MAX_SONGS} songs to this Walkman"));
+                continue;
+            }
+            // The MP3 as it is when the Walkman takes it, else converted.
+            let is_mp3 = src.extension().is_some_and(|e| e.eq_ignore_ascii_case("mp3"));
+            let as_is = if is_mp3 { std::fs::read(src).ok().and_then(|b| chinotto_omg::mp3::prepare(&b).ok()) } else { None };
+            let mp3 = match as_is {
+                Some(m) => m,
+                None => match crate::convert::mp3_44k(src, &tmp.0, i)
+                    .and_then(|f| std::fs::read(&f).map_err(|e| e.to_string()))
+                    .and_then(|b| chinotto_omg::mp3::prepare(&b).map_err(|e| e.to_string()))
+                {
+                    Ok(m) => m,
+                    Err(e) => {
+                        res.skipped.push(format!("{name}: couldn't convert it ({e})"));
+                        continue;
+                    }
+                },
+            };
+            song.length_ms = mp3.length_ms;
+            song.codec = oma::codec_params(mp3.bitrate_index);
+            song.cid = oma::new_content_id(&db.songs.iter().map(|s| s.cid).collect::<Vec<_>>());
+            let id = db.songs.len() as u32 + 1;
+            let dest = omg.join(oma::path_for(id));
+            let part = dest.with_extension("part");
+            let write = std::fs::create_dir_all(dest.parent().unwrap())
+                .and_then(|_| std::fs::write(&part, oma::build(&mp3, &tags, &song.cid)))
+                .and_then(|_| std::fs::rename(&part, &dest));
+            if let Err(e) = write {
+                let _ = std::fs::remove_file(&part);
+                res.skipped.push(format!("{name}: couldn't write it to the Walkman ({e})"));
+                if e.raw_os_error() == Some(28) {
+                    break; // full
+                }
+                continue;
+            }
+            written.push(dest);
+            if !db.art.contains_key(&song.album) {
+                let cover = crate::tags::embedded_cover(src)
+                    .or_else(|| crate::library::folder_cover(src.parent()?).and_then(|p| std::fs::read(p).ok()));
+                if let Some(art) = cover.as_deref().and_then(art_from) {
+                    db.art.insert(song.album.clone(), art);
+                }
+            }
+            db.songs.push(song);
+            res.added += 1;
+        }
+        let _ = app.emit("add-progress", crate::write::AddProgress { done: total, total, current: String::new() });
+        drop(tmp);
+        if db.songs.len() > before {
+            if let Err(e) = install(&root, &db) {
+                // The database is as it was: the new files would only be clutter.
+                for f in &written {
+                    let _ = std::fs::remove_file(f);
+                }
+                return Err(e);
+            }
+        }
+        Ok(res)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Put the rebuilt database (tables and pictures) in place: back up, stage,
+/// swap; on failure the backup goes back.
+fn install(root: &Path, db: &Database) -> Result<(), String> {
+    let omg = root.join("OMGAUDIO");
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    let backup = root.join(BACKUPS).join(format!("OpenMG {stamp}"));
+    backup_omg(&omg, &backup).map_err(|e| format!("Couldn't back up the Walkman's database, so nothing was changed: {e}"))?;
+    let stage = root.join(STAGING);
+    let _ = std::fs::remove_dir_all(&stage);
+    let staged = (|| -> std::io::Result<()> {
+        std::fs::create_dir_all(stage.join("tables"))?;
+        for (name, bytes) in db.tables() {
+            std::fs::write(stage.join("tables").join(name), bytes)?;
+        }
+        for (rel, bytes) in db.pictures() {
+            let p = stage.join("pictures").join(rel);
+            std::fs::create_dir_all(p.parent().unwrap())?;
+            std::fs::write(p, bytes)?;
+        }
+        Ok(())
+    })();
+    if let Err(e) = staged {
+        let _ = std::fs::remove_dir_all(&stage);
+        return Err(format!("Couldn't prepare the Walkman's new database, so nothing was changed: {e}"));
     }
-    block.fill(0);
-    block[..4].copy_from_slice(id);
-    block[4..6].copy_from_slice(&[0, 2]);
-    for (index, unit) in encoded.into_iter().enumerate() {
-        let start = 6 + index * 2;
-        block[start..start + 2].copy_from_slice(&unit.to_be_bytes());
+    let swapped = (|| -> std::io::Result<()> {
+        std::fs::create_dir_all(stage.join("old"))?;
+        for e in std::fs::read_dir(stage.join("tables"))?.flatten() {
+            let live = omg.join(e.file_name());
+            if live.exists() {
+                std::fs::rename(&live, stage.join("old").join(e.file_name()))?;
+            }
+            std::fs::rename(e.path(), &live)?;
+        }
+        for d in picture_dirs(&omg)? {
+            std::fs::rename(&d, stage.join("old").join(d.file_name().unwrap()))?;
+        }
+        if let Ok(rd) = std::fs::read_dir(stage.join("pictures")) {
+            for e in rd.flatten() {
+                std::fs::rename(e.path(), omg.join(e.file_name()))?;
+            }
+        }
+        Ok(())
+    })();
+    if let Err(e) = swapped {
+        let restored = restore_omg(&omg, &backup);
+        let _ = std::fs::remove_dir_all(&stage);
+        return Err(match restored {
+            Ok(()) => format!("Couldn't update the Walkman's database ({e}); it's back as it was."),
+            Err(r) => format!(
+                "Couldn't update the Walkman's database ({e}) and couldn't put the backup back ({r}). Copy the files in “{}” back into OMGAUDIO by hand.",
+                backup.display()
+            ),
+        });
+    }
+    let _ = std::fs::remove_dir_all(&stage);
+    Ok(())
+}
+
+/// OMGAUDIO's picture folders (20P01…).
+fn picture_dirs(omg: &Path) -> std::io::Result<Vec<PathBuf>> {
+    Ok(std::fs::read_dir(omg)?
+        .flatten()
+        .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()) && e.file_name().to_string_lossy().to_ascii_uppercase().starts_with("20P"))
+        .map(|e| e.path())
+        .collect())
+}
+
+/// Copy the tables (not RESERVED.DAT, which nothing changes) and picture folders.
+fn backup_omg(omg: &Path, backup: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(backup)?;
+    for e in std::fs::read_dir(omg)?.flatten() {
+        let n = e.file_name().to_string_lossy().into_owned();
+        if e.file_type()?.is_file() && n.to_ascii_uppercase().ends_with(".DAT") && !n.starts_with("._") && n != "RESERVED.DAT" {
+            std::fs::copy(e.path(), backup.join(&n))?;
+        }
+    }
+    for d in picture_dirs(omg)? {
+        let to = backup.join(d.file_name().unwrap());
+        std::fs::create_dir_all(&to)?;
+        for f in std::fs::read_dir(&d)?.flatten() {
+            if f.file_type()?.is_file() && !f.file_name().to_string_lossy().starts_with("._") {
+                std::fs::copy(f.path(), to.join(f.file_name()))?;
+            }
+        }
     }
     Ok(())
 }
 
-/// Prepare a `05CIDLST.DAT` row from an existing row, replacing only its key.
-#[allow(dead_code)]
-pub(crate) fn prepare_track_key_record(template: &[u8], key: [u8; 11]) -> Result<[u8; 48], String> {
-    if template.len() != 48 {
-        return Err("OpenMG track-key template must be exactly 48 bytes.".into());
+fn restore_omg(omg: &Path, backup: &Path) -> std::io::Result<()> {
+    for d in picture_dirs(omg)? {
+        std::fs::remove_dir_all(d)?;
     }
-    let mut record = [0u8; 48];
-    record.copy_from_slice(template);
-    record[13..24].copy_from_slice(&key);
-    Ok(record)
+    for e in std::fs::read_dir(backup)?.flatten() {
+        if e.file_type()?.is_dir() {
+            let to = omg.join(e.file_name());
+            std::fs::create_dir_all(&to)?;
+            for f in std::fs::read_dir(e.path())?.flatten() {
+                std::fs::copy(f.path(), to.join(f.file_name()))?;
+            }
+        } else {
+            std::fs::copy(e.path(), omg.join(e.file_name()))?;
+        }
+    }
+    Ok(())
 }
 
-/// Append one fixed-size row to an OpenMG table whose count and payload length
-/// are stored in the common 48-byte header. This only prepares table bytes in
-/// memory; it must be combined with all related indexes before any device write.
-#[allow(dead_code)]
-pub(crate) fn append_counted_record(table: &[u8], record: &[u8], magic: &[u8; 4]) -> Result<Vec<u8>, String> {
-    const HEADER_SIZE: usize = 48;
-    const COUNT_OFFSET: usize = 0x24;
-    const RECORD_SIZE_OFFSET: usize = 0x26;
-    const PAYLOAD_LENGTH_OFFSET: usize = 0x1a;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    if table.len() < HEADER_SIZE || &table[..4] != magic {
-        return Err("OpenMG table header is missing or has an unexpected type.".into());
+    fn copy_dir(from: &Path, to: &Path) {
+        std::fs::create_dir_all(to).unwrap();
+        for e in std::fs::read_dir(from).unwrap().flatten() {
+            if e.file_type().unwrap().is_dir() {
+                copy_dir(&e.path(), &to.join(e.file_name()));
+            } else {
+                std::fs::copy(e.path(), to.join(e.file_name())).unwrap();
+            }
+        }
     }
-    let declared_record_size = u16::from_be_bytes([table[RECORD_SIZE_OFFSET], table[RECORD_SIZE_OFFSET + 1]]) as usize;
-    if declared_record_size == 0 || record.len() != declared_record_size {
-        return Err("OpenMG row size does not match the table's declared record size.".into());
-    }
-    let count = u16::from_be_bytes([table[COUNT_OFFSET], table[COUNT_OFFSET + 1]]) as usize;
-    let expected_len = HEADER_SIZE
-        .checked_add(count.checked_mul(declared_record_size).ok_or("OpenMG table is too large.")?)
-        .ok_or("OpenMG table is too large.")?;
-    if table.len() != expected_len {
-        return Err("OpenMG table length does not match its header count.".into());
-    }
-    let new_count = count.checked_add(1).filter(|count| *count <= u16::MAX as usize).ok_or("OpenMG table has reached its record limit.")?;
-    let payload_len = 16usize
-        .checked_add(new_count.checked_mul(declared_record_size).ok_or("OpenMG table is too large.")?)
-        .ok_or("OpenMG table is too large.")?;
-    let payload_len = u32::try_from(payload_len).map_err(|_| "OpenMG table is too large.")?;
 
-    let mut result = Vec::with_capacity(expected_len + declared_record_size);
-    result.extend_from_slice(table);
-    result.extend_from_slice(record);
-    result[COUNT_OFFSET..COUNT_OFFSET + 2].copy_from_slice(&(new_count as u16).to_be_bytes());
-    result[PAYLOAD_LENGTH_OFFSET..PAYLOAD_LENGTH_OFFSET + 4].copy_from_slice(&payload_len.to_be_bytes());
-    Ok(result)
+    /// Adding a song in a new album (with a cover) to a copy of a real
+    /// Walkman's OMGAUDIO: backup made, tables and pictures swapped in and
+    /// consistent, staging gone. Set CHINOTTO_TEST_OMG (never committed).
+    #[test]
+    fn installs_on_a_copy() {
+        let Ok(src) = std::env::var("CHINOTTO_TEST_OMG") else { return };
+        let root = std::env::temp_dir().join(format!("chinotto-omg-install-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        copy_dir(Path::new(&src), &root.join("OMGAUDIO"));
+        let omg = root.join("OMGAUDIO");
+        let mut db = Database::read(&omg).unwrap();
+        let n = db.songs.len();
+        // "Abba" sorts first: every album and 2D number shifts by one.
+        let cover = {
+            let mut png = Vec::new();
+            image::DynamicImage::new_rgb8(500, 400).write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
+            png
+        };
+        db.art.insert("Abba Gold".into(), art_from(&cover).unwrap());
+        db.songs.push(Song {
+            title: "Waterloo".into(),
+            artist: "ABBA".into(),
+            album: "Abba Gold".into(),
+            genre: "Pop".into(),
+            year: Some(1992),
+            length_ms: 1000,
+            codec: oma::codec_params(14),
+            cid: oma::new_content_id(&[]),
+        });
+        install(&root, &db).unwrap();
+        let back = Database::read(&omg).unwrap();
+        assert_eq!(back.songs.len(), n + 1);
+        assert_eq!(back.songs, db.songs);
+        assert_eq!(back.art.len(), db.art.len());
+        for (album, art) in &db.art {
+            assert_eq!(back.art.get(album), Some(art), "{album}");
+        }
+        for (name, bytes) in back.tables() {
+            assert!(std::fs::read(omg.join(&name)).unwrap() == bytes, "{name}");
+        }
+        assert!(!root.join(STAGING).exists());
+        let backups: Vec<_> = std::fs::read_dir(root.join(BACKUPS)).unwrap().flatten().collect();
+        assert_eq!(backups.len(), 1);
+        assert!(backups[0].path().join("04CNTINF.DAT").is_file());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// The app's MP3 encoder makes what the Walkman takes (44.1 kHz, 320 kbps CBR).
+    #[test]
+    fn encoder_output_is_usable() {
+        let dir = std::env::temp_dir().join(format!("chinotto-omg-enc-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let wav = dir.join("tone.wav");
+        let rate = 48_000u32;
+        let samples: Vec<i16> = (0..rate * 2)
+            .flat_map(|i| {
+                let v = ((i as f32 * 440.0 * std::f32::consts::TAU / rate as f32).sin() * 8000.0) as i16;
+                [v, v]
+            })
+            .collect();
+        let mut w = b"RIFF".to_vec();
+        w.extend((36 + samples.len() as u32 * 2).to_le_bytes());
+        w.extend(b"WAVEfmt ");
+        w.extend(16u32.to_le_bytes());
+        w.extend(1u16.to_le_bytes());
+        w.extend(2u16.to_le_bytes());
+        w.extend(rate.to_le_bytes());
+        w.extend((rate * 4).to_le_bytes());
+        w.extend(4u16.to_le_bytes());
+        w.extend(16u16.to_le_bytes());
+        w.extend(b"data");
+        w.extend((samples.len() as u32 * 2).to_le_bytes());
+        w.extend(samples.iter().flat_map(|s| s.to_le_bytes()));
+        std::fs::write(&wav, w).unwrap();
+        let mp3 = crate::convert::mp3_44k(&wav, &dir, 0).unwrap();
+        let m = chinotto_omg::mp3::prepare(&std::fs::read(mp3).unwrap()).unwrap();
+        assert_eq!(m.bitrate_index, 14);
+        assert!((1900..2200).contains(&m.length_ms), "{}", m.length_ms);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

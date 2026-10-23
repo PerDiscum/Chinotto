@@ -331,7 +331,7 @@ class Store {
     // Players set up as drives: their songs (and playlists, for the sidebar).
     for (const d of list) if (d.kind === "msc" && d.library && !this.libViews[d.library]) void this.loadPlayer(d.library);
     if (!list.some((d) => d.kind === "mtp")) this.mtpInfos = {};
-    for (const d of list) if (d.kind === "msc" && !this.playerStates[d.path]) void this.loadPlayerState(d.path);
+    for (const d of list) if ((d.kind === "msc" || d.kind === "openmg") && !this.playerStates[d.path]) void this.loadPlayerState(d.path);
     // The player being shown was unplugged.
     const s = this.source;
     if (s.kind === "library" && this.isDeviceLibrary(s.lib) && !list.some((d) => d.library === s.lib)) this.select({ kind: "none" });
@@ -512,6 +512,7 @@ class Store {
     try {
       const r = await api.mscAdd(path, dbids, files);
       if (d?.kind === "mtp") await this.refreshMtp(path);
+      if (d?.kind === "openmg") this.openMgRevision++;
       const lines = [...r.skipped];
       if (r.already) lines.unshift(tn(r.already, "{n} song was already on the player.", "{n} songs were already on the player."));
       if (r.skipped.length) this.dialog = { kind: "report", title: tn(r.added, "{n} song copied", "{n} songs copied"), lines };
@@ -522,6 +523,9 @@ class Store {
       this.progress = null;
     }
   }
+
+  /** Bumped after songs are added to an OpenMG Walkman (its page reads its list again). */
+  openMgRevision = $state(0);
 
   async pickAndCopyToPlayer(path: string) {
     const files = await api.pickMusicFiles();
