@@ -5,9 +5,12 @@
 /// Bitrates (kbps) of MPEG-1 Layer III, by header index.
 const KBPS: [u32; 16] = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0];
 
-/// Bitrate indexes whose header value is confirmed on a device: 128 and
-/// 320 kbps (see [`crate::oma::codec_params`]). Others are converted.
-pub const CONFIRMED_BITRATES: [u8; 2] = [9, 14];
+/// Bitrate indexes Chinotto will write to a device's own `.OMA` codec field
+/// (see [`crate::oma::codec_params`]): 128 and 320 kbps are confirmed by
+/// testing on a real Walkman; 192 and 256 follow the same byte pattern by
+/// extrapolation and haven't been confirmed there yet. Other bitrates are
+/// converted.
+pub const CONFIRMED_BITRATES: [u8; 4] = [9, 11, 13, 14];
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Mp3 {
@@ -170,8 +173,8 @@ pub(crate) mod tests {
     fn refuses_what_needs_converting() {
         let vbr: Vec<u8> = [frame(9, false), frame(14, false), frame(9, false)].concat();
         assert_eq!(prepare(&vbr), Err(NotUsable::Variable));
-        let k192: Vec<u8> = [frame(11, false), frame(11, false)].concat();
-        assert_eq!(prepare(&k192), Err(NotUsable::Bitrate(192)));
+        let k160: Vec<u8> = [frame(10, false), frame(10, false)].concat();
+        assert_eq!(prepare(&k160), Err(NotUsable::Bitrate(160)));
         // 48 kHz.
         let mut f = frame(14, false);
         f[2] |= 0x04;

@@ -174,14 +174,21 @@ pub fn identity(root: &Path) -> String {
     format!("openmg:{}", root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default())
 }
 
-/// Its page settings: Allow changes (songs always go as MP3).
+/// Its page settings: Allow changes, and the MP3 bitrate songs are converted
+/// to (or re-encoded to, if asked: see `target_kbps`).
 pub fn state(root: &Path, app: &AppHandle) -> msc::PlayerState {
-    msc::PlayerState {
-        writable: app.state::<AppState>().is_writable(&identity(root)),
-        conversion: crate::convert::Conversion { format: "mp3_320".into(), ..Default::default() },
-        plays: vec!["mp3"],
-        aac: false,
+    let mut conversion = app.state::<AppState>().conversion(&identity(root));
+    if !conversion.format.starts_with("mp3") {
+        // Never customized for this Walkman (the shared default is AAC, which it can't play).
+        conversion.format = "mp3_320".into();
     }
+    msc::PlayerState { writable: app.state::<AppState>().is_writable(&identity(root)), conversion, plays: vec!["mp3"], aac: false }
+}
+
+/// The bitrate (kbps) to convert or re-encode songs to, from the device's
+/// conversion setting ("mp3_128"…"mp3_320"; 320 if it's something else).
+fn target_kbps(conversion: &crate::convert::Conversion) -> u32 {
+    conversion.format.strip_prefix("mp3_").and_then(|s| s.parse().ok()).unwrap_or(320)
 }
 
 /// An album's three pictures (200, 96 and 32 pixels, baseline JPEG) from a cover.
@@ -211,6 +218,7 @@ pub async fn add(path: String, dbids: Vec<String>, files: Vec<String>, app: AppH
         if !app.state::<AppState>().is_writable(&identity(&root)) {
             return Err(SWITCHED_OFF.into());
         }
+        let kbps = target_kbps(&state(&root, &app).conversion);
         let omg = root.join("OMGAUDIO");
         let mut db = Database::read(&omg).map_err(|e| format!("Couldn't read the Walkman's database: {e}"))?;
         let mut res = msc::CopyResult::default();
@@ -263,7 +271,7 @@ pub async fn add(path: String, dbids: Vec<String>, files: Vec<String>, app: AppH
             let as_is = if is_mp3 { std::fs::read(src).ok().and_then(|b| chinotto_omg::mp3::prepare(&b).ok()) } else { None };
             let mp3 = match as_is {
                 Some(m) => m,
-                None => match crate::convert::mp3_44k(src, &tmp.0, i)
+                None => match crate::convert::mp3_44k(src, &tmp.0, i, kbps)
                     .and_then(|f| std::fs::read(&f).map_err(|e| e.to_string()))
                     .and_then(|b| chinotto_omg::mp3::prepare(&b).map_err(|e| e.to_string()))
                 {
@@ -978,7 +986,7 @@ mod tests {
         w.extend((samples.len() as u32 * 2).to_le_bytes());
         w.extend(samples.iter().flat_map(|s| s.to_le_bytes()));
         std::fs::write(&wav, w).unwrap();
-        let mp3 = crate::convert::mp3_44k(&wav, &dir, 0).unwrap();
+        let mp3 = crate::convert::mp3_44k(&wav, &dir, 0, 320).unwrap();
         let m = chinotto_omg::mp3::prepare(&std::fs::read(mp3).unwrap()).unwrap();
         assert_eq!(m.bitrate_index, 14);
         assert!((1900..2200).contains(&m.length_ms), "{}", m.length_ms);

@@ -21,7 +21,8 @@ pub const CID_PREFIX: [u8; 8] = [0x01, 0x0F, 0x50, 0x00, 0x00, 0x04, 0x00, 0x00]
 
 /// The codec field for MP3 at `bitrate_index`, as the device's own files
 /// have it: `03 84 D9 00` at 128 kbps, `03 84 DE 00` at 320 kbps (the low
-/// nibble is the bitrate index; only these two are confirmed).
+/// nibble is the bitrate index). 192 and 256 kbps (`DB`/`DD`) follow the
+/// same pattern but haven't been confirmed on a real device.
 pub fn codec_params(bitrate_index: u8) -> [u8; 4] {
     [0x03, 0x84, 0xD0 | (bitrate_index & 0x0F), 0x00]
 }

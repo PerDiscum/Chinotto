@@ -43,7 +43,9 @@
         <option value="aac128">{t("AAC 128 kbps (smaller)")}</option>
       {/if}
       <option value="mp3_320">{t("MP3 320 kbps")}</option>
+      <option value="mp3_256">{t("MP3 256 kbps")}</option>
       <option value="mp3_192">{t("MP3 192 kbps")}</option>
+      <option value="mp3_128">{t("MP3 128 kbps (smaller)")}</option>
     </select>
   </label>
   {#if !conversion.advanced}
@@ -68,7 +70,9 @@
                   <option value="aac128">{t("AAC 128 kbps")}</option>
                 {/if}
                 <option value="mp3_320">{t("MP3 320 kbps")}</option>
+                <option value="mp3_256">{t("MP3 256 kbps")}</option>
                 <option value="mp3_192">{t("MP3 192 kbps")}</option>
+                <option value="mp3_128">{t("MP3 128 kbps")}</option>
                 {#if alac}<option value="alac">{t("Apple Lossless")}</option>{/if}
               </select>
             </td>

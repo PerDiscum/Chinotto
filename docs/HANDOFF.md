@@ -1063,3 +1063,29 @@ Confirmed on the NW-S716F: "Put Albums in Track Order" works (0090).
   `sony-openmg` (now the automatic picture for OpenMG Walkmans, whose page has
   the same picture chooser as the iPod's) and `ipod-nano-6g` (the label
   existed with no picture, so Nano 6s showed the generic player).
+
+## 0094: OpenMG MP3 bitrate choice (128/192/256/320 kbps)
+
+Previously every converted song went to 320 kbps, the only rate confirmed by
+testing on the NW-S716F; MP3 files not already at 128 or 320 kbps were always
+re-encoded to 320. Asked to also offer 192 and 256:
+
+- `chinotto_omg::mp3::CONFIRMED_BITRATES` now accepts 128, 192, 256 and 320
+  (indexes 9, 11, 13, 14). The `.OMA` codec byte for 192 and 256 (`DB`/`DD`)
+  follows the same low-nibble pattern as the two bytes actually seen on the
+  device (`D9`/`DE` for 128/320) — an informed guess, **not yet confirmed on
+  real hardware**.
+- `convert::mp3_44k` takes a target bitrate instead of a hardcoded 320;
+  `convert::encode_mp3`'s LAME bitrate now covers 128/192/256/320 instead of
+  a binary 320-or-192 choice.
+- The OpenMG page has a "Convert other formats to" bitrate picker (reusing
+  the existing per-device `Conversion` setting/storage, routed to OpenMG in
+  `msc_set_conversion` and `openmg::state`), with a note that 192/256 are
+  unconfirmed. `convert::Conversion`'s shared format list (used by every
+  device's conversion settings, not just OpenMG) gained `mp3_256`/`mp3_128`
+  alongside the existing `mp3_320`/`mp3_192`.
+- Needs testing on the NW-S716F: add a song with 192 kbps and one with 256
+  kbps selected, confirm both transfer, are recognised, play fully, and seek
+  correctly. If either doesn't play right, that bitrate's codec byte guess is
+  wrong and needs removing from `CONFIRMED_BITRATES` (and from the picker)
+  until the real byte is found.

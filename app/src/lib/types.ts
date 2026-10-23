@@ -253,7 +253,7 @@ export interface TrackChanges {
 }
 
 export interface Conversion {
-  /** "aac256", "aac128", "mp3_320" or "mp3_192". */
+  /** "aac256", "aac128", "mp3_320", "mp3_256", "mp3_192" or "mp3_128". */
   format: string;
   /** Convert Apple Lossless too (it plays on iPods but is large). */
   convertAlac: boolean;
