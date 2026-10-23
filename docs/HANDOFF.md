@@ -826,9 +826,10 @@ Devices were opened with `LIBMTP_Open_Raw_Device_Uncached`, and libmtp's `flush_
   the NW-S716F. The device currently reports six tracks in `04CNTINF.DAT`;
   the two new files are `10F00/10000005.OMA` and
   `10F00/10000006.OMA`.
-- For all six observed tracks, the per-track key bytes in `05CIDLST.DAT`
-  match the corresponding `.OMA` file at offset `0xC0D`. The audio payload
-  begins at `0xC60`. This links the track table, key list, and audio files on
+- For all six observed tracks, the 11-byte key in `05CIDLST.DAT` matches the
+  corresponding `.OMA` file at offset `0xC15` (the EA3 header starts at
+  `0xC00`; `0xC14` is a preceding per-track byte). The audio payload begins at
+  `0xC60`. This links the track table, key list, and audio files on
   this device, but does not yet define how to generate a valid new file/key.
 - ManicStage's latest transfer log shows one MP3 was copied without
   transcoding and another was transcoded to MP3 320 kbps before being written.
@@ -851,3 +852,13 @@ Devices were opened with `LIBMTP_Open_Raw_Device_Uncached`, and libmtp's `flush_
   validate its output against the known-good six-track state before offering
   any device write action. No files were written to the physical Walkman
   during this investigation.
+
+## 0078: show OpenMG audio-file linkage
+
+- Extend the guarded OpenMG read command to match each `04CNTINF.DAT` row to
+  its OMA file using the 11-byte key in `05CIDLST.DAT` and the key at offset
+  `0xC15` in the file's EA3 header. Search the `10F*` audio folders instead of
+  assuming track-number filenames are the authoritative link.
+- Show the linked OMA filename on the existing read-only device page, or an
+  explicit missing-link message. This provides a check of the on-disk track
+  relationship before building a write path. It does not enable device writes.

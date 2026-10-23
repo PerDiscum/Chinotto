@@ -55,16 +55,16 @@
       {:else}
         <div class="table-wrap">
           <table>
-            <thead><tr><th>{t("Title")}</th><th>{t("Artist")}</th><th>{t("Album")}</th><th>{t("Genre")}</th><th>{t("Time")}</th></tr></thead>
+            <thead><tr><th>{t("Title")}</th><th>{t("Artist")}</th><th>{t("Album")}</th><th>{t("Genre")}</th><th>{t("Time")}</th><th>{t("Audio file")}</th></tr></thead>
             <tbody>
               {#each tracks as track (track.number)}
-                <tr><td>{track.title ?? t("Untitled")}</td><td>{track.artist ?? "—"}</td><td>{track.album ?? "—"}</td><td>{track.genre ?? "—"}</td><td>{duration(track.lengthMs)}</td></tr>
+                <tr><td>{track.title ?? t("Untitled")}</td><td>{track.artist ?? "—"}</td><td>{track.album ?? "—"}</td><td>{track.genre ?? "—"}</td><td>{duration(track.lengthMs)}</td><td class:missing={!track.audioFile}>{track.audioFile ?? t("No matching OMA file")}</td></tr>
               {/each}
             </tbody>
           </table>
         </div>
       {/if}
-      <p class="note">{t("This is a read-only view of the Walkman's track database. Chinotto does not change OpenMG devices yet.")}</p>
+      <p class="note">{t("Audio file names are matched through the OpenMG track keys. This remains a read-only view; Chinotto does not change OpenMG devices yet.")}</p>
     </section>
   </div>
 {/if}
@@ -89,6 +89,7 @@
   th, td { padding: 9px 12px; border-bottom: 1px solid var(--chrome-edge); }
   th { color: var(--muted); font-weight: 600; }
   td:last-child, th:last-child { text-align: right; white-space: nowrap; }
+  td.missing { color: var(--danger, #e07862); }
   .error { color: var(--danger, #e07862); }
   @container (max-width: 600px) { .picture { display: none; } }
 </style>
