@@ -121,3 +121,16 @@ Point `CHINOTTO_TEST_IPOD` at a folder laid out like an iPod root:
 
 Without it, those tests are skipped. `fixtures-private/` is git-ignored for
 keeping such a copy inside the checkout.
+
+## Acknowledgements
+
+- The nano 6G's compressed `iTunesCDB` and its companion SQLite library are
+  read and written using Milan Marocchi's PodBox
+  (`crates/chinotto-gpod/libgpod/src/podbox`, MIT — see the `LICENSE` file
+  there).
+- Signing that database uses the HashAB implementation from dstaley/hashab
+  (`crates/chinotto-gpod/libgpod/src/hashab`, Unlicense/public domain — see
+  the `LICENSE` file there).
+- MTP album art and playlists follow the approach of XNJB by Richard Low
+  (GPLv2): no code from it is used in Chinotto, but it shaped how Chinotto
+  creates MTP album objects and playlists.
