@@ -25,6 +25,7 @@ export type Dialog =
   | { kind: "remove-from-library"; ids: number[] }
   /** Set up an iPod with no database, or (rebuild) replace a lost or broken one. */
   | { kind: "setup"; path: string; rebuild: boolean }
+  | { kind: "rip"; disc: string | null }
   /** Set up (or change the settings of) a player that shows up as a drive. */
   | { kind: "msc"; path: string }
   | { kind: "delete-player-songs"; path: string; ids: number[] };
@@ -303,7 +304,8 @@ class Store {
     void api.playerVolume(this.volume);
     await api.onAddProgress((p) => {
       this.progress = p;
-      if (p.total) this.busy = t("Adding {done} of {total}", { done: Math.min(p.done + 1, p.total), total: p.total }) + (p.current ? `: ${p.current}` : "");
+      const n = { done: Math.min(p.done + 1, p.total), total: p.total };
+      if (p.total) this.busy = (this.ripping ? t("Ripping {done} of {total}", n) : t("Adding {done} of {total}", n)) + (p.current ? `: ${p.current}` : "");
     });
     this.deviceIcons = await api.deviceIcons().catch(() => ({}));
     await api.onLibrariesChanged((l) => (this.libraries = l));
@@ -314,6 +316,12 @@ class Store {
     this.libraries = await api.listLibraries().catch(() => []);
     // Expanded libraries show their playlists in the sidebar.
     for (const l of this.libraries) if (!l.device && !this.collapsed.includes(l.id)) void this.loadLibrary(l.id);
+    // Audio CDs: macOS mounts them, so looking is cheap; on Linux, reading a
+    // disc's contents spins the drive, so it's done when Rip CD… is chosen.
+    if (isMac) {
+      void this.refreshDiscs();
+      setInterval(() => void this.refreshDiscs(), 4000);
+    }
     const start = await api.startupFolder();
     this.devicesChanged(await api.listDevices());
     if (start && !this.ipod) await this.open(start);
@@ -793,6 +801,45 @@ class Store {
       this.libraries = await api.listLibraries();
     } catch (e) {
       this.error = String(e);
+    }
+  }
+
+  // ---- Audio CDs ----
+
+  /** Audio CDs in the drives (macOS: kept up to date; Linux: when asked). */
+  discs = $state<import("./types").Disc[]>([]);
+  /** A rip is running (the progress says "Ripping"). */
+  ripping = $state(false);
+
+  async refreshDiscs() {
+    const d = await api.cdList().catch(() => []);
+    if (JSON.stringify(d) !== JSON.stringify(this.discs)) this.discs = d;
+  }
+
+  /** Ask for a folder, then rip into it. Libraries whose folders hold it scan it. */
+  async rip(req: Omit<import("./types").RipRequest, "folder">) {
+    if (this.busy) return;
+    const folder = await api.pickFolder(t("Rip the CD into"));
+    if (!folder) return;
+    this.dialog = null;
+    this.ripping = true;
+    this.busy = t("Ripping…");
+    this.error = null;
+    try {
+      const r = await api.cdRip({ ...req, folder });
+      const inside = (dir: string) => r.folder === dir || r.folder.startsWith(dir.endsWith("/") ? dir : dir + "/");
+      for (const l of this.libraries) if (!l.device && l.folders.some((f) => inside(f.path))) void this.scanLibrary(l.id);
+      this.dialog = {
+        kind: "report",
+        title: tn(r.ripped, "Ripped {n} song", "Ripped {n} songs"),
+        lines: [t("Saved in {path}", { path: r.folder }), ...r.problems],
+      };
+    } catch (e) {
+      this.error = String(e);
+    } finally {
+      this.ripping = false;
+      this.busy = null;
+      this.progress = null;
     }
   }
 

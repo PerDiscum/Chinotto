@@ -65,6 +65,17 @@ The developer used ManicStage once, on the test device, to set it up for
 direct folder access — no code from ManicStage is used in Chinotto, and it
 isn't needed again once the Walkman is reformatted.
 
+## Ripping CDs
+
+Put in an audio CD: on a Mac it shows up under Devices (or use **File → Rip
+CD…**); on Linux, click **Rip CD…** under Devices. Name the artist, album,
+year and songs (there's no online lookup yet), choose Apple Lossless, FLAC,
+AAC or MP3, then **Rip…** and the folder to save into. Songs are saved as
+`Artist/Artist - Year - Album/Artist - Year - Album - 01 - Title`, never over
+an existing file. They join a library only if that folder is inside one of
+the library's folders. Linux needs `cdparanoia` to read the disc (and
+`ffmpeg` for Apple Lossless and AAC); FLAC and MP3 are built in.
+
 ## Tested devices
 
 So far, this is the developer's own hardware, run through the app itself

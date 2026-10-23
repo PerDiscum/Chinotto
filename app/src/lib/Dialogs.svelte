@@ -6,6 +6,7 @@
   import LibraryDialog from "./LibraryDialog.svelte";
   import SetupDialog from "./SetupDialog.svelte";
   import MscDialog from "./MscDialog.svelte";
+  import RipDialog from "./RipDialog.svelte";
   import { count } from "./format";
 
   const close = () => (store.dialog = null);
@@ -37,6 +38,8 @@
   </Modal>
 {:else if store.dialog?.kind === "setup"}
   <SetupDialog path={store.dialog.path} rebuild={store.dialog.rebuild} />
+{:else if store.dialog?.kind === "rip"}
+  <RipDialog disc={store.dialog.disc} />
 {:else if store.dialog?.kind === "msc"}
   <MscDialog path={store.dialog.path} />
 {:else if store.dialog?.kind === "library"}

@@ -142,9 +142,27 @@ fn out_rate(rate: u32) -> u32 {
 /// the new file (with the original's tags and cover).
 pub fn convert(src: &Path, dir: &Path, target: &str, n: usize) -> Result<PathBuf, String> {
     let name = src.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    let out = dir.join(format!("{n:05}.{}", if target.starts_with("mp3") { "mp3" } else { "m4a" }));
+    let out = encode(src, dir, target, n)?;
+    copy_tags(src, &out).map_err(|e| format!("{name}: {e}"))?;
+    Ok(out)
+}
+
+/// The file extension a conversion target gets.
+pub fn extension(target: &str) -> &'static str {
+    match target {
+        t if t.starts_with("mp3") => "mp3",
+        "flac" => "flac",
+        _ => "m4a",
+    }
+}
+
+/// Encode `src` into `dir` as `target`, without tags; returns the new file.
+pub fn encode(src: &Path, dir: &Path, target: &str, n: usize) -> Result<PathBuf, String> {
+    let name = src.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let out = dir.join(format!("{n:05}.{}", extension(target)));
     let mut source = Source::open(src).map_err(|e| format!("{name}: {e}"))?;
     match target {
+        "flac" => encode_flac(&mut source, &out)?,
         "alac" => encode_alac(src, &mut source, &out, dir, n)?,
         "aac128" => encode_aac(src, &mut source, &out, 128, dir, n)?,
         "mp3_320" => encode_mp3(&mut source, &out, 320, None)?,
@@ -153,8 +171,47 @@ pub fn convert(src: &Path, dir: &Path, target: &str, n: usize) -> Result<PathBuf
         "mp3_128" => encode_mp3(&mut source, &out, 128, None)?,
         _ => encode_aac(src, &mut source, &out, 256, dir, n)?,
     }
-    copy_tags(src, &out).map_err(|e| format!("{name}: {e}"))?;
     Ok(out)
+}
+
+/// FLAC, 16-bit (CD quality; flacenc, built in).
+fn encode_flac(source: &mut Source, out: &Path) -> Result<(), String> {
+    use flacenc::component::BitRepr;
+    use flacenc::error::Verify;
+    let rate = source.rate;
+    let mut samples: Vec<i32> = Vec::new();
+    stereo_chunks(source, |pcm| {
+        samples.extend(pcm.iter().map(|s| (s.clamp(-1.0, 1.0) * 32767.0).round() as i32));
+        Ok(())
+    })?;
+    let e = |e: &dyn std::fmt::Debug| format!("FLAC encoder: {e:?}");
+    let config = flacenc::config::Encoder::default().into_verified().map_err(|x| e(&x))?;
+    // Frame by frame (flacenc's own loop pads the last frame with silence):
+    // the last frame is only as long as what's left.
+    let mut stream = flacenc::component::Stream::new(rate as usize, 2, 16).map_err(|x| e(&x))?;
+    let block = config.block_size;
+    for (i, chunk) in samples.chunks(block * 2).enumerate() {
+        use flacenc::source::Fill;
+        let mut fb = flacenc::source::FrameBuf::with_size(2, chunk.len() / 2).map_err(|x| e(&x))?;
+        fb.fill_interleaved(chunk).map_err(|x| e(&x))?;
+        let frame = flacenc::encode_fixed_size_frame(&config, &fb, i, stream.stream_info()).map_err(|x| e(&x))?;
+        stream.add_frame(frame);
+    }
+    // STREAMINFO's minimum block size leaves out the (shorter) last frame, as
+    // in a fixed-block-size stream; flacenc counts it, and decoders then take
+    // the stream as variable-size. Write the stream by hand with that fixed.
+    let mut info = stream.stream_info().clone();
+    let full = if stream.frame_count() > 1 { block } else { samples.len() / 2 };
+    info.set_block_sizes(full.max(16), full.max(16)).map_err(|x| e(&x))?;
+    let mut sink = flacenc::bitsink::ByteSink::new();
+    use flacenc::bitsink::BitSink;
+    // "fLaC", then STREAMINFO's block header: last block, type 0, 34 bytes.
+    sink.write_bytes_aligned(b"fLaC\x80\x00\x00\x22").map_err(|x| e(&x))?;
+    info.write(&mut sink).map_err(|x| e(&x))?;
+    for i in 0..stream.frame_count() {
+        stream.frame(i).ok_or("FLAC encoder: missing frame")?.write(&mut sink).map_err(|x| e(&x))?;
+    }
+    std::fs::write(out, sink.as_slice()).map_err(|e| e.to_string())
 }
 
 /// Decoded stereo samples, chunk by chunk.

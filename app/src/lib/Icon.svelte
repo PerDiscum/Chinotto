@@ -1,10 +1,13 @@
 <script lang="ts">
   // Small line icons drawn for Chinotto (16×16 grid).
-  let { name, size = 16 }: { name: "ipod" | "music" | "playlist" | "smart" | "eject" | "folder" | "columns" | "artwork" | "add" | "newlist" | "shuffle" | "repeat" | "repeat-one" | "library"; size?: number } = $props();
+  let { name, size = 16 }: { name: "ipod" | "music" | "playlist" | "smart" | "eject" | "folder" | "columns" | "artwork" | "add" | "newlist" | "shuffle" | "repeat" | "repeat-one" | "library" | "disc"; size?: number } = $props();
 </script>
 
 <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-  {#if name === "ipod"}
+  {#if name === "disc"}
+    <circle cx="8" cy="8" r="6.5" />
+    <circle cx="8" cy="8" r="1.6" />
+  {:else if name === "ipod"}
     <rect x="3.5" y="1.5" width="9" height="13" rx="2" />
     <rect x="5" y="3" width="6" height="4" rx="0.6" />
     <circle cx="8" cy="10.8" r="2.1" />

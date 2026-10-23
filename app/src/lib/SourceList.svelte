@@ -1,6 +1,6 @@
 <script lang="ts">
   import { t, tn } from "./i18n";
-  import { store } from "./store.svelte";
+  import { store, isMac } from "./store.svelte";
   import Icon from "./Icon.svelte";
   import { deviceImage } from "./deviceImages";
 
@@ -171,7 +171,21 @@
     </ul>
   {/if}
   <h2>{t("Devices")}</h2>
-  {#if store.devices.length === 0}
+  {#if store.discs.length}
+    <ul class="libs">
+      {#each store.discs as d (d.id)}
+        <li>
+          <div class="row device">
+            <button class="name" onclick={() => (store.dialog = { kind: "rip", disc: d.id })} title={t("Rip this CD…")}>
+              <Icon name="disc" />
+              <span>{d.name}</span>
+            </button>
+          </div>
+        </li>
+      {/each}
+    </ul>
+  {/if}
+  {#if store.devices.length === 0 && store.discs.length === 0}
     <p class="hint">{t("Connect your device, and it will show up here.")}</p>
   {/if}
   <ul>
@@ -298,9 +312,15 @@
       </li>
     {/each}
   </ul>
+  {#if !isMac && !store.discs.length}
+    <!-- Linux: no menu bar, and the drive isn't read until asked. -->
+    <button class="rip" onclick={() => (store.dialog = { kind: "rip", disc: null })}><Icon name="disc" /> {t("Rip CD…")}</button>
+  {/if}
 </nav>
 
 <style>
+  .rip { display: flex; align-items: center; gap: 6px; margin: 4px 14px; padding: 2px 0; border: 0; background: none; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
+  .rip:hover { color: var(--ink); }
   .sources {
     flex: 1;
     overflow-y: auto;
