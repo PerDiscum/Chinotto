@@ -3,6 +3,22 @@
 A music library manager and sync app for classic iPods and other digital
 audio players, modelled on the workflows of classic iTunes (9/10 era).
 
+## Ethos
+
+This is the kind of program iTunes and MediaMonkey used to be, built for a
+modern Mac or Linux machine instead of a Windows XP box from 2005 — the app
+I wish I'd had 25 years ago. It's for the Mac user whose Walkman wants
+SonicStage or Media Center and nothing else, the Linux user who's always had
+to compromise on iPod support, and the nano owner who wanted a more recent
+model with album art, not just the oldest ones that happen to be well
+supported everywhere.
+
+Every line of code here was written by AI — Claude (Sonnet and Opus),
+ChatGPT ("Luna"), and GitHub Copilot — working from the developer's ideas,
+testing, and direction. Beyond that, nobody involved feels they can take
+credit for it, so it's released under the MIT license: use it, change it,
+pull it apart, build on it.
+
 Status: early. The desktop app recognises a player when it's plugged in —
 a classic, pre-iOS iPod, an MTP device (such as a Creative Zen), or a Sony
 Walkman using OpenMG (most NW-A/S/E models) — and lets you browse it: source
@@ -41,6 +57,46 @@ your own on your computer.
 
 Reading and writing MP3s, AACs, and other common formats is built in;
 anything a player can't take as-is is converted first.
+
+**A Walkman still locked to Media Center or SonicStage** (it won't show up
+as a plain OpenMG drive at all) needs reformatting before Chinotto, or
+anything else, can use it as a drive. Chinotto has no way to do that itself.
+The developer used ManicStage once, on the test device, to set it up for
+direct folder access — no code from ManicStage is used in Chinotto, and it
+isn't needed again once the Walkman is reformatted.
+
+## Tested devices
+
+So far, this is the developer's own hardware, run through the app itself
+(not just tested against copies of its database files):
+
+| Device | Connection | Notes |
+|---|---|---|
+| iPod classic 7G | iPod, HFS+ | |
+| iPod nano 3G | iPod, HFS+ | Needs its FireWire ID |
+| iPod nano 2G | iPod, FAT32 | |
+| iPod nano 6G | iPod, compressed database | Writing is still experimental |
+| SanDisk Sansa e260 v2 | MSC | Official firmware; MTP mode didn't work right |
+| Sony Walkman NWZ-E44/E45 series | MTP (Linux), MSC (Mac) | Playlists over MTP are still unreliable |
+| Sony Walkman NW-A25 | MSC | |
+| Sony NW-S716F (Japanese model) | OpenMG | |
+
+**MTP is the least reliable connection of the four right now** — where a
+player can also run as MSC (most Sony Walkmans, and some Sansas), that's the
+one to use with Chinotto for the time being.
+
+## Feature support by player type
+
+|  | Classic iPod | MTP devices | MSC (drive) players | Sony Walkman (OpenMG) |
+|---|---|---|---|---|
+| Browse & play | ✅ | ✅ | ✅ | ✅ |
+| Add / delete songs | ✅ | ✅ | ✅ | ✅ (up to 255 songs, one storage folder) |
+| Edit tags & covers | ✅ | ✅ (title, artist, album, genre, composer, year, track number) | ✅ | ✅ (title, artist, album, genre, year, track and disc number) |
+| Playlists | ✅ read and write | ⚠️ read; writing is unreliable | ✅ read and write, M3U/M3U8 players only | ❌ the format has none |
+| Ratings | ✅ | ✅ | ❌ | ❌ |
+
+The nano 6G's write support and MTP's playlist writing are both still
+experimental (see Tested devices above).
 
 ## Layout
 
@@ -173,3 +229,7 @@ git-ignored for keeping such copies inside the checkout.
 - MTP album art and playlists follow the approach of XNJB by Richard Low
   (GPLv2): no code from it is used in Chinotto, but it shaped how Chinotto
   creates MTP album objects and playlists.
+- ManicStage was used, once, to reformat the test Walkman out of Media
+  Center/SonicStage lock-in and into plain OpenMG folder access (see
+  "A Walkman still locked to Media Center or SonicStage" above): no code
+  from it is used in Chinotto.
