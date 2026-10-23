@@ -1089,3 +1089,14 @@ re-encoded to 320. Asked to also offer 192 and 256:
   correctly. If either doesn't play right, that bitrate's codec byte guess is
   wrong and needs removing from `CONFIRMED_BITRATES` (and from the picker)
   until the real byte is found.
+
+## 0095: Let Sansa e260 v2 reach its OS descriptor probe
+
+The Sansa e260 v2 (USB `0781:7422`) was detected, but its MTP OpenSession
+response stalled twice. The debug log showed libmtp stopped its Microsoft OS
+descriptor probe as soon as it saw the active kernel interface. The model
+already requests `DEVICE_FLAG_ALWAYS_PROBE_DESCRIPTOR`; this change lets that
+device continue past the kernel-interface guard so libmtp can try the probe.
+The exception is limited to this USB ID. It still needs testing on the player:
+confirm Chinotto opens the device, lists its songs, and can transfer a test
+track before enabling regular use.

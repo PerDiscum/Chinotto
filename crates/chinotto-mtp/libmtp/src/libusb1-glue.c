@@ -244,10 +244,12 @@ static int probe_device_descriptor(libusb_device *dev, FILE *dumpfile)
   int ret;
   /* This is to indicate if we find some vendor interface */
   int found_vendor_spec_interface = 0;
+  int sansa_v2 = 0;
   struct libusb_device_descriptor desc;
 
   ret = libusb_get_device_descriptor (dev, &desc);
   if (ret != LIBUSB_SUCCESS) return 0;
+  sansa_v2 = desc.idVendor == 0x0781 && desc.idProduct == 0x7422;
   /*
    * Don't examine devices that are not likely to
    * contain any MTP interface, update this the day
@@ -364,7 +366,7 @@ static int probe_device_descriptor(libusb_device *dev, FILE *dumpfile)
             libusb_close(devh);
             return 1;
           }
-          if (libusb_kernel_driver_active(devh, config->interface[j].altsetting[k].iInterface))
+          if (!sansa_v2 && libusb_kernel_driver_active(devh, config->interface[j].altsetting[k].iInterface))
 	  {
 	    /*
 	     * Specifically avoid probing anything else than USB mass storage devices
