@@ -27,8 +27,6 @@ export type Dialog =
   | { kind: "setup"; path: string; rebuild: boolean }
   /** Set up (or change the settings of) a player that shows up as a drive. */
   | { kind: "msc"; path: string }
-  /** A Sony Walkman with the legacy OpenMG/OMGAUDIO database. */
-  | { kind: "openmg"; path: string }
   | { kind: "delete-player-songs"; path: string; ids: number[] };
 
 function loadVolume(): number {
@@ -338,6 +336,7 @@ class Store {
     const s = this.source;
     if (s.kind === "library" && this.isDeviceLibrary(s.lib) && !list.some((d) => d.library === s.lib)) this.select({ kind: "none" });
     if (s.kind === "player" && !list.some((d) => d.path === s.path)) this.select({ kind: "none" });
+    if (s.kind === "openmg" && !list.some((d) => d.path === s.path)) this.select({ kind: "none" });
     // The open iPod was unplugged.
     if (this.ipod && !list.some((d) => d.path === this.ipod!.path)) this.forget();
     // Open a newly plugged-in iPod when nothing else is open.

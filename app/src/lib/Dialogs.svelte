@@ -39,14 +39,6 @@
   <SetupDialog path={store.dialog.path} rebuild={store.dialog.rebuild} />
 {:else if store.dialog?.kind === "msc"}
   <MscDialog path={store.dialog.path} />
-{:else if store.dialog?.kind === "openmg"}
-  {@const d = store.devices.find((x) => x.path === store.dialog?.path)}
-  <Modal title={t("Sony Walkman (OpenMG)")} onclose={close}>
-    <p>{t("Chinotto recognizes this Walkman as an OpenMG device. Its music and database are stored in OMGAUDIO, not in the regular MUSIC folder.")}</p>
-    <p>{t("Generic drive setup and writing are disabled to protect the device database. OpenMG initialization and song transfer are not available in this version yet.")}</p>
-    {#if d}<p class="muted">{d.path}</p>{/if}
-    {#snippet buttons()}<button onclick={close}>{t("Close")}</button>{/snippet}
-  </Modal>
 {:else if store.dialog?.kind === "library"}
   <LibraryDialog id={store.dialog.id} />
 {:else if store.dialog?.kind === "delete-library"}
