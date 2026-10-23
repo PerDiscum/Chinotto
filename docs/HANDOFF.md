@@ -791,9 +791,10 @@ Devices were opened with `LIBMTP_Open_Raw_Device_Uncached`, and libmtp's `flush_
   settings, copy, and delete commands for these roots.
 - This is only recognition and write protection. Initialization, parsing of
   OMGAUDIO's indexed database, and OpenMG-compatible song encoding/transfer
-  are not implemented. The user's Sony NW-S716F was initialized by ManicStage;
-  its live database had one playable `.OMA` track in `OMGAUDIO` while `MUSIC`
-  remained empty. Do not treat it as a normal `NWZ` drag-and-drop Walkman.
+  are not implemented. The user's Sony NW-S716F was initialized with legacy
+  device software; its live database had one playable `.OMA` track in
+  `OMGAUDIO` while `MUSIC` remained empty. Do not treat it as a normal `NWZ`
+  drag-and-drop Walkman.
 
 ## 0074: give OpenMG devices a dedicated page
 
@@ -822,8 +823,9 @@ Devices were opened with `LIBMTP_Open_Raw_Device_Uncached`, and libmtp's `flush_
 
 ## 0077: document the OpenMG transfer investigation checkpoint
 
-- The user added two more songs with ManicStage. Both now appear and play on
-  the NW-S716F. The device currently reports six tracks in `04CNTINF.DAT`;
+- The user added two more songs with third-party device software. Both now
+  appear and play on the NW-S716F. The device currently reports six tracks in
+  `04CNTINF.DAT`;
   the two new files are `10F00/10000005.OMA` and
   `10F00/10000006.OMA`.
 - For all six observed tracks, the 11-byte key in `05CIDLST.DAT` matches the
@@ -831,10 +833,10 @@ Devices were opened with `LIBMTP_Open_Raw_Device_Uncached`, and libmtp's `flush_
   `0xC00`; `0xC14` is a preceding per-track byte). The audio payload begins at
   `0xC60`. This links the track table, key list, and audio files on
   this device, but does not yet define how to generate a valid new file/key.
-- ManicStage's latest transfer log shows one MP3 was copied without
-  transcoding and another was transcoded to MP3 320 kbps before being written.
-  Their playback on the Walkman confirms the result. Do not reuse ManicStage
-  source code; treat the device output and database diffs as observations.
+- The latest transfer log shows one MP3 was copied without transcoding and
+  another was transcoded to MP3 320 kbps before being written. Their playback
+  on the Walkman confirms the result. Do not reuse third-party source code;
+  treat the device output and database diffs as observations.
 - The database changed in `04CNTINF.DAT`, `05CIDLST.DAT`, `03GINF01/02/03/2D`,
   `02TREINF.DAT`, and `01TREE01/02/03/04/2D`. The current six-track snapshots
   are under `/private/tmp/chinotto-openmg-baseline-6track-20261023` and the
@@ -866,8 +868,8 @@ Devices were opened with `LIBMTP_Open_Raw_Device_Uncached`, and libmtp's `flush_
 ## 0079: isolate one OpenMG track addition
 
 - Captured a read-only six-track baseline of the user's NW-S716F database and
-  artwork before the user added one track through ManicStage. The before/after
-  comparison is under `/private/tmp/chinotto-openmg-baseline-6track-current`
+  artwork before the user added one track through third-party device software.
+  The comparison is under `/private/tmp/chinotto-openmg-baseline-6track-current`
   and the live Walkman volume; no Chinotto command wrote to the device.
 - The new `If We` track is the seventh `04CNTINF.DAT` record (Mariah Carey,
   `Glitter`, `Pop`, 260884 ms), paired with `10F00/10000007.OMA` through the
