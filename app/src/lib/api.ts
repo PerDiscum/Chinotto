@@ -15,8 +15,8 @@ export const openMgReorder = (path: string) => invoke<number>("openmg_reorder", 
 export const onDevicesChanged = (f: (d: DeviceInfo[]) => void): Promise<UnlistenFn> =>
   listen<DeviceInfo[]>("devices-changed", (e) => f(e.payload));
 
-export async function pickFolder(): Promise<string | null> {
-  const r = await open({ directory: true, multiple: false, title: "Choose the drive" });
+export async function pickFolder(title = "Choose the drive"): Promise<string | null> {
+  const r = await open({ directory: true, multiple: false, title });
   return typeof r === "string" ? r : null;
 }
 
@@ -189,3 +189,7 @@ export const mscDelete = (path: string, ids: number[]) => invoke<string[]>("msc_
 export const mtpOpen = (key: string) => invoke<MtpInfo>("mtp_open", { key });
 export const mtpClose = (key: string) => invoke<void>("mtp_close", { key });
 export const mtpInfo = (key: string) => invoke<MtpInfo | null>("mtp_info", { key });
+
+// ---- Audio CDs ----
+export const cdList = () => invoke<import("./types").Disc[]>("cd_list");
+export const cdRip = (req: import("./types").RipRequest) => invoke<import("./types").RipResult>("cd_rip", { req });

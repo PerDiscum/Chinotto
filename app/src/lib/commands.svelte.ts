@@ -24,6 +24,9 @@ export const run = {
   newLibrary: () => (store.dialog = { kind: "library", id: null }),
   openFile: () => void store.pickAndOpenSongs(),
   openDevice: () => void store.openFolder(),
+  ripCd: () => {
+    if (!store.busy) store.dialog = { kind: "rip", disc: null };
+  },
   setUpIpod: () => void store.pickDriveToSetUp(),
   addToIpod: () => store.ipod?.writable && void store.pickAndAddFiles(),
   saveAs: () => store.selected.size && void store.exportSongs(store.selectedTracks),
@@ -124,6 +127,7 @@ export async function installMenu() {
       sep,
       await item(t("Open File…"), run.openFile, "CmdOrCtrl+O"),
       await item(t("Open Device…"), run.openDevice),
+      await item(t("Rip CD…"), run.ripCd),
       await item(t("Set Up iPod…"), run.setUpIpod),
       await item(t("Add Songs to iPod…"), run.addToIpod, "CmdOrCtrl+Shift+O", () => !!store.ipod?.writable),
       sep,

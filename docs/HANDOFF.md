@@ -1227,3 +1227,25 @@ the player's album view; add a second song of the same album → no second
 album; change a song's cover in Song Details; delete the album's songs →
 the album disappears. Then try any other MTP player (Clip/Fuze, a Creative,
 the Walkman on Linux), especially on the Mac.
+
+## 0103: Ripping CDs
+
+`rip.rs` (`cd_list`, `cd_rip`), `RipDialog.svelte`, `store.rip`.
+
+- Reading: macOS mounts audio CDs as a volume of AIFF files (found by its
+  hidden `.TOC.plist`; lengths from the file sizes), polled every 4 s and
+  shown under Devices. Linux: `cdparanoia`/`cd-paranoia -Q` on /dev/sr0,
+  /dev/sr1, /dev/cdrom, only when Rip CD… is chosen (it spins the drive);
+  each track is read to a WAV with `cdparanoia -q -d <dev> N`.
+- Encoding: `convert::encode` (the old `convert` without copying tags) gained
+  a `flac` target: `flacenc` (pure Rust), 16-bit, frame by frame so the last
+  frame isn't padded with silence, with STREAMINFO written by hand (flacenc
+  counts the short last frame in the minimum block size, which makes
+  decoders treat the stream as variable-size). Test: `flac_round_trip`.
+- Tags: title, artist, album artist, album, genre, year, track N of M, via
+  `tagwrite::write`. No metadata lookup yet (MusicBrainz later).
+- Files: `<folder>/ARTIST/ARTIST - YEAR - ALBUM/ARTIST - YEAR - ALBUM - NN -
+  TITLE.ext` (no " - YEAR" without a year), FAT-safe names, " (2)" etc.
+  instead of overwriting. Not added to any library, but libraries with a
+  folder containing the album folder are rescanned afterwards.
+- Untested with a real disc on either system.

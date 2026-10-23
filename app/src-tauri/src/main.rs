@@ -13,6 +13,7 @@ mod msc;
 mod mtp;
 mod openmg;
 mod playback;
+mod rip;
 mod scratch;
 mod setup;
 mod state;
@@ -60,6 +61,8 @@ fn main() {
             mtp::mtp_info,
             openmg::openmg_view,
             openmg::openmg_reorder,
+            rip::cd_list,
+            rip::cd_rip,
             msc::msc_save,
             msc::msc_state,
             msc::msc_allow,

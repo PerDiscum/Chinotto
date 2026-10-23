@@ -289,3 +289,29 @@ export interface MtpInfo {
   songs: number;
   library: string;
 }
+
+/** An audio CD in a drive. */
+export interface Disc {
+  /** The volume (macOS) or the drive (Linux). */
+  id: string;
+  name: string;
+  tracks: { number: number; lengthMs: number }[];
+}
+
+export interface RipRequest {
+  disc: string;
+  folder: string;
+  /** "alac", "flac", "aac256", "aac128", "mp3_320"… */
+  format: string;
+  artist: string;
+  album: string;
+  year: number;
+  genre: string;
+  tracks: { number: number; title: string }[];
+}
+
+export interface RipResult {
+  ripped: number;
+  folder: string;
+  problems: string[];
+}
