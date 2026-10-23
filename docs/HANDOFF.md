@@ -1173,3 +1173,57 @@ the profile's byte ceiling (300 px and 30 KB), instead of returning an
 oversized image. Rebuild and transfer a song with a large, detailed cover;
 check the embedded JPEG dimensions and byte size on the device, and confirm it
 still displays in the player's album view.
+
+## 0102: MTP for every device, not just the Sansa; album art through album objects
+
+What made the Sansa e260 v2 work (0100) was the **Microsoft OS descriptor
+exchange**: string descriptor 0xEE, then the vendor request it names. Windows
+sends it to every device it enumerates, and many Windows-era players (SanDisk,
+Creative, LG…) don't answer MTP until they get it. libmtp only sends it when
+the device or one of its interfaces is vendor-specific and no kernel driver
+holds an interface — the Sansa failed both checks (class 0 interfaces; macOS
+holds one). The fallbacks from 0096/0097 didn't open it; the handshake did.
+So, in `libusb1-glue.c`, instead of exceptions for USB `0781:7422`:
+
+- `probe_device_descriptor_ex(dev, dumpfile, force)`: `force` skips the class
+  and kernel-driver guards. Detection scans of unknown devices keep them.
+- Before the session, **every device libmtp flags
+  `DEVICE_FLAG_ALWAYS_PROBE_DESCRIPTOR`** gets the forced exchange (the e260 v2,
+  Clip, Clip v2, Clip+, Clip Zip, Fuze, Fuze v2, Fuze+, Zii EGG, three LG
+  players). On macOS those also get the configuration re-selected, as Windows
+  does.
+- Any device whose OpenSession fails: both bulk endpoint halts are cleared
+  and OpenSession retried; if that fails, the device is reset and — for
+  devices without the flag (libmtp doesn't know they need it) — given the
+  forced exchange before the last attempt.
+- The `Sansa e260 v2:` log lines are now `<vid>:<pid> forced descriptor
+  probe:` lines (`LIBMTP_DEBUG=5` shows them) for any device.
+- `mtp::profile_for` falls back on the USB vendor (SanDisk → Sansa rules,
+  Sony → Walkman rules) when the product name doesn't say, instead of the
+  e260 v2's USB ID only; Clip/Fuze get their own profile.
+
+**Album art.** SanDisk's firmware (and other players built around Windows Media
+Player) doesn't show covers embedded in songs sent over MTP: it shows the
+picture of the song's **album object** (an abstract album in the database with
+a "representative sample" JPEG), which is what WMP and XNJB send. 0101 only
+made the embedded covers smaller. Now:
+
+- `chinotto_mtp::Device`: `albums`, `create_album`, `update_album`,
+  `album_art_size` (the size the device asks for), `album_has_art`,
+  `set_album_art` (layouts checked by `struct_layouts_match`).
+- `mtp::add`: after sending, songs are grouped by album and album artist
+  ("Various Artists" for compilations); each group joins its album object
+  (made if missing), and an album without a picture gets the cover (embedded,
+  else the folder's cover image), as a baseline JPEG at the device's size,
+  else the model's small-cover rule (Sansa: 300 px, 30 KB).
+- Song Details: a new cover for songs on an MTP device goes to their album
+  object(s) (made if needed). Taking a cover off isn't possible yet.
+- Deleting songs deletes album objects left with none of their songs.
+- `msc::small_jpeg` no longer enlarges covers smaller than the limit (0101
+  made it resize every cover to the limit).
+
+To test on the Sansa (MTP mode): add an album with a cover → it should show in
+the player's album view; add a second song of the same album → no second
+album; change a song's cover in Song Details; delete the album's songs →
+the album disappears. Then try any other MTP player (Clip/Fuze, a Creative,
+the Walkman on Linux), especially on the Mac.

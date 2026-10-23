@@ -115,6 +115,30 @@ mod ffi {
         pub next: *mut LIBMTP_playlist_t,
     }
 
+    #[repr(C)]
+    pub struct LIBMTP_album_t {
+        pub album_id: u32,
+        pub parent_id: u32,
+        pub storage_id: u32,
+        pub name: *mut c_char,
+        pub artist: *mut c_char,
+        pub composer: *mut c_char,
+        pub genre: *mut c_char,
+        pub tracks: *mut u32,
+        pub no_tracks: u32,
+        pub next: *mut LIBMTP_album_t,
+    }
+
+    #[repr(C)]
+    pub struct LIBMTP_filesampledata_t {
+        pub width: u32,
+        pub height: u32,
+        pub duration: u32,
+        pub filetype: c_int,
+        pub size: u64,
+        pub data: *mut c_char,
+    }
+
     pub type Progress = Option<unsafe extern "C" fn(sent: u64, total: u64, data: *const c_void) -> c_int>;
 
     extern "C" {
@@ -152,6 +176,20 @@ mod ffi {
         pub fn LIBMTP_Delete_Object(d: *mut LIBMTP_mtpdevice_t, id: u32) -> c_int;
         pub fn LIBMTP_Get_Supported_Filetypes(d: *mut LIBMTP_mtpdevice_t, types: *mut *mut u16, len: *mut u16) -> c_int;
         pub fn LIBMTP_Get_Errorstack(d: *mut LIBMTP_mtpdevice_t) -> *mut LIBMTP_error_t;
+        pub fn LIBMTP_new_album_t() -> *mut LIBMTP_album_t;
+        pub fn LIBMTP_destroy_album_t(a: *mut LIBMTP_album_t);
+        pub fn LIBMTP_Get_Album_List(d: *mut LIBMTP_mtpdevice_t) -> *mut LIBMTP_album_t;
+        pub fn LIBMTP_Create_New_Album(d: *mut LIBMTP_mtpdevice_t, a: *mut LIBMTP_album_t) -> c_int;
+        pub fn LIBMTP_Update_Album(d: *mut LIBMTP_mtpdevice_t, a: *const LIBMTP_album_t) -> c_int;
+        pub fn LIBMTP_new_filesampledata_t() -> *mut LIBMTP_filesampledata_t;
+        pub fn LIBMTP_destroy_filesampledata_t(s: *mut LIBMTP_filesampledata_t);
+        pub fn LIBMTP_Get_Representative_Sample_Format(
+            d: *mut LIBMTP_mtpdevice_t,
+            filetype: c_int,
+            s: *mut *mut LIBMTP_filesampledata_t,
+        ) -> c_int;
+        pub fn LIBMTP_Send_Representative_Sample(d: *mut LIBMTP_mtpdevice_t, id: u32, s: *mut LIBMTP_filesampledata_t) -> c_int;
+        pub fn LIBMTP_Get_Representative_Sample(d: *mut LIBMTP_mtpdevice_t, id: u32, s: *mut LIBMTP_filesampledata_t) -> c_int;
         pub fn strdup(s: *const c_char) -> *mut c_char;
         pub fn chinotto_usb_fingerprint() -> u64;
         pub fn chinotto_has_mtp_interface(bus: u32, address: u8) -> c_int;
@@ -159,6 +197,7 @@ mod ffi {
     }
     extern "C" {
         pub fn free(p: *mut c_void);
+        pub fn malloc(n: usize) -> *mut c_void;
     }
 }
 
@@ -355,6 +394,46 @@ pub struct Playlist {
     pub tracks: Vec<u32>,
 }
 
+/// An album object in the device's database: what SanDisk, Creative and
+/// other Windows-era players show album art from (the "representative
+/// sample" image Windows Media Player sends with it), not covers embedded in
+/// the song files.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Album {
+    pub id: u32,
+    pub storage: u32,
+    pub name: String,
+    pub artist: Option<String>,
+    pub genre: Option<String>,
+    pub tracks: Vec<u32>,
+}
+
+/// libmtp's JPEG and album file types.
+const FILETYPE_JPEG: c_int = 14;
+const FILETYPE_ALBUM: c_int = 42;
+
+/// A string libmtp frees itself later (its own copy).
+fn c_dup(s: Option<&str>) -> *mut c_char {
+    match s.and_then(|s| CString::new(s.replace('\0', "")).ok()) {
+        Some(c) => unsafe { ffi::strdup(c.as_ptr()) },
+        None => ptr::null_mut(),
+    }
+}
+
+/// A track list libmtp frees itself later.
+fn c_tracks(ids: &[u32]) -> *mut u32 {
+    if ids.is_empty() {
+        return ptr::null_mut();
+    }
+    unsafe {
+        let p = ffi::malloc(std::mem::size_of_val(ids)) as *mut u32;
+        if !p.is_null() {
+            ptr::copy_nonoverlapping(ids.as_ptr(), p, ids.len());
+        }
+        p
+    }
+}
+
 /// An opened MTP device. Other programs can't use it while it's open.
 pub struct Device {
     d: *mut ffi::LIBMTP_mtpdevice_t,
@@ -504,6 +583,142 @@ impl Device {
             ffi::LIBMTP_Clear_Errorstack(self.d);
         }
         out
+    }
+
+    /// The device's album objects.
+    pub fn albums(&mut self) -> Vec<Album> {
+        let mut out = Vec::new();
+        unsafe {
+            let mut a = ffi::LIBMTP_Get_Album_List(self.d);
+            while !a.is_null() {
+                let r = &*a;
+                let tracks =
+                    if r.tracks.is_null() { Vec::new() } else { std::slice::from_raw_parts(r.tracks, r.no_tracks as usize).to_vec() };
+                out.push(Album {
+                    id: r.album_id,
+                    storage: r.storage_id,
+                    name: text(r.name).unwrap_or_default(),
+                    artist: text(r.artist),
+                    genre: text(r.genre),
+                    tracks,
+                });
+                let next = r.next;
+                (*a).next = ptr::null_mut();
+                ffi::LIBMTP_destroy_album_t(a);
+                a = next;
+            }
+            ffi::LIBMTP_Clear_Errorstack(self.d);
+        }
+        out
+    }
+
+    /// Make a new album object (in the device's album folder); its id.
+    pub fn create_album(&mut self, album: &Album) -> Result<u32> {
+        unsafe {
+            let a = ffi::LIBMTP_new_album_t();
+            if a.is_null() {
+                return Err(Error("out of memory".into()));
+            }
+            let r = &mut *a;
+            r.parent_id = 0;
+            r.storage_id = album.storage;
+            r.name = c_dup(Some(&album.name));
+            r.artist = c_dup(album.artist.as_deref());
+            r.genre = c_dup(album.genre.as_deref());
+            r.tracks = c_tracks(&album.tracks);
+            r.no_tracks = album.tracks.len() as u32;
+            let rc = ffi::LIBMTP_Create_New_Album(self.d, a);
+            let id = r.album_id;
+            ffi::LIBMTP_destroy_album_t(a);
+            if rc != 0 {
+                return Err(self.take_error("The device didn't make the album"));
+            }
+            ffi::LIBMTP_Clear_Errorstack(self.d);
+            Ok(id)
+        }
+    }
+
+    /// Write an album object's songs (and name) back to the device.
+    pub fn update_album(&mut self, album: &Album) -> Result<()> {
+        unsafe {
+            let a = ffi::LIBMTP_new_album_t();
+            if a.is_null() {
+                return Err(Error("out of memory".into()));
+            }
+            let r = &mut *a;
+            r.album_id = album.id;
+            r.storage_id = album.storage;
+            r.name = c_dup(Some(&album.name));
+            r.artist = c_dup(album.artist.as_deref());
+            r.genre = c_dup(album.genre.as_deref());
+            r.tracks = c_tracks(&album.tracks);
+            r.no_tracks = album.tracks.len() as u32;
+            let rc = ffi::LIBMTP_Update_Album(self.d, a);
+            ffi::LIBMTP_destroy_album_t(a);
+            if rc != 0 {
+                return Err(self.take_error("The device didn't change the album"));
+            }
+            ffi::LIBMTP_Clear_Errorstack(self.d);
+        }
+        Ok(())
+    }
+
+    /// The largest album picture the device asks for (width, height), if it says.
+    pub fn album_art_size(&mut self) -> Option<(u32, u32)> {
+        unsafe {
+            let mut s: *mut ffi::LIBMTP_filesampledata_t = ptr::null_mut();
+            let rc = ffi::LIBMTP_Get_Representative_Sample_Format(self.d, FILETYPE_ALBUM, &mut s);
+            ffi::LIBMTP_Clear_Errorstack(self.d);
+            if s.is_null() {
+                return None;
+            }
+            let size = ((*s).width, (*s).height);
+            ffi::LIBMTP_destroy_filesampledata_t(s);
+            (rc == 0 && size.0 > 0 && size.1 > 0).then_some(size)
+        }
+    }
+
+    /// Whether an album object already has a picture.
+    pub fn album_has_art(&mut self, id: u32) -> bool {
+        unsafe {
+            let s = ffi::LIBMTP_new_filesampledata_t();
+            if s.is_null() {
+                return false;
+            }
+            let rc = ffi::LIBMTP_Get_Representative_Sample(self.d, id, s);
+            let has = rc == 0 && (*s).size > 0 && !(*s).data.is_null();
+            ffi::LIBMTP_destroy_filesampledata_t(s);
+            ffi::LIBMTP_Clear_Errorstack(self.d);
+            has
+        }
+    }
+
+    /// Give an album object its picture: a baseline JPEG, `width`×`height`.
+    pub fn set_album_art(&mut self, id: u32, jpeg: &[u8], width: u32, height: u32) -> Result<()> {
+        unsafe {
+            let s = ffi::LIBMTP_new_filesampledata_t();
+            if s.is_null() {
+                return Err(Error("out of memory".into()));
+            }
+            let data = ffi::malloc(jpeg.len().max(1)) as *mut c_char;
+            if data.is_null() {
+                ffi::LIBMTP_destroy_filesampledata_t(s);
+                return Err(Error("out of memory".into()));
+            }
+            ptr::copy_nonoverlapping(jpeg.as_ptr() as *const c_char, data, jpeg.len());
+            (*s).data = data;
+            (*s).size = jpeg.len() as u64;
+            (*s).width = width;
+            (*s).height = height;
+            (*s).filetype = FILETYPE_JPEG;
+            let rc = ffi::LIBMTP_Send_Representative_Sample(self.d, id, s);
+            ffi::LIBMTP_destroy_filesampledata_t(s);
+            if rc != 0 {
+                return Err(self.take_error("The device didn't take the album picture"));
+            }
+            ffi::LIBMTP_Clear_Errorstack(self.d);
+        }
+        Ok(())
     }
 
     /// The file types the device says it takes (libmtp's numbers).
@@ -678,6 +893,10 @@ mod tests {
         assert_eq!(c(5), size_of::<ffi::LIBMTP_mtpdevice_t>());
         assert_eq!(c(6), offset_of!(ffi::LIBMTP_mtpdevice_t, storage));
         assert_eq!(c(7), offset_of!(ffi::LIBMTP_track_t, filetype));
+        assert_eq!(c(8), size_of::<ffi::LIBMTP_album_t>());
+        assert_eq!(c(9), offset_of!(ffi::LIBMTP_album_t, next));
+        assert_eq!(c(10), size_of::<ffi::LIBMTP_filesampledata_t>());
+        assert_eq!(c(11), offset_of!(ffi::LIBMTP_filesampledata_t, data));
     }
 
     /// Runs on any machine: detection works with nothing plugged in.

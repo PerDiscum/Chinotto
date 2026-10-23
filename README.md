@@ -91,7 +91,7 @@ one to use with Chinotto for the time being.
 |---|---|---|---|---|
 | Browse & play | ✅ | ✅ | ✅ | ✅ |
 | Add / delete songs | ✅ | ✅ | ✅ | ✅ (up to 255 songs, one storage folder) |
-| Edit tags & covers | ✅ | ✅ (title, artist, album, genre, composer, year, track number) | ✅ | ✅ (title, artist, album, genre, year, track and disc number) |
+| Edit tags & covers | ✅ | ✅ (title, artist, album, genre, composer, year, track number; covers go to the device's album pictures) | ✅ | ✅ (title, artist, album, genre, year, track and disc number) |
 | Playlists | ✅ read and write | ⚠️ read; writing is unreliable | ✅ read and write, M3U/M3U8 players only | ❌ the format has none |
 | Ratings | ✅ | ✅ | ❌ | ❌ |
 

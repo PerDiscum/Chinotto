@@ -72,6 +72,10 @@ size_t chinotto_mtp_layout(int which) {
     case 5: return sizeof(LIBMTP_mtpdevice_t);
     case 6: return offsetof(LIBMTP_mtpdevice_t, storage);
     case 7: return offsetof(LIBMTP_track_t, filetype);
+    case 8: return sizeof(LIBMTP_album_t);
+    case 9: return offsetof(LIBMTP_album_t, next);
+    case 10: return sizeof(LIBMTP_filesampledata_t);
+    case 11: return offsetof(LIBMTP_filesampledata_t, data);
     default: return 0;
   }
 }

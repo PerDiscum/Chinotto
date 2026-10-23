@@ -108,16 +108,15 @@ fn plays_of(types: &[i32]) -> Vec<&'static str> {
 /// profiles: Walkmans want ID3v2.3 and plain Greek, Sansas small covers).
 /// No folder.jpg: over MTP there are no folders of our own.
 fn profile_for(r: &RawDevice) -> crate::msc::Profile {
-    let key = if r.vendor_id == 0x0781 && r.product_id == 0x7422 {
-        // The e260 v2's product string can vary with firmware. Its USB ID is
-        // stable, so always apply the tested Sansa artwork/tag rules to it.
-        "sansa-e200"
-    } else {
-        match icon_for(r) {
-            "sony-nwz" => "sony-nwz",
-            i if i.starts_with("sansa-") => "sansa-e200",
-            _ => "other",
-        }
+    // By name first; then by maker, as product strings vary with firmware and
+    // libmtp doesn't know every model (USB vendors: SanDisk 0781, Sony 054c).
+    let key = match icon_for(r) {
+        "sony-nwz" => "sony-nwz",
+        "sansa-clip" | "sansa-fuze" => "sansa-clip",
+        i if i.starts_with("sansa-") => "sansa-e200",
+        _ if r.vendor_id == 0x0781 => "sansa-e200",
+        _ if r.vendor_id == 0x054c => "sony-nwz",
+        _ => "other",
     };
     let mut p = crate::msc::profiles().into_iter().find(|p| p.key == key).unwrap_or_else(|| crate::msc::profiles().pop().unwrap());
     p.folder_jpg = false;
@@ -423,6 +422,8 @@ pub async fn add(key: String, dbids: Vec<String>, files: Vec<String>, app: AppHa
         };
         let tmp = crate::convert::TempDir::new()?;
         let total = sources.len();
+        // Songs sent, for their album objects afterwards.
+        let mut sent_songs: Vec<SentSong> = Vec::new();
         for (i, src) in sources.iter().enumerate() {
             let name = src.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
             let _ = app.emit("add-progress", crate::write::AddProgress { done: i, total, current: crate::tags::label(src) });
@@ -491,6 +492,14 @@ pub async fn add(key: String, dbids: Vec<String>, files: Vec<String>, app: AppHa
                 Ok(id) => {
                     res.added += 1;
                     on_device.insert(id3);
+                    if let Some(album) = info.album.clone().filter(|a| !a.trim().is_empty()) {
+                        let artist = if info.compilation {
+                            Some("Various Artists".to_string())
+                        } else {
+                            info.album_artist.clone().filter(|a| !a.trim().is_empty()).or_else(|| info.artist.clone())
+                        };
+                        sent_songs.push(SentSong { id, album, artist, genre: info.genre.clone(), src: src.clone() });
+                    }
                     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
                     let t = chinotto_mtp::Track {
                         id,
@@ -524,12 +533,161 @@ pub async fn add(key: String, dbids: Vec<String>, files: Vec<String>, app: AppHa
         let _ = app.emit("add-progress", crate::write::AddProgress { done: total, total, current: String::new() });
         drop(tmp);
         if let Some(o) = state.mtp.lock().unwrap().open.as_mut().filter(|o| o.key == key) {
+            if !sent_songs.is_empty() {
+                res.skipped.extend(file_albums(o, &sent_songs));
+            }
             refresh_space(o);
         }
         Ok(res)
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// A song just sent to the device, for its album object.
+struct SentSong {
+    id: u32,
+    album: String,
+    /// The album's artist (or "Various Artists" for a compilation).
+    artist: Option<String>,
+    genre: Option<String>,
+    /// The original file, for the cover.
+    src: std::path::PathBuf,
+}
+
+/// Put songs just sent into the device's album objects, making the albums
+/// that don't exist yet and giving them a picture: SanDisk, Creative and
+/// other players built around Windows Media Player show album art from the
+/// album object, not from covers embedded in the songs (the approach of
+/// XNJB). Problems come back as report lines; the songs are on the device
+/// either way.
+fn file_albums(o: &mut Opened, songs: &[SentSong]) -> Vec<String> {
+    let mut problems = Vec::new();
+    let key = |name: &str, artist: Option<&str>| (name.trim().to_lowercase(), artist.unwrap_or("").trim().to_lowercase());
+    let mut albums = o.dev.albums();
+    let mut groups: Vec<(&SentSong, Vec<u32>)> = Vec::new();
+    for s in songs {
+        match groups.iter_mut().find(|(first, _)| key(&first.album, first.artist.as_deref()) == key(&s.album, s.artist.as_deref())) {
+            Some((_, ids)) => ids.push(s.id),
+            None => groups.push((s, vec![s.id])),
+        }
+    }
+    for (first, ids) in groups {
+        let k = key(&first.album, first.artist.as_deref());
+        // The same album, also matched by name alone when the device kept no artist.
+        let existing = albums
+            .iter()
+            .position(|a| key(&a.name, a.artist.as_deref()) == k)
+            .or_else(|| albums.iter().position(|a| a.artist.is_none() && a.name.trim().eq_ignore_ascii_case(first.album.trim())));
+        let id = match existing {
+            Some(i) => {
+                let a = &mut albums[i];
+                for id in &ids {
+                    if !a.tracks.contains(id) {
+                        a.tracks.push(*id);
+                    }
+                }
+                if let Err(e) = o.dev.update_album(a) {
+                    problems.push(format!("Album “{}”: {e}", first.album));
+                    continue;
+                }
+                a.id
+            }
+            None => {
+                let a = chinotto_mtp::Album {
+                    name: first.album.clone(),
+                    artist: first.artist.clone(),
+                    genre: first.genre.clone(),
+                    tracks: ids.clone(),
+                    ..Default::default()
+                };
+                match o.dev.create_album(&a) {
+                    Ok(id) => {
+                        albums.push(chinotto_mtp::Album { id, ..a });
+                        id
+                    }
+                    Err(e) => {
+                        problems.push(format!("Album “{}”: {e}", first.album));
+                        continue;
+                    }
+                }
+            }
+        };
+        if existing.is_some() && o.dev.album_has_art(id) {
+            continue;
+        }
+        let cover = crate::tags::embedded_cover(&first.src)
+            .or_else(|| crate::library::folder_cover(first.src.parent()?).and_then(|p| std::fs::read(p).ok()));
+        let Some(cover) = cover else { continue };
+        if let Err(e) = send_album_art(o, id, &cover) {
+            problems.push(format!("Album “{}”: {e}", first.album));
+        }
+    }
+    problems
+}
+
+/// Give album object `id` a picture made from `cover` (any image): the size
+/// the device asks for, else the model's small-cover rule, else 300 pixels.
+fn send_album_art(o: &mut Opened, id: u32, cover: &[u8]) -> Result<(), String> {
+    let (max_px, max_bytes) = match (o.dev.album_art_size(), o.profile.small_covers) {
+        (Some((w, h)), small) => (w.min(h).min(small.map_or(u32::MAX, |s| s.0)), small.map_or(200_000, |s| s.1)),
+        (None, Some((px, bytes))) => (px, bytes),
+        (None, None) => (300, 200_000),
+    };
+    let jpeg = crate::msc::small_jpeg(cover, max_px, max_bytes).map_err(|e| format!("its cover couldn't be prepared ({e})"))?;
+    let (w, h) = image::load_from_memory(&jpeg).map(|i| (i.width(), i.height())).unwrap_or((max_px, max_px));
+    o.dev.set_album_art(id, &jpeg, w, h).map_err(|e| e.to_string())
+}
+
+/// A new cover for songs on the device: it goes to their album objects
+/// (made for them if there are none), which is where these players show
+/// covers from.
+fn set_cover(o: &mut Opened, ids: &[u32], cover: &[u8]) -> Vec<String> {
+    let mut problems = Vec::new();
+    let mut albums = o.dev.albums();
+    let mut done: Vec<u32> = Vec::new();
+    for id in ids {
+        if albums.iter().any(|a| done.contains(&a.id) && a.tracks.contains(id)) {
+            continue;
+        }
+        let album_id = match albums.iter().find(|a| a.tracks.contains(id)) {
+            Some(a) => a.id,
+            None => {
+                let Some(t) = o.tracks.get(id).cloned() else { continue };
+                let Some(name) = t.album.clone().filter(|a| !a.trim().is_empty()) else {
+                    problems.push(format!("{}: a song needs an album name for its cover to show", t.title.as_deref().unwrap_or("?")));
+                    continue;
+                };
+                // Every song of that album on the device.
+                let same = |x: &chinotto_mtp::Track| x.album.as_deref().is_some_and(|a| a.trim().eq_ignore_ascii_case(name.trim()));
+                let mut tracks: Vec<u32> = o.tracks.values().filter(|x| same(x)).map(|x| x.id).collect();
+                tracks.sort();
+                let a = chinotto_mtp::Album {
+                    name: name.clone(),
+                    artist: t.artist.clone(),
+                    genre: t.genre.clone(),
+                    tracks,
+                    ..Default::default()
+                };
+                match o.dev.create_album(&a) {
+                    Ok(new_id) => {
+                        albums.push(chinotto_mtp::Album { id: new_id, ..a });
+                        new_id
+                    }
+                    Err(e) => {
+                        problems.push(format!("Album “{name}”: {e}"));
+                        continue;
+                    }
+                }
+            }
+        };
+        done.push(album_id);
+        if let Err(e) = send_album_art(o, album_id, cover) {
+            let name = albums.iter().find(|a| a.id == album_id).map(|a| a.name.clone()).unwrap_or_default();
+            problems.push(format!("Album “{name}”: {e}"));
+        }
+    }
+    problems
 }
 
 /// Delete songs (the device library's song ids, which are the device's own
@@ -552,6 +710,14 @@ pub fn delete(key: &str, ids: &[u32], app: &AppHandle) -> Result<Vec<String>, St
     }
     for id in &gone {
         o.tracks.remove(id);
+    }
+    // Album objects left with none of their songs (only ones that had some of these).
+    if !gone.is_empty() {
+        for a in o.dev.albums() {
+            if a.tracks.iter().any(|t| gone.contains(t)) && !a.tracks.iter().any(|t| o.tracks.contains_key(t)) {
+                let _ = o.dev.delete(a.id);
+            }
+        }
     }
     refresh_space(o);
     drop(m);
@@ -579,7 +745,7 @@ pub fn edit(
     ids: &[u32],
     fields: &[chinotto_gpod::Field],
     rating: Option<u8>,
-    cover: bool,
+    cover: Option<&crate::tagwrite::CoverChange>,
 ) -> Result<Vec<String>, String> {
     use chinotto_gpod::Field as F;
     let state = app.state::<AppState>();
@@ -622,8 +788,12 @@ pub fn edit(
         if ignored {
             problems.push("Only title, artist, album, genre, composer, year, track number and rating are kept on an MTP device; the other changes were left out.".into());
         }
-        if cover {
-            problems.push("Covers of songs on an MTP device can't be changed yet.".into());
+        match cover {
+            Some(crate::tagwrite::CoverChange::Set(bytes, _)) => problems.extend(set_cover(o, ids, bytes)),
+            Some(crate::tagwrite::CoverChange::Remove) => {
+                problems.push("Covers can't be taken off songs on an MTP device yet; choose another image instead.".into())
+            }
+            None => {}
         }
     }
     crate::libcommands::change(app, lib, |l| {
