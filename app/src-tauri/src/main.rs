@@ -11,6 +11,7 @@ mod libcommands;
 mod library;
 mod msc;
 mod mtp;
+mod openmg;
 mod playback;
 mod scratch;
 mod setup;
@@ -57,6 +58,7 @@ fn main() {
             mtp::mtp_open,
             mtp::mtp_close,
             mtp::mtp_info,
+            openmg::openmg_view,
             msc::msc_save,
             msc::msc_state,
             msc::msc_allow,

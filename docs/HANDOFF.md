@@ -802,3 +802,20 @@ Devices were opened with `LIBMTP_Open_Raw_Device_Uncached`, and libmtp's `flush_
   control, and explains that generic writes remain disabled while native
   initialization and song transfer are under development.
 - The selected device clears from the page if it is unplugged.
+
+## 0075: fix the OpenMG toolbar type check
+
+- Bind the narrowed OpenMG source path before looking up its device so
+  `svelte-check` accepts the discriminated union.
+
+## 0076: show OpenMG track metadata read-only
+
+- Add a guarded `openmg_view` command that reads `OMGAUDIO/04CNTINF.DAT`
+  only after confirming the selected root is an OpenMG device. Parse the
+  documented fixed-size track records and the UTF-16BE tag blocks into title,
+  artist, album, genre, and duration fields.
+- Show those fields in a read-only table on the OpenMG device page. There is
+  still no playback, initialization, or write support for OpenMG devices.
+- The parser currently follows the one-track database observed on the user's
+  NW-S716F. Confirm the record-to-audio-file relationship and multi-track
+  behavior against a second track before building on this reader.
