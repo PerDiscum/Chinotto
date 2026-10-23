@@ -819,3 +819,35 @@ Devices were opened with `LIBMTP_Open_Raw_Device_Uncached`, and libmtp's `flush_
 - The parser currently follows the one-track database observed on the user's
   NW-S716F. Confirm the record-to-audio-file relationship and multi-track
   behavior against a second track before building on this reader.
+
+## 0077: document the OpenMG transfer investigation checkpoint
+
+- The user added two more songs with ManicStage. Both now appear and play on
+  the NW-S716F. The device currently reports six tracks in `04CNTINF.DAT`;
+  the two new files are `10F00/10000005.OMA` and
+  `10F00/10000006.OMA`.
+- For all six observed tracks, the per-track key bytes in `05CIDLST.DAT`
+  match the corresponding `.OMA` file at offset `0xC0D`. The audio payload
+  begins at `0xC60`. This links the track table, key list, and audio files on
+  this device, but does not yet define how to generate a valid new file/key.
+- ManicStage's latest transfer log shows one MP3 was copied without
+  transcoding and another was transcoded to MP3 320 kbps before being written.
+  Their playback on the Walkman confirms the result. Do not reuse ManicStage
+  source code; treat the device output and database diffs as observations.
+- The database changed in `04CNTINF.DAT`, `05CIDLST.DAT`, `03GINF01/02/03/2D`,
+  `02TREINF.DAT`, and `01TREE01/02/03/04/2D`. The current six-track snapshots
+  are under `/private/tmp/chinotto-openmg-baseline-6track-20261023` and the
+  three- and four-track comparisons are in sibling snapshot folders. These
+  are local research artifacts, not repository fixtures.
+- A standard OMA muxer is not a drop-in writer for this device's files. An
+  independent reverse-engineering project describes additional key locations
+  and a device-specific OpenMG variant; those claims do not fully match the
+  files visible in this user's currently working volume. Use this S716F's
+  observed behavior as the target and resolve the difference before enabling
+  writes. Do not infer a complete writer from the `04CNTINF`/`05CIDLST` diffs
+  alone, and keep generic MSC writes blocked for OpenMG roots.
+- Next work: continue decoding the device-specific `.OMA` header and the
+  changed index records, then implement a staged/off-device generator and
+  validate its output against the known-good six-track state before offering
+  any device write action. No files were written to the physical Walkman
+  during this investigation.
