@@ -1249,3 +1249,25 @@ the Walkman on Linux), especially on the Mac.
   instead of overwriting. Not added to any library, but libraries with a
   folder containing the album folder are rescanned afterwards.
 - Untested with a real disc on either system.
+
+## 0104: OpenMG saves were slow, not stuck
+
+Adding 3 songs to the NW-S716F (154 songs, 29 picture folders) took over five
+minutes after the files were copied, while the status still said "Adding 3 of
+3". The Walkman's FAT takes about two seconds per small file, and every save
+backed up all ~90 table and picture files, then wrote all of them again to the
+staging folder. Now:
+
+- The pictures are compared with the ones on the Walkman first; when they're
+  the same (songs added to albums it already has), they're neither backed up,
+  staged, nor swapped. Only the ~13 tables are.
+- Backups and restores copy bytes only (`fs::copy` also copies extended
+  attributes, which on FAT is an extra "._" file each).
+- While the song list is saved, the status says so ("Saving the Walkman's song
+  list… this can take a few minutes"); progress events arriving after the work
+  is done no longer bring back "Adding N of N".
+- Old backups: kept the newest ten by the time in the name. Older builds named
+  them without zero padding, so text sorting deleted the newest first.
+
+Still slow: adding a new album renumbers the pictures, so all of them are
+rewritten. Writing only the changed picture files is the next step.
