@@ -250,6 +250,8 @@ static int probe_device_descriptor(libusb_device *dev, FILE *dumpfile)
   ret = libusb_get_device_descriptor (dev, &desc);
   if (ret != LIBUSB_SUCCESS) return 0;
   sansa_v2 = desc.idVendor == 0x0781 && desc.idProduct == 0x7422;
+  if (sansa_v2)
+    LIBMTP_INFO("Sansa e260 v2: starting Microsoft OS descriptor probe\n");
   /*
    * Don't examine devices that are not likely to
    * contain any MTP interface, update this the day
@@ -278,6 +280,8 @@ static int probe_device_descriptor(libusb_device *dev, FILE *dumpfile)
   ret = libusb_open(dev, &devh);
   if (ret != LIBUSB_SUCCESS) {
     /* Could not open this device */
+    if (sansa_v2)
+      LIBMTP_INFO("Sansa e260 v2: descriptor probe could not open USB device (%d)\n", ret);
     return 0;
   }
 
@@ -310,6 +314,10 @@ static int probe_device_descriptor(libusb_device *dev, FILE *dumpfile)
 	   */
 	  if (intf->bNumEndpoints != 3)
 	    continue;
+
+          if (sansa_v2)
+            LIBMTP_INFO("Sansa e260 v2: descriptor probe found config %d interface %d altsetting %d class 0x%02x with three endpoints\n",
+                        i, j, k, intf->bInterfaceClass);
 
 	  /*
 	   * We only want to probe for the OS descriptor if the
@@ -394,6 +402,8 @@ static int probe_device_descriptor(libusb_device *dev, FILE *dumpfile)
 
     /* Read the special descriptor */
     ret = libusb_get_descriptor(devh, 0x03, 0xee, buf, sizeof(buf));
+    if (sansa_v2)
+      LIBMTP_INFO("Sansa e260 v2: Microsoft string descriptor request returned %d bytes\n", ret);
 
     /*
      * If something failed we're probably stalled to we need
@@ -413,8 +423,11 @@ static int probe_device_descriptor(libusb_device *dev, FILE *dumpfile)
       data_dump_ascii(dumpfile, buf, ret, 16);
     }
 
-    /* Check if descriptor length is at least 10 bytes */
-    if (ret < 10) {
+    /* The descriptor signature uses bytes through 8 and the vendor request
+     * code below reads byte 16, so require that byte to be present. */
+    if (ret < 17) {
+      if (sansa_v2)
+        LIBMTP_INFO("Sansa e260 v2: Microsoft string descriptor was too short for its request code (%d bytes)\n", ret);
       libusb_close(devh);
       return 0;
     }
@@ -422,12 +435,16 @@ static int probe_device_descriptor(libusb_device *dev, FILE *dumpfile)
     /* Check if this device has a Microsoft Descriptor */
     if (!((buf[2] == 'M') && (buf[4] == 'S') &&
 	  (buf[6] == 'F') && (buf[8] == 'T'))) {
+      if (sansa_v2)
+        LIBMTP_INFO("Sansa e260 v2: string descriptor did not contain the Microsoft OS descriptor signature\n");
       libusb_close(devh);
       return 0;
     }
 
     /* Check if device responds to control message 1 or if there is an error */
     cmd = buf[16];
+    if (sansa_v2)
+      LIBMTP_INFO("Sansa e260 v2: Microsoft OS descriptor vendor request is 0x%02x\n", cmd);
     ret = libusb_control_transfer (devh,
 			   LIBUSB_ENDPOINT_IN | LIBUSB_RECIPIENT_DEVICE | LIBUSB_REQUEST_TYPE_VENDOR,
 			   cmd,
@@ -436,6 +453,8 @@ static int probe_device_descriptor(libusb_device *dev, FILE *dumpfile)
 			   buf,
 			   sizeof(buf),
 			   USB_TIMEOUT_DEFAULT);
+    if (sansa_v2)
+      LIBMTP_INFO("Sansa e260 v2: Microsoft OS descriptor vendor request returned %d bytes\n", ret);
 
     // Dump it, if requested
     if (dumpfile != NULL && ret > 0) {
@@ -447,6 +466,8 @@ static int probe_device_descriptor(libusb_device *dev, FILE *dumpfile)
     if (ret <= 0x15) {
       /* TODO: If there was an error, flag it and let the user know somehow */
       /* if(ret == -1) {} */
+      if (sansa_v2)
+        LIBMTP_INFO("Sansa e260 v2: Microsoft OS descriptor vendor response was too short (%d bytes)\n", ret);
       libusb_close(devh);
       return 0;
     }
@@ -454,9 +475,14 @@ static int probe_device_descriptor(libusb_device *dev, FILE *dumpfile)
     /* Check if device is MTP or if it is something like a USB Mass Storage
        device with Janus DRM support */
     if ((buf[0x12] != 'M') || (buf[0x13] != 'T') || (buf[0x14] != 'P')) {
+      if (sansa_v2)
+        LIBMTP_INFO("Sansa e260 v2: Microsoft OS descriptor response did not contain the MTP signature\n");
       libusb_close(devh);
       return 0;
     }
+
+    if (sansa_v2)
+      LIBMTP_INFO("Sansa e260 v2: Microsoft OS descriptor identified MTP; continuing to session setup\n");
 
     /* After this point we are probably dealing with an MTP device */
 
@@ -501,6 +527,9 @@ static int probe_device_descriptor(libusb_device *dev, FILE *dumpfile)
     libusb_close(devh);
     return 1;
   }
+
+  if (sansa_v2)
+    LIBMTP_INFO("Sansa e260 v2: no vendor-specific device/interface found for Microsoft OS descriptor probe\n");
 
   /* Close the USB device handle */
   libusb_close(devh);
@@ -2291,7 +2320,11 @@ LIBMTP_error_number_t configure_usb_device(LIBMTP_raw_device_t *device,
    */
   if (FLAG_ALWAYS_PROBE_DESCRIPTOR(ptp_usb)) {
     // Massage the device descriptor
-    (void) probe_device_descriptor(ldevice, NULL);
+    int descriptor_probe_result = probe_device_descriptor(ldevice, NULL);
+    if (device->device_entry.vendor_id == 0x0781 &&
+        device->device_entry.product_id == 0x7422)
+      LIBMTP_INFO("Sansa e260 v2: pre-session descriptor probe %s\n",
+                  descriptor_probe_result ? "succeeded" : "did not identify MTP");
   }
 
   /* Assign interface and endpoints to usbinfo... */

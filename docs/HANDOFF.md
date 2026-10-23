@@ -1135,3 +1135,16 @@ libusb sources to upstream 1.0.30, which includes Darwin backend concurrency
 fixes and macOS compatibility changes. This is a diagnostic dependency update,
 not a confirmed Sansa fix. Rebuild on macOS and retest opening the Sansa; also
 check Linux and Windows builds because common libusb sources changed.
+
+## 0099: Log the Sansa e260 v2 OS descriptor probe
+
+Homebrew's standalone libmtp 1.1.23 still skips the Microsoft OS descriptor
+probe on this Mac because its interface check reports an attached kernel
+interface, then fails at OpenSession. Chinotto has a Sansa-specific exception
+to that guard and already asks libmtp to probe this model before session setup,
+so the Homebrew log cannot show whether Chinotto's probe succeeds. Add
+Sansa-only debug messages for the descriptor request, its response, and the
+result before OpenSession. Also require the string descriptor's byte 16 to be
+present before reading the vendor request code. This is diagnostic; the next
+test should capture a Chinotto run with `LIBMTP_DEBUG=5` and report the Sansa
+descriptor-probe lines before the OpenSession messages.
