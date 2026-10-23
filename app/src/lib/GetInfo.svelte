@@ -253,7 +253,7 @@
         </label>
       </div>
     {:else if tab === "sorting"}
-      <p class="hint">{store.source.kind === "library" ? t("Chinotto and iPods sort by these instead of the names when they're filled in (for example “Beatles” for “The Beatles”).") : t("The iPod sorts by these instead of the names when they're filled in (for example “Beatles” for “The Beatles”).")}</p>
+      <p class="hint">{store.source.kind === "library" ? t("Chinotto and iPods sort by these instead of the names when they're filled in (for example “Beatles” for “The Beatles”).") : t("The device sorts by these instead of the names when they're filled in (for example “Beatles” for “The Beatles”).")}</p>
       <div class="sortgrid">
         {#each SORT_PAIRS as [name, sort] (sort)}
           {#if !(many && name === "title")}
@@ -292,7 +292,7 @@
         </div>
         <div class="side">
           {#if artwork && artwork !== "remove"}
-            <p class="hint">{t("This new cover is {size}.", { size: artwork.size })} {store.source.kind === "library" ? t("It's saved into the song files when you press OK; images larger than 600 px on the shorter side are shrunk to that.") : t("It will be automatically resized such that its shortest side measures 600px. The change applies once the image is saved to your iPod.")}</p>
+            <p class="hint">{t("This new cover is {size}.", { size: artwork.size })} {store.source.kind === "library" ? t("It's saved into the song files when you press OK; images larger than 600 px on the shorter side are shrunk to that.") : t("It will be automatically resized such that its shortest side measures 600px. The change applies once the image is saved to your device.")}</p>
           {:else if artwork === "remove"}
             <p class="hint">{t("The cover is taken off when you press OK.")}</p>
           {:else}
@@ -333,7 +333,7 @@
 
   {#snippet buttons()}
     {#if readOnly}
-      <span class="left">{t("Read-only: turn on “Allow changes” on the iPod's page to edit.")}</span>
+      <span class="left">{t("Read-only: turn on “Allow changes” on the device's page to edit.")}</span>
       <button class="primary" onclick={close}>{t("Done")}</button>
     {:else}
       <button onclick={close} disabled={saving}>{t("Cancel")}</button>

@@ -22,7 +22,7 @@
     <img class="emblem" src={emblem} alt="" aria-hidden="true" />
     <h1>{t("Connect your device!")}</h1>
     <p>
-      {t("Welcome to Chinotto! Ready? Plug in your digital audio player to begin! If you’re using a classic, pre-iOS Apple iPod or an MTP device (such as a Creative Zen), it will show up here automatically. If you are using an MSC device (e.g., most Sony Walkman and Sansa models), click below to add the drive manually to Chinotto.")}
+      {t("Welcome to Chinotto! Ready? Plug in your digital audio player to begin! A classic, pre-iOS Apple iPod, an MTP device (such as a Creative Zen), or a Sony Walkman with OpenMG (most NW-A/S/E models) shows up here automatically. For any other drive-like player (most Sansa models, and older MSC Walkmans), click below to add it manually.")}
     </p>
     <div class="buttons">
       <button onclick={() => store.openFolder()}>{t("Add Drive…")}</button>

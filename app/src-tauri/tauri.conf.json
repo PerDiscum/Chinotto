@@ -35,8 +35,8 @@
       "rpm"
     ],
     "category": "Music",
-    "shortDescription": "Music library manager and iPod sync",
-    "longDescription": "Chinotto manages a music library and keeps classic iPods and other players in sync.",
+    "shortDescription": "Music library manager and music player sync",
+    "longDescription": "Chinotto manages a music library and keeps classic iPods, MTP devices, and OpenMG and MSC-mode Walkmans and other drive-based players in sync.",
     "copyright": "\u00a9 2026 Chinotto contributors",
     "license": "MIT",
     "icon": [

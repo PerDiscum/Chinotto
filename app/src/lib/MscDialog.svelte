@@ -56,7 +56,7 @@
   {:else if !info}
     <p class="muted">{t("Looking at the drive…")}</p>
   {:else if info.isIpod}
-    <p>{t("This is an iPod: use Open iPod Folder… instead.")}</p>
+    <p>{t("This is an iPod: use Set Up iPod… or just plug it in, instead of adding it here.")}</p>
   {:else}
     <div class="drive">
       {#if deviceImage(cfg.icon)}<img src={deviceImage(cfg.icon)} alt="" />{/if}

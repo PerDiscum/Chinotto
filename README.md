@@ -1,31 +1,68 @@
 # Chinotto
 
-A music library manager and sync app for classic iPods and other players,
-modelled on the workflows of classic iTunes (9/10 era).
+A music library manager and sync app for classic iPods and other digital
+audio players, modelled on the workflows of classic iTunes (9/10 era).
 
-Status: early. The desktop app opens a classic iPod (automatically when it's
-plugged in) and lets you browse it: source list with the iPod's playlists,
-Genre → Artist → Album column browser, sortable song list, search, covers,
-and a device page with the capacity bar.
+Status: early. The desktop app recognises a player when it's plugged in —
+a classic, pre-iOS iPod, an MTP device (such as a Creative Zen), or a Sony
+Walkman using OpenMG (most NW-A/S/E models) — and lets you browse it: source
+list with its playlists, Genre → Artist → Album column browser, sortable song
+list, search, covers, and a device page with the capacity bar. Other
+drive-like players (most Sansa models, older MSC Walkmans) can be added by
+hand the same way, once told which folders hold the music and playlists.
 
-Once you switch on "Allow changes to this iPod" on its page, it can also edit
-songs (Song Details), add and delete them, and make and change playlists. Every
-save backs up the iPod's database first (`iPod_Control/iTunes/Chinotto Backups`).
+Once you switch on "Allow changes" on a player's page, Chinotto can also edit
+songs (Song Details), add and delete them, and make and change playlists.
+Every save backs up the player's database first.
 
-It also plays the iPod's songs (MP3, AAC, Apple Lossless, WAV, AIFF; FLAC and
-Ogg Vorbis too, for when it has its own library).
+It also plays a player's songs: MP3 and AAC everywhere; Apple Lossless, WAV
+and AIFF on iPods and MTP devices; FLAC and Ogg Vorbis too, for a library of
+your own on your computer.
+
+## Supported players
+
+- **Classic iPods** (up to the iPod classic, nano 6G and shuffle 4G — not the
+  iOS-based touch): full read/write support, including playlists, ratings,
+  and artwork. The nano 6G's compressed database is handled separately (see
+  Acknowledgements) and its write support is still experimental.
+- **MTP devices** (Creative Zen, Sansa in MTP mode, and similar): browsing,
+  playback, adding and deleting songs, editing tags and covers, and writing
+  M3U/M3U8 playlists.
+- **MSC (mass-storage) players** — anything that just shows up as a drive,
+  such as most Sansa models and Walkmans not using OpenMG: add them once with
+  **Add Drive…**, pointing Chinotto at the music and playlist folders; after
+  that they're recognised automatically.
+- **Sony Walkmans using OpenMG** (most NW-A, NW-S and NW-E series, the format
+  used instead of plain MSC on those models): recognised and opened
+  automatically, with full read/write support — adding, deleting, and editing
+  songs and covers, with albums kept in track order. The OpenMG database
+  format was reverse-engineered for this project; see `docs/HANDOFF.md` for
+  the write-up.
+
+Reading and writing MP3s, AACs, and other common formats is built in;
+anything a player can't take as-is is converted first.
 
 ## Layout
 
 - `crates/chinotto-ipod` — iTunesDB / ArtworkDB parsing and writing, RGB565
   thumbnails, SysInfo. No external dependencies.
 - `crates/chinotto-gpod` — changes the iPod's database through a bundled
-  libgpod (LGPL; see its README).
+  libgpod (LGPL; see its README), including the nano 6G's compressed
+  database (see Acknowledgements).
+- `crates/chinotto-mtp` — MTP device access (listing, reading, and writing
+  songs, covers and playlists).
+- `crates/chinotto-omg` — the Sony OpenMG `.OMA` file format and OMGAUDIO
+  database, built from scratch for this project (see Acknowledgements for
+  what it doesn't cover). No external dependencies.
 - `crates/chinotto-player` — audio playback (Symphonia + cpal).
 - `app/` — the desktop app (Tauri 2).
   - `app/src/` — the window's interface (Svelte 5 + TypeScript).
-  - `app/src-tauri/` — the Rust side: device detection, opening an iPod,
-    serving covers (`art:` URLs), eject.
+  - `app/src-tauri/` — the Rust side: device detection and watching
+    (`devices.rs`), the iPod (`setup.rs`, `state.rs`, `write.rs`,
+    `cover.rs`), MTP devices (`mtp.rs`), drive-based MSC players
+    (`msc.rs`), OpenMG Walkmans (`openmg.rs`), playback (`playback.rs`),
+    libraries of your own files (`library.rs`), and format conversion
+    (`convert.rs`).
 - `.github/workflows/` — `ci.yml` checks every push on Linux and macOS;
   `build.yml` builds the installable apps.
 
@@ -108,19 +145,21 @@ Then:
     npm run tauri dev       # run with live reload
     npm run tauri build     # make the installable app (in target/release/bundle)
 
-To open a copy of an iPod's folder at start-up instead of a plugged-in iPod,
-pass it as the first argument or set `CHINOTTO_OPEN=/path/to/folder`.
+To open a copy of a player's folder at start-up (an iPod, or an MSC player
+already set up with Chinotto), pass it as the first argument or set
+`CHINOTTO_OPEN=/path/to/folder`.
 
-## Tests against a real iPod
+## Tests against a real device
 
-Some tests need a copy of an iPod's database files. They are never committed.
-Point `CHINOTTO_TEST_IPOD` at a folder laid out like an iPod root:
+Some tests need a copy of a real player's database files. They are never
+committed. Point `CHINOTTO_TEST_IPOD` at a folder laid out like an iPod root:
 
     $CHINOTTO_TEST_IPOD/iPod_Control/iTunes/iTunesDB
     $CHINOTTO_TEST_IPOD/iPod_Control/Artwork/ArtworkDB   (optional)
 
-Without it, those tests are skipped. `fixtures-private/` is git-ignored for
-keeping such a copy inside the checkout.
+and `CHINOTTO_TEST_OMG` at a copy of a Sony Walkman's OMGAUDIO folder.
+Without these, the tests that need them are skipped. `fixtures-private/` is
+git-ignored for keeping such copies inside the checkout.
 
 ## Acknowledgements
 

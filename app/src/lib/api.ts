@@ -49,14 +49,14 @@ export async function pickMusicFiles(): Promise<string[]> {
   const r = await open({
     multiple: true,
     directory: false,
-    title: "Add to iPod",
-    filters: [{ name: "Music the iPod plays", extensions: AUDIO }],
+    title: "Add Songs",
+    filters: [{ name: "Music", extensions: AUDIO }],
   });
   return Array.isArray(r) ? r : typeof r === "string" ? [r] : [];
 }
 
 export async function pickMusicFolder(): Promise<string | null> {
-  const r = await open({ directory: true, multiple: false, title: "Add a folder to iPod" });
+  const r = await open({ directory: true, multiple: false, title: "Add a Folder of Songs" });
   return typeof r === "string" ? r : null;
 }
 
