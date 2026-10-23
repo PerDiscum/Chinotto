@@ -48,6 +48,8 @@ export interface OpenMgTrack {
   album: string | null;
   genre: string | null;
   lengthMs: number;
+  /** OMA filename linked by the track's key in 05CIDLST.DAT, when found. */
+  audioFile: string | null;
 }
 
 export interface OpenMgView {
