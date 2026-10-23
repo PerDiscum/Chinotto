@@ -1124,3 +1124,14 @@ Apple builds only, libmtp now re-selects the active configuration for USB
 `0781:7422` before claiming the interface and opening the session. This is a
 narrow experimental attempt to match the known-good Windows setup sequence;
 it needs testing on the Sansa.
+
+## 0098: Update bundled libusb to 1.0.30
+
+The clean macOS 27.0.1 log confirms that the Sansa opens and claims its USB
+interface, but its first PTP `OpenSession` bulk-OUT transfer stalls; clearing
+the halt, re-selecting configuration 1, and libmtp's reset retry do not
+complete a session. Chinotto's vendored libusb was 1.0.29. Update its tracked
+libusb sources to upstream 1.0.30, which includes Darwin backend concurrency
+fixes and macOS compatibility changes. This is a diagnostic dependency update,
+not a confirmed Sansa fix. Rebuild on macOS and retest opening the Sansa; also
+check Linux and Windows builds because common libusb sources changed.
