@@ -194,3 +194,53 @@ fn write_tag(record: &mut [u8], offset: usize, id: &[u8; 4], value: &str, size: 
     }
     Ok(())
 }
+
+/// Prepare a `05CIDLST.DAT` row from an existing row, replacing only its key.
+#[allow(dead_code)]
+pub(crate) fn prepare_track_key_record(template: &[u8], key: [u8; 11]) -> Result<[u8; 48], String> {
+    if template.len() != 48 {
+        return Err("OpenMG track-key template must be exactly 48 bytes.".into());
+    }
+    let mut record = [0u8; 48];
+    record.copy_from_slice(template);
+    record[13..24].copy_from_slice(&key);
+    Ok(record)
+}
+
+/// Append one fixed-size row to an OpenMG table whose count and payload length
+/// are stored in the common 48-byte header. This only prepares table bytes in
+/// memory; it must be combined with all related indexes before any device write.
+#[allow(dead_code)]
+pub(crate) fn append_counted_record(table: &[u8], record: &[u8], magic: &[u8; 4]) -> Result<Vec<u8>, String> {
+    const HEADER_SIZE: usize = 48;
+    const COUNT_OFFSET: usize = 0x24;
+    const RECORD_SIZE_OFFSET: usize = 0x26;
+    const PAYLOAD_LENGTH_OFFSET: usize = 0x1a;
+
+    if table.len() < HEADER_SIZE || &table[..4] != magic {
+        return Err("OpenMG table header is missing or has an unexpected type.".into());
+    }
+    let declared_record_size = u16::from_be_bytes([table[RECORD_SIZE_OFFSET], table[RECORD_SIZE_OFFSET + 1]]) as usize;
+    if declared_record_size == 0 || record.len() != declared_record_size {
+        return Err("OpenMG row size does not match the table's declared record size.".into());
+    }
+    let count = u16::from_be_bytes([table[COUNT_OFFSET], table[COUNT_OFFSET + 1]]) as usize;
+    let expected_len = HEADER_SIZE
+        .checked_add(count.checked_mul(declared_record_size).ok_or("OpenMG table is too large.")?)
+        .ok_or("OpenMG table is too large.")?;
+    if table.len() != expected_len {
+        return Err("OpenMG table length does not match its header count.".into());
+    }
+    let new_count = count.checked_add(1).filter(|count| *count <= u16::MAX as usize).ok_or("OpenMG table has reached its record limit.")?;
+    let payload_len = 16usize
+        .checked_add(new_count.checked_mul(declared_record_size).ok_or("OpenMG table is too large.")?)
+        .ok_or("OpenMG table is too large.")?;
+    let payload_len = u32::try_from(payload_len).map_err(|_| "OpenMG table is too large.")?;
+
+    let mut result = Vec::with_capacity(expected_len + declared_record_size);
+    result.extend_from_slice(table);
+    result.extend_from_slice(record);
+    result[COUNT_OFFSET..COUNT_OFFSET + 2].copy_from_slice(&(new_count as u16).to_be_bytes());
+    result[PAYLOAD_LENGTH_OFFSET..PAYLOAD_LENGTH_OFFSET + 4].copy_from_slice(&payload_len.to_be_bytes());
+    Ok(result)
+}

@@ -896,3 +896,14 @@ Devices were opened with `LIBMTP_Open_Raw_Device_Uncached`, and libmtp's `flush_
 - This is only an off-device building block. It is not called by a transfer
   command and does not update `05CIDLST`, group tables, tree indexes, artwork,
   or OMA files. OpenMG device writes remain disabled.
+
+## 0081: prepare OpenMG track-key and counted-table rows
+
+- Add an in-memory `05CIDLST.DAT` row helper that preserves the opaque row
+  bytes and substitutes the 11-byte key obtained from the candidate OMA file.
+- Add a generic counted-table append helper for the observed 48-byte OpenMG
+  header layout. It validates the magic, declared row size, count, and exact
+  current table length, then updates the count and payload-length fields.
+- These helpers do not write files or update group/tree relationships. They
+  are groundwork for an off-device generator only; device writing remains
+  disabled until the full database can be generated and validated together.
