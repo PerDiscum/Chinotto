@@ -69,6 +69,23 @@ pub fn is_mount_point(_path: &Path) -> bool {
 pub fn describe(root: &Path, manual: bool) -> DeviceInfo {
     // A folder that isn't its own disk (e.g. a copy of an iPod) can't be ejected.
     let manual = manual || !is_mount_point(root);
+    if crate::msc::is_openmg_root(root) {
+        let (capacity, free) = disk_space(root);
+        return DeviceInfo {
+            path: root.to_string_lossy().into_owned(),
+            volume: root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "WALKMAN".into()),
+            model: Some("Sony Walkman S-series (OpenMG)".into()),
+            model_number: None,
+            icon: "sony-nwz".into(),
+            identity: None,
+            capacity,
+            free,
+            manual,
+            needs_setup: false,
+            kind: "openmg",
+            library: None,
+        };
+    }
     if !is_ipod_root(root) && !needs_setup(root) {
         if let Some(cfg) = crate::msc::read_config(root) {
             let (capacity, free) = disk_space(root);
@@ -152,7 +169,7 @@ impl Scanner {
         self.known.retain(|p, _| now.iter().any(|(q, _)| q == p));
         let mut out = Vec::new();
         for (p, manual) in now {
-            let probe = |p: &Path| (is_ipod_root(p) || needs_setup(p) || p.join(crate::msc::CONFIG).is_file()).then(|| describe(p, manual));
+            let probe = |p: &Path| (is_ipod_root(p) || needs_setup(p) || crate::msc::is_openmg_root(p) || p.join(crate::msc::CONFIG).is_file()).then(|| describe(p, manual));
             let entry = self.known.entry(p.clone()).or_insert_with(|| (std::time::Instant::now(), probe(&p)));
             // A volume can show up a moment before it's readable: keep looking for a few seconds.
             if entry.1.is_none() && entry.0.elapsed() < Duration::from_secs(8) {

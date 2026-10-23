@@ -21,6 +21,12 @@ use crate::state::AppState;
 
 pub const CONFIG: &str = ".chinotto-device.json";
 
+/// Sony's SonicStage-era S-series players keep their library in OMGAUDIO;
+/// they are not ordinary file-copy MSC players even though the drive mounts.
+pub fn is_openmg_root(root: &Path) -> bool {
+    root.join("OMGAUDIO").is_dir()
+}
+
 /// A player's settings, as kept on it.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", default)]
@@ -165,6 +171,9 @@ pub fn msc_inspect(path: String) -> Result<DriveInfo, String> {
     if !root.is_dir() {
         return Err(format!("{path} isn't there"));
     }
+    if is_openmg_root(&root) {
+        return Err("This Sony Walkman uses an OMGAUDIO/OpenMG database. It can't be set up as a generic drive player.".into());
+    }
     let mut folders: Vec<String> = std::fs::read_dir(&root)
         .map_err(|e| format!("Couldn't look inside {path}: {e}"))?
         .flatten()
@@ -207,6 +216,9 @@ fn clean_folder(f: &str) -> Result<String, String> {
 #[tauri::command]
 pub fn msc_save(path: String, config: MscConfig, app: AppHandle) -> Result<crate::devices::DeviceInfo, String> {
     let root = PathBuf::from(&path);
+    if is_openmg_root(&root) {
+        return Err("This Sony Walkman uses an OMGAUDIO/OpenMG database. Generic drive setup is disabled for this device.".into());
+    }
     let mut cfg = config;
     if cfg.id.is_empty() {
         // Keep the id of settings already there (a re-setup keeps its songs list).
@@ -435,6 +447,9 @@ fn resolve(entry: &str, base: &Path, root: Option<&Path>) -> Option<PathBuf> {
 /// The player at `path`, its settings and its model.
 fn player(path: &str) -> Result<(PathBuf, MscConfig, Profile), String> {
     let root = PathBuf::from(path);
+    if is_openmg_root(&root) {
+        return Err("This Sony Walkman uses an OMGAUDIO/OpenMG database. Generic MSC changes are disabled for this device.".into());
+    }
     let cfg = read_config(&root).ok_or("That player isn't set up (or isn't plugged in)")?;
     let profile = profiles().into_iter().find(|p| p.key == cfg.model).unwrap_or_else(|| profiles().pop().unwrap());
     Ok((root, cfg, profile))

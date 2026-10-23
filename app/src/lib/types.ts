@@ -14,8 +14,8 @@ export interface DeviceInfo {
   manual: boolean;
   /** An iPod without a database: it needs setting up first. */
   needsSetup: boolean;
-  /** "ipod", "msc" for a player set up as a drive, or "mtp". */
-  kind: "ipod" | "msc" | "mtp";
+  /** "ipod", generic drive player ("msc"), MTP device, or legacy Sony OpenMG Walkman. */
+  kind: "ipod" | "msc" | "mtp" | "openmg";
   /** MSC player: the library listing its songs. */
   library: string | null;
 }
