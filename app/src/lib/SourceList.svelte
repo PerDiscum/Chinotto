@@ -189,7 +189,9 @@
             store.menu = {
               x: e.clientX,
               y: e.clientY,
-              items: d.kind === "mtp"
+              items: d.kind === "openmg"
+                ? [{ label: t("OpenMG Walkman Info…"), action: () => (store.dialog = { kind: "openmg", path: d.path }) }]
+                : d.kind === "mtp"
                 ? [{ label: t("Let Other Programs Use It"), disabled: !store.mtpInfos[d.path], action: () => store.closeMtp(d.path) }]
                 : lib
                 ? [
@@ -206,7 +208,7 @@
           <button
             class="name"
             onclick={() =>
-              d.kind === "mtp" ? store.openMtp(d.path) : d.library ? store.select({ kind: "player", path: d.path }) : isOpen(d.path) ? store.select({ kind: "device" }) : store.open(d.path)}
+              d.kind === "openmg" ? (store.dialog = { kind: "openmg", path: d.path }) : d.kind === "mtp" ? store.openMtp(d.path) : d.library ? store.select({ kind: "player", path: d.path }) : isOpen(d.path) ? store.select({ kind: "device" }) : store.open(d.path)}
             title={d.path}
           >
             {#if deviceImage(store.iconFor(d))}<img class="dev" src={deviceImage(store.iconFor(d))} alt="" />{:else}<Icon name="ipod" />{/if}

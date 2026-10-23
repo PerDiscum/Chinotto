@@ -27,6 +27,8 @@ export type Dialog =
   | { kind: "setup"; path: string; rebuild: boolean }
   /** Set up (or change the settings of) a player that shows up as a drive. */
   | { kind: "msc"; path: string }
+  /** A Sony Walkman with the legacy OpenMG/OMGAUDIO database. */
+  | { kind: "openmg"; path: string }
   | { kind: "delete-player-songs"; path: string; ids: number[] };
 
 function loadVolume(): number {

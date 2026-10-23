@@ -780,3 +780,17 @@ Devices were opened with `LIBMTP_Open_Raw_Device_Uncached`, and libmtp's `flush_
   companion SQLite indexes. Song files are still removed only after both
   staged databases are installed successfully.
 - Nano 6 metadata edits and deletion still require a real-device check.
+
+## 0073: identify legacy Sony OpenMG Walkmans safely
+
+- Detect mounted roots containing `OMGAUDIO` as a separate `openmg` device
+  kind, rather than attaching the generic MSC library to the usually empty
+  `MUSIC` folder.
+- Open a device-info dialog from the sidebar. Generic MSC setup is rejected by
+  `msc_inspect`/`msc_save`, and the shared player resolver blocks generic
+  settings, copy, and delete commands for these roots.
+- This is only recognition and write protection. Initialization, parsing of
+  OMGAUDIO's indexed database, and OpenMG-compatible song encoding/transfer
+  are not implemented. The user's Sony NW-S716F was initialized by ManicStage;
+  its live database had one playable `.OMA` track in `OMGAUDIO` while `MUSIC`
+  remained empty. Do not treat it as a normal `NWZ` drag-and-drop Walkman.
