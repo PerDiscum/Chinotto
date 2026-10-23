@@ -1148,3 +1148,15 @@ result before OpenSession. Also require the string descriptor's byte 16 to be
 present before reading the vendor request code. This is diagnostic; the next
 test should capture a Chinotto run with `LIBMTP_DEBUG=5` and report the Sansa
 descriptor-probe lines before the OpenSession messages.
+
+## 0100: Probe the Sansa e260 v2 Microsoft descriptor despite class 0
+
+Patch 0099's Chinotto log confirms the Sansa-specific descriptor probe runs
+before session setup and sees a three-endpoint interface, but its device and
+interface classes are both `0x00`. libmtp normally sends the Microsoft OS
+descriptor request only for vendor-specific device/interface classes, so it
+skips that request and then OpenSession stalls. For USB `0781:7422` only,
+allow the Microsoft descriptor request even when the reported classes are
+zero. The new diagnostic lines will confirm whether the device responds with
+the OS descriptor and MTP signature. This remains experimental and needs a
+macOS retest.

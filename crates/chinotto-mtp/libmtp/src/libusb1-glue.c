@@ -398,7 +398,11 @@ static int probe_device_descriptor(libusb_device *dev, FILE *dumpfile)
    * or one of the interfaces found is.
    */
   if (desc.bDeviceClass == LIBUSB_CLASS_VENDOR_SPEC ||
-      found_vendor_spec_interface) {
+      found_vendor_spec_interface || sansa_v2) {
+    if (sansa_v2 && !found_vendor_spec_interface &&
+        desc.bDeviceClass != LIBUSB_CLASS_VENDOR_SPEC)
+      LIBMTP_INFO("Sansa e260 v2: forcing Microsoft OS descriptor request despite class 0x%02x descriptors\n",
+                  desc.bDeviceClass);
 
     /* Read the special descriptor */
     ret = libusb_get_descriptor(devh, 0x03, 0xee, buf, sizeof(buf));
