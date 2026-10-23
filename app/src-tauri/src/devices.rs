@@ -76,14 +76,14 @@ pub fn describe(root: &Path, manual: bool) -> DeviceInfo {
             volume: root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "WALKMAN".into()),
             model: Some("Sony Walkman S-series (OpenMG)".into()),
             model_number: None,
-            icon: "sony-nwz".into(),
-            identity: None,
+            icon: "sony-openmg".into(),
+            identity: Some(crate::openmg::identity(root)),
             capacity,
             free,
             manual,
             needs_setup: false,
             kind: "openmg",
-            library: None,
+            library: Some(crate::openmg::lib_id(root)),
         };
     }
     if !is_ipod_root(root) && !needs_setup(root) {
@@ -209,6 +209,14 @@ pub fn start_watcher(app: AppHandle) {
                         crate::msc::attach(&app, Path::new(&d.path), &cfg);
                     }
                 }
+                // OpenMG Walkmans: their song lists, read from their databases.
+                for d in list.iter().filter(|d| d.kind == "openmg" && !last.iter().any(|(p, _)| p == &d.path)) {
+                    crate::openmg::attach(&app, Path::new(&d.path));
+                }
+                crate::openmg::detach_missing(
+                    &app,
+                    &list.iter().filter(|d| d.kind == "openmg").map(|d| d.path.clone()).collect::<Vec<_>>(),
+                );
                 last = paths;
                 let _ = app.emit("devices-changed", &list);
             }

@@ -316,6 +316,7 @@ pub async fn add(path: String, dbids: Vec<String>, files: Vec<String>, app: AppH
                 return Err(e);
             }
             res.skipped.extend(save_numbers(&omg, &db, &numbered));
+            attach(&app, &root);
         }
         Ok(res)
     })
@@ -363,16 +364,7 @@ fn save_numbers(omg: &Path, db: &Database, which: &[usize]) -> Vec<String> {
     for &i in which {
         let s = &db.songs[i];
         let Some(file) = &s.file else { continue };
-        let tags = oma::Tags {
-            title: s.title.clone(),
-            artist: s.artist.clone(),
-            album: s.album.clone(),
-            genre: s.genre.clone(),
-            year: s.year,
-            track: s.track,
-            disc: s.disc,
-        };
-        if let Err(e) = oma::rewrite_tag(&omg.join(file), &tags, s.length_ms) {
+        if let Err(e) = oma::rewrite_tag(&omg.join(file), &tags_of(s), s.length_ms) {
             problems.push(format!("{}: couldn't keep its track number ({e})", s.title));
         }
     }
@@ -396,6 +388,7 @@ pub async fn openmg_reorder(path: String, app: AppHandle) -> Result<usize, Strin
         let numbered = number_from_libraries(&app, &mut db);
         install(&root, &db)?;
         let problems = save_numbers(&omg, &db, &numbered);
+        attach(&app, &root);
         if let Some(p) = problems.first() {
             return Err(p.clone());
         }
@@ -410,8 +403,17 @@ pub async fn openmg_reorder(path: String, app: AppHandle) -> Result<usize, Strin
 fn install(root: &Path, db: &Database) -> Result<(), String> {
     let omg = root.join("OMGAUDIO");
     let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-    let backup = root.join(BACKUPS).join(format!("OpenMG {stamp}"));
+    let backup = root.join(BACKUPS).join(format!("OpenMG {stamp:012}"));
     backup_omg(&omg, &backup).map_err(|e| format!("Couldn't back up the Walkman's database, so nothing was changed: {e}"))?;
+    // Keep the newest ten backups (names sort by time).
+    if let Ok(rd) = std::fs::read_dir(root.join(BACKUPS)) {
+        let mut old: Vec<PathBuf> =
+            rd.flatten().map(|e| e.path()).filter(|p| p.file_name().is_some_and(|n| n.to_string_lossy().starts_with("OpenMG "))).collect();
+        old.sort();
+        while old.len() > 10 {
+            let _ = std::fs::remove_dir_all(old.remove(0));
+        }
+    }
     let stage = root.join(STAGING);
     let _ = std::fs::remove_dir_all(&stage);
     let staged = (|| -> std::io::Result<()> {
@@ -512,6 +514,308 @@ fn restore_omg(omg: &Path, backup: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
+// ---- The Walkman's songs as a library; deleting and editing ----
+
+/// The id of the song list of the Walkman at `root` ("o" + a hash of its path).
+pub fn lib_id(root: &Path) -> String {
+    let h = root.to_string_lossy().bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ b as u64).wrapping_mul(0x0100_0000_01b3));
+    format!("o{h:016x}")
+}
+
+fn tags_of(s: &Song) -> oma::Tags {
+    oma::Tags {
+        title: s.title.clone(),
+        artist: s.artist.clone(),
+        album: s.album.clone(),
+        genre: s.genre.clone(),
+        year: s.year,
+        track: s.track,
+        disc: s.disc,
+    }
+}
+
+/// Read the Walkman's database into its song list (a library that's never
+/// saved), replacing the one there was.
+pub fn attach(app: &AppHandle, root: &Path) {
+    let omg = root.join("OMGAUDIO");
+    let Ok(db) = Database::read(&omg) else { return };
+    let id = lib_id(root);
+    let name = root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "WALKMAN".into());
+    let mut l = crate::library::Library::new(&name, Vec::new());
+    l.id = id.clone();
+    l.device = Some(format!("openmg:{}", root.display()));
+    l.ephemeral = true;
+    l.tracks = db
+        .songs
+        .iter()
+        .enumerate()
+        .map(|(i, s)| {
+            let path = s.file.as_ref().map(|f| omg.join(f)).unwrap_or_default();
+            let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+            crate::library::LibTrack {
+                id: i as u32 + 1,
+                path: path.to_string_lossy().into_owned(),
+                size,
+                mtime: 0,
+                added: 0,
+                play_count: 0,
+                rating: 0,
+                played: None,
+                cover: false,
+                tags: crate::library::Tags {
+                    title: Some(s.title.clone()),
+                    artist: Some(s.artist.clone()),
+                    album: Some(s.album.clone()),
+                    genre: Some(s.genre.clone()),
+                    year: s.year.unwrap_or(0),
+                    track_nr: s.track,
+                    disc_nr: s.disc,
+                    length_ms: s.length_ms,
+                    bitrate: if s.length_ms > 0 { (size.saturating_sub(0xC60) * 8 / s.length_ms as u64) as u32 } else { 0 },
+                    sample_rate: 44_100,
+                    kind: "MP3 audio file".into(),
+                    ..Default::default()
+                },
+            }
+        })
+        .collect();
+    l.next_id = l.tracks.len() as u32 + 1;
+    {
+        let state = app.state::<AppState>();
+        let mut libs = state.libraries.lock().unwrap();
+        libs.list.retain(|x| x.id != id);
+        libs.list.push(l);
+    }
+    crate::libcommands::announce(app, &id);
+}
+
+/// Forget the song lists of Walkmans no longer plugged in.
+pub fn detach_missing(app: &AppHandle, present: &[String]) {
+    let state = app.state::<AppState>();
+    let mut libs = state.libraries.lock().unwrap();
+    libs.list.retain(|l| {
+        !(l.ephemeral && l.device.as_deref().and_then(|d| d.strip_prefix("openmg:")).is_some_and(|r| !present.iter().any(|p| p == r)))
+    });
+}
+
+/// A song on the Walkman as an MP3 the computer can play (its audio, after
+/// the tag and header, copied into a cache folder the first time).
+pub fn fetch(path: &Path) -> Result<PathBuf, String> {
+    let meta = std::fs::metadata(path).map_err(|_| "That song isn't on the Walkman any more".to_string())?;
+    let mut head = vec![0u8; oma::TAG_SIZE + oma::HEADER_SIZE];
+    std::fs::File::open(path).and_then(|mut f| f.read_exact(&mut head)).map_err(|e| e.to_string())?;
+    let cid = oma::content_id(&head).ok_or("That isn't an OpenMG song file")?;
+    let dir = std::env::temp_dir().join("chinotto-openmg");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let name: String = cid.iter().map(|b| format!("{b:02x}")).collect();
+    let out = dir.join(format!("{name}-{}.mp3", meta.len()));
+    if !out.is_file() {
+        let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+        let part = out.with_extension("part");
+        std::fs::write(&part, &bytes[oma::TAG_SIZE + oma::HEADER_SIZE..]).map_err(|e| e.to_string())?;
+        std::fs::rename(&part, &out).map_err(|e| e.to_string())?;
+    }
+    Ok(out)
+}
+
+/// The Walkman whose song list is `lib`.
+pub fn root_of_library(app: &AppHandle, lib: &str) -> Option<PathBuf> {
+    let state = app.state::<AppState>();
+    let libs = state.libraries.lock().unwrap();
+    libs.list.iter().find(|l| l.id == lib).and_then(|l| l.device.as_deref()?.strip_prefix("openmg:").map(PathBuf::from))
+}
+
+fn writable_db(app: &AppHandle, root: &Path) -> Result<Database, String> {
+    if !msc::is_openmg_root(root) {
+        return Err("That Walkman isn't plugged in".into());
+    }
+    if !app.state::<AppState>().is_writable(&identity(root)) {
+        return Err(SWITCHED_OFF.into());
+    }
+    Database::read(&root.join("OMGAUDIO")).map_err(|e| format!("Couldn't read the Walkman's database: {e}"))
+}
+
+/// Delete songs (rows of the song list, from 1). The other songs' files are
+/// renumbered so file N stays song N; the deleted files are moved aside and
+/// only removed once the new database is in place (any failure undoes it all).
+pub fn delete(root: &Path, ids: &[u32], app: &AppHandle) -> Result<Vec<String>, String> {
+    let db = writable_db(app, root)?;
+    let r = remove(root, db, ids);
+    attach(app, root);
+    r.map(|_| Vec::new())
+}
+
+/// [`delete`] without the app: the files and database of the Walkman at `root`.
+fn remove(root: &Path, mut db: Database, ids: &[u32]) -> Result<(), String> {
+    let omg = root.join("OMGAUDIO");
+    let gone: std::collections::HashSet<usize> = ids.iter().filter(|&&i| i >= 1).map(|&i| i as usize - 1).collect();
+    if gone.is_empty() {
+        return Ok(());
+    }
+    let aside = root.join(".chinotto-omg-deleted");
+    let _ = std::fs::remove_dir_all(&aside);
+    std::fs::create_dir_all(aside.join("moving")).map_err(|e| e.to_string())?;
+    // Every rename done, to undo in reverse.
+    let mut done: Vec<(PathBuf, PathBuf)> = Vec::new();
+    let undo = |done: &mut Vec<(PathBuf, PathBuf)>| {
+        while let Some((from, to)) = done.pop() {
+            let _ = std::fs::rename(&to, &from);
+        }
+    };
+    let step = |from: PathBuf, to: PathBuf, done: &mut Vec<(PathBuf, PathBuf)>| -> std::io::Result<()> {
+        if let Some(dir) = to.parent() {
+            std::fs::create_dir_all(dir)?;
+        }
+        std::fs::rename(&from, &to)?;
+        done.push((from, to));
+        Ok(())
+    };
+    let songs = std::mem::take(&mut db.songs);
+    let mut kept = Vec::with_capacity(songs.len());
+    let mut moves: Vec<(PathBuf, String)> = Vec::new();
+    let mut result = Ok(());
+    for (i, mut s) in songs.into_iter().enumerate() {
+        if gone.contains(&i) {
+            if let Some(f) = &s.file {
+                let to = aside.join(f.replace('/', "_"));
+                if let Err(e) = step(omg.join(f), to, &mut done) {
+                    result = Err(format!("Couldn't move “{}” aside: {e}", s.title));
+                    break;
+                }
+            }
+            continue;
+        }
+        let want = oma::path_for(kept.len() as u32 + 1);
+        if let Some(f) = s.file.as_ref().filter(|f| !f.eq_ignore_ascii_case(&want)) {
+            moves.push((omg.join(f), want.clone()));
+        }
+        if s.file.is_some() {
+            s.file = Some(want);
+        }
+        kept.push(s);
+    }
+    // Two steps (via "moving"), so no file is renamed onto one still in use.
+    if result.is_ok() {
+        let mut parked = Vec::new();
+        for (n, (from, want)) in moves.iter().enumerate() {
+            let tmp = aside.join("moving").join(format!("{n}.OMA"));
+            if let Err(e) = step(from.clone(), tmp.clone(), &mut done) {
+                result = Err(format!("Couldn't renumber the Walkman's files: {e}"));
+                break;
+            }
+            parked.push((tmp, want.clone()));
+        }
+        if result.is_ok() {
+            for (tmp, want) in parked {
+                if let Err(e) = step(tmp, omg.join(&want), &mut done) {
+                    result = Err(format!("Couldn't renumber the Walkman's files: {e}"));
+                    break;
+                }
+            }
+        }
+    }
+    if let Err(e) = result {
+        undo(&mut done);
+        let _ = std::fs::remove_dir_all(&aside);
+        return Err(e);
+    }
+    db.songs = kept;
+    if let Err(e) = install(root, &db) {
+        undo(&mut done);
+        let _ = std::fs::remove_dir_all(&aside);
+        return Err(e);
+    }
+    let _ = std::fs::remove_dir_all(&aside);
+    Ok(())
+}
+
+/// Change songs on the Walkman: title, artist, album, genre, year, track and
+/// disc number (the rest has no place on it), and the album's cover.
+pub fn edit(
+    app: &AppHandle,
+    root: &Path,
+    ids: &[u32],
+    fields: &[chinotto_gpod::Field],
+    cover: Option<&crate::tagwrite::CoverChange>,
+) -> Result<Vec<String>, String> {
+    let db = writable_db(app, root)?;
+    let r = change(root, db, ids, fields, cover);
+    attach(app, root);
+    r
+}
+
+/// [`edit`] without the app.
+fn change(
+    root: &Path,
+    mut db: Database,
+    ids: &[u32],
+    fields: &[chinotto_gpod::Field],
+    cover: Option<&crate::tagwrite::CoverChange>,
+) -> Result<Vec<String>, String> {
+    use chinotto_gpod::Field as F;
+    let omg = root.join("OMGAUDIO");
+    let mut problems = Vec::new();
+    let mut ignored = false;
+    let text =
+        |v: &Option<String>, unknown: &str| chinotto_omg::fit(v.as_deref().map(str::trim).filter(|v| !v.is_empty()).unwrap_or(unknown));
+    let mut changed = Vec::new();
+    for &id in ids {
+        let Some(s) = db.songs.get_mut(id.saturating_sub(1) as usize).filter(|_| id >= 1) else { continue };
+        let old_album = s.album.clone();
+        for f in fields {
+            match f {
+                F::Title(v) => s.title = text(v, &s.title.clone()),
+                F::Artist(v) => s.artist = text(v, "Unknown Artist"),
+                F::Album(v) => s.album = text(v, "Unknown Album"),
+                F::Genre(v) => s.genre = text(v, "Unknown Genre"),
+                F::Year(y) => s.year = (*y > 0).then_some(*y as u32),
+                F::TrackNr(n) => s.track = (*n).max(0) as u32,
+                F::DiscNr(n) => s.disc = (*n).max(0) as u32,
+                _ => ignored = true,
+            }
+        }
+        // A renamed album keeps its pictures.
+        if s.album != old_album && !db.art.contains_key(&s.album) {
+            if let Some(a) = db.art.get(&old_album).cloned() {
+                db.art.insert(s.album.clone(), a);
+            }
+        }
+        changed.push(id as usize - 1);
+    }
+    match cover {
+        Some(crate::tagwrite::CoverChange::Set(bytes, _)) => match art_from(bytes) {
+            Some(art) => {
+                for &i in &changed {
+                    db.art.insert(db.songs[i].album.clone(), art.clone());
+                }
+            }
+            None => problems.push("That picture couldn't be read.".to_string()),
+        },
+        Some(crate::tagwrite::CoverChange::Remove) => {
+            for &i in &changed {
+                db.art.remove(&db.songs[i].album.clone());
+            }
+        }
+        None => {}
+    }
+    if ignored {
+        problems.push(
+            "Only title, artist, album, genre, year, track and disc number are kept on this Walkman; the other changes were left out."
+                .into(),
+        );
+    }
+    install(root, &db)?;
+    for &i in &changed {
+        let s = &db.songs[i];
+        if let Some(f) = &s.file {
+            if let Err(e) = oma::rewrite_tag(&omg.join(f), &tags_of(s), s.length_ms) {
+                problems.push(format!("{}: {e}", s.title));
+            }
+        }
+    }
+    Ok(problems)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -525,6 +829,78 @@ mod tests {
                 std::fs::copy(e.path(), to.join(e.file_name())).unwrap();
             }
         }
+    }
+
+    /// A copy of a real Walkman's OMGAUDIO with an .OMA file for each song
+    /// (made up audio, the songs' content IDs, files in row order).
+    fn walkman_copy(tag: &str) -> Option<(PathBuf, Database)> {
+        let src = std::env::var("CHINOTTO_TEST_OMG").ok()?;
+        let root = std::env::temp_dir().join(format!("chinotto-omg-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        copy_dir(Path::new(&src), &root.join("OMGAUDIO"));
+        let omg = root.join("OMGAUDIO");
+        let _ = std::fs::remove_dir_all(omg.join("10F00"));
+        let db = Database::read(&omg).unwrap();
+        let frame = {
+            let mut f = vec![0xFF, 0xFB, 0x90, 0x00];
+            f.resize(417, 0);
+            f
+        };
+        for (i, s) in db.songs.iter().enumerate() {
+            let mp3 = chinotto_omg::mp3::prepare(&frame.repeat(i + 2)).unwrap();
+            let p = omg.join(oma::path_for(i as u32 + 1));
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, oma::build(&mp3, &tags_of(s), &s.cid)).unwrap();
+        }
+        let db = Database::read(&omg).unwrap();
+        Some((root, db))
+    }
+
+    #[test]
+    fn deletes_on_a_copy() {
+        let Some((root, db)) = walkman_copy("delete") else { return };
+        let omg = root.join("OMGAUDIO");
+        let n = db.songs.len();
+        assert!(n >= 4);
+        let keep: Vec<Song> = db.songs.iter().enumerate().filter(|(i, _)| *i != 0 && *i != 2).map(|(_, s)| s.clone()).collect();
+        remove(&root, db, &[1, 3]).unwrap();
+        let back = Database::read(&omg).unwrap();
+        assert_eq!(back.songs.len(), n - 2);
+        for (i, (b, k)) in back.songs.iter().zip(&keep).enumerate() {
+            assert_eq!((&b.title, b.cid), (&k.title, k.cid));
+            // Renumbered: song N is file N.
+            assert_eq!(b.file.as_deref(), Some(oma::path_for(i as u32 + 1).as_str()));
+        }
+        let files = std::fs::read_dir(omg.join("10F00")).unwrap().count();
+        assert_eq!(files, n - 2);
+        for (name, bytes) in back.tables() {
+            assert!(std::fs::read(omg.join(&name)).unwrap() == bytes, "{name}");
+        }
+        assert!(!root.join(".chinotto-omg-deleted").exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn edits_on_a_copy() {
+        use chinotto_gpod::Field as F;
+        let Some((root, db)) = walkman_copy("edit") else { return };
+        let omg = root.join("OMGAUDIO");
+        let album = db.songs[0].album.clone();
+        let had_art = db.art.contains_key(&album);
+        let problems = change(
+            &root,
+            db,
+            &[1],
+            &[F::Title(Some("New title".into())), F::Album(Some("Renamed".into())), F::TrackNr(7), F::Comment(Some("x".into()))],
+            None,
+        )
+        .unwrap();
+        assert_eq!(problems.len(), 1); // the comment
+        let back = Database::read(&omg).unwrap();
+        let s = &back.songs[0];
+        assert_eq!((s.title.as_str(), s.album.as_str(), s.track), ("New title", "Renamed", 7));
+        assert_eq!(back.art.contains_key("Renamed"), had_art);
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     /// Adding a song in a new album (with a cover) to a copy of a real

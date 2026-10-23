@@ -49,7 +49,7 @@ export function songMenu(e: MouseEvent, track: Track, tracks: Track[]) {
   const onIpod = src.kind !== "library" && src.kind !== "scratch";
   // Songs on a player set up as a drive.
   const player = src.kind === "library" ? store.playerOf(src.lib) : undefined;
-  const canDelete = player?.kind === "msc" || player?.kind === "mtp";
+  const canDelete = player?.kind === "msc" || player?.kind === "mtp" || player?.kind === "openmg";
   const canEditPlaylists = !player || (player.kind === "msc" && store.playlistsWritable);
   if (src.kind === "scratch") {
     // Opened from outside the libraries: play, look, save, copy to the iPod, or take off the list.

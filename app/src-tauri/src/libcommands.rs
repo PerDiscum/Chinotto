@@ -73,6 +73,12 @@ struct Progress<'a> {
     current: &'a str,
 }
 
+/// Tell the window a library's list and songs changed.
+pub(crate) fn announce(app: &AppHandle, id: &str) {
+    emit_list(app);
+    let _ = app.emit("library-updated", id);
+}
+
 fn emit_list(app: &AppHandle) {
     let list = app.state::<AppState>().libraries.lock().unwrap().summaries();
     let _ = app.emit("libraries-changed", list);
@@ -355,6 +361,12 @@ pub fn track_file(app: &AppHandle, dbid: &str) -> Result<PathBuf, String> {
     let libs = state.libraries.lock().unwrap();
     let lib = libs.list.iter().find(|l| l.id == lib_id).ok_or("That library doesn't exist any more")?;
     let t = lib.track(tid).ok_or("That song isn't in the library any more")?;
+    if lib.ephemeral && lib.device.as_deref().is_some_and(|d| d.starts_with("openmg:")) {
+        // On an OpenMG Walkman: its MP3 audio, copied out of the .OMA file.
+        let p = PathBuf::from(&t.path);
+        drop(libs);
+        return crate::openmg::fetch(&p);
+    }
     if lib.ephemeral && t.path.starts_with("mtp:") {
         // On an MTP device: copied into a cache folder to be played or copied.
         let p = t.path.clone();
@@ -551,6 +563,19 @@ pub async fn lib_edit_tracks(
             Some(crate::tagwrite::CoverChange::Set(bytes, mime))
         }
     };
+    // Songs on an OpenMG Walkman: changed in its database and files.
+    if let Some(root) = crate::openmg::root_of_library(&app, &lib) {
+        let app2 = app.clone();
+        return tauri::async_runtime::spawn_blocking(move || {
+            let mut problems = crate::openmg::edit(&app2, &root, &ids, &fields, cover.as_ref())?;
+            if rating.is_some() {
+                problems.push("This Walkman doesn't keep ratings.".into());
+            }
+            Ok(problems)
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+    }
     // Songs on an open MTP device: changed in its database.
     if crate::mtp::is_mtp_library(&app, &lib) {
         let app2 = app.clone();
