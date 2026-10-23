@@ -919,3 +919,18 @@ Devices were opened with `LIBMTP_Open_Raw_Device_Uncached`, and libmtp's `flush_
 - These records still need stable group identifiers and corresponding
   `01TREE`/`03GINF2D` hierarchy references. The helpers are not connected to
   transfer and do not write to the Walkman.
+
+## 0084: document OpenMG tree-index observations
+
+- The before/after database captures show each `01TREE*.DAT` file remains
+  0x4060 bytes. Its group list begins at 0x40 with 8-byte records, and its
+  `TPLB` track-order table begins at 0x4050 with 16-bit track references.
+  The track-order sequence changes when a new track is added and differs by
+  tree file, so it cannot be safely regenerated from a single sort rule.
+- `01TREE2D.DAT` adds two 8-byte nodes when the new artist and album are
+  introduced. The node type values distinguish the two kinds, but the album
+  node's reference field is inconsistent across the existing records. Keep
+  preserving these records and do not synthesize hierarchy references until
+  their meaning is resolved.
+- This checkpoint records observed structure only. OpenMG transfer stays
+  disabled; the current template encoders are not a complete database writer.
