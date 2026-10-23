@@ -108,10 +108,16 @@ fn plays_of(types: &[i32]) -> Vec<&'static str> {
 /// profiles: Walkmans want ID3v2.3 and plain Greek, Sansas small covers).
 /// No folder.jpg: over MTP there are no folders of our own.
 fn profile_for(r: &RawDevice) -> crate::msc::Profile {
-    let key = match icon_for(r) {
-        "sony-nwz" => "sony-nwz",
-        i if i.starts_with("sansa-") => "sansa-e200",
-        _ => "other",
+    let key = if r.vendor_id == 0x0781 && r.product_id == 0x7422 {
+        // The e260 v2's product string can vary with firmware. Its USB ID is
+        // stable, so always apply the tested Sansa artwork/tag rules to it.
+        "sansa-e200"
+    } else {
+        match icon_for(r) {
+            "sony-nwz" => "sony-nwz",
+            i if i.starts_with("sansa-") => "sansa-e200",
+            _ => "other",
+        }
     };
     let mut p = crate::msc::profiles().into_iter().find(|p| p.key == key).unwrap_or_else(|| crate::msc::profiles().pop().unwrap());
     p.folder_jpg = false;

@@ -1160,3 +1160,16 @@ allow the Microsoft descriptor request even when the reported classes are
 zero. The new diagnostic lines will confirm whether the device responds with
 the OS descriptor and MTP signature. This remains experimental and needs a
 macOS retest.
+
+## 0101: Enforce Sansa cover limits for MTP transfers
+
+The Sansa e260 v2 now responds to the forced Microsoft OS descriptor request;
+Chinotto opens an MTP session and can read its library, update track metadata,
+transcode, and add songs. The user reports that album artwork still exceeds
+the established Sansa limits. MTP now selects the Sansa artwork profile by
+USB ID `0781:7422`, independent of its product string. The shared cover encoder
+now keeps lowering JPEG dimensions if its lowest quality setting still exceeds
+the profile's byte ceiling (300 px and 30 KB), instead of returning an
+oversized image. Rebuild and transfer a song with a large, detailed cover;
+check the embedded JPEG dimensions and byte size on the device, and confirm it
+still displays in the player's album view.
