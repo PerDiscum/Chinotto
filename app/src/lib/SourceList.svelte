@@ -180,7 +180,7 @@
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
           class="row device"
-          class:active={(isOpen(d.path) && store.source.kind === "device") || (store.source.kind === "player" && store.source.path === d.path)}
+          class:active={(isOpen(d.path) && store.source.kind === "device") || ((store.source.kind === "player" || store.source.kind === "openmg") && store.source.path === d.path)}
           class:drop={store.songDrag?.target === `player:${d.path}`}
           data-drop-playlist={d.kind === "msc" || (d.kind === "mtp" && d.library) ? `player:${d.path}` : undefined}
           oncontextmenu={(e) => {
@@ -190,7 +190,7 @@
               x: e.clientX,
               y: e.clientY,
               items: d.kind === "openmg"
-                ? [{ label: t("OpenMG Walkman Info…"), action: () => (store.dialog = { kind: "openmg", path: d.path }) }]
+                ? [{ label: t("Show Device Page"), action: () => store.select({ kind: "openmg", path: d.path }) }]
                 : d.kind === "mtp"
                 ? [{ label: t("Let Other Programs Use It"), disabled: !store.mtpInfos[d.path], action: () => store.closeMtp(d.path) }]
                 : lib
@@ -208,7 +208,7 @@
           <button
             class="name"
             onclick={() =>
-              d.kind === "openmg" ? (store.dialog = { kind: "openmg", path: d.path }) : d.kind === "mtp" ? store.openMtp(d.path) : d.library ? store.select({ kind: "player", path: d.path }) : isOpen(d.path) ? store.select({ kind: "device" }) : store.open(d.path)}
+              d.kind === "openmg" ? store.select({ kind: "openmg", path: d.path }) : d.kind === "mtp" ? store.openMtp(d.path) : d.library ? store.select({ kind: "player", path: d.path }) : isOpen(d.path) ? store.select({ kind: "device" }) : store.open(d.path)}
             title={d.path}
           >
             {#if deviceImage(store.iconFor(d))}<img class="dev" src={deviceImage(store.iconFor(d))} alt="" />{:else}<Icon name="ipod" />{/if}

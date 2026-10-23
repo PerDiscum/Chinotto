@@ -103,6 +103,10 @@
       {@const d = store.devices.find((x) => x.path === path)}
       <strong>{d?.volume ?? ""}</strong>
       <span class="sub">{tn(store.libViews[d?.library ?? ""]?.view.tracks.length ?? 0, "{n} song on this player", "{n} songs on this player")}</span>
+    {:else if store.source.kind === "openmg"}
+      {@const d = store.devices.find((x) => x.path === store.source.path)}
+      <strong>{d?.volume ?? t("Sony Walkman")}</strong>
+      <span class="sub">{t("OpenMG device")}</span>
     {:else if store.ipod || store.source.kind === "library" || store.source.kind === "scratch"}
       <strong>{sourceName}</strong>
       <span class="sub">

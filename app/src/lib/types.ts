@@ -157,7 +157,9 @@ export type Source =
   /** Songs opened from outside the libraries (never added to one). */
   | { kind: "scratch" }
   /** The page of a player that shows up as a drive (MSC). */
-  | { kind: "player"; path: string };
+  | { kind: "player"; path: string }
+  /** The informational page for a legacy Sony OpenMG Walkman. */
+  | { kind: "openmg"; path: string };
 
 export interface LibrarySummary {
   id: string;

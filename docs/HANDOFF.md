@@ -794,3 +794,11 @@ Devices were opened with `LIBMTP_Open_Raw_Device_Uncached`, and libmtp's `flush_
   are not implemented. The user's Sony NW-S716F was initialized by ManicStage;
   its live database had one playable `.OMA` track in `OMGAUDIO` while `MUSIC`
   remained empty. Do not treat it as a normal `NWZ` drag-and-drop Walkman.
+
+## 0074: give OpenMG devices a dedicated page
+
+- Selecting an `openmg` device now opens a full device page rather than a modal.
+- The page shows the model, capacity, OMGAUDIO database location and eject
+  control, and explains that generic writes remain disabled while native
+  initialization and song transfer are under development.
+- The selected device clears from the page if it is unplugged.
