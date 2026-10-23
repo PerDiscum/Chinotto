@@ -198,15 +198,20 @@ pub(crate) fn prepare_album_summary_record(
     artist: &str,
     genre: &str,
     album_duration_ms: u32,
+    artwork_metadata: &[u8],
 ) -> Result<Vec<u8>, String> {
     if template.len() != 0x310 {
         return Err("OpenMG album-summary template must be exactly 784 bytes.".into());
+    }
+    if artwork_metadata.len() != 384 {
+        return Err("OpenMG album artwork metadata must be exactly 384 bytes.".into());
     }
     let mut record = template.to_vec();
     record[8..12].copy_from_slice(&album_duration_ms.to_be_bytes());
     write_tag(&mut record, 16, b"TIT2", album, 128)?;
     write_tag(&mut record, 144, b"TPE1", artist, 128)?;
     write_tag(&mut record, 272, b"TCON", genre, 128)?;
+    record[400..784].copy_from_slice(artwork_metadata);
     Ok(record)
 }
 

@@ -945,3 +945,14 @@ Devices were opened with `LIBMTP_Open_Raw_Device_Uncached`, and libmtp's `flush_
 - Rename the template-encoder parameters to describe these totals. Database
   generation must recalculate the affected group totals when adding or removing
   tracks; no transfer path is enabled by this change.
+
+## 0086: require explicit OpenMG album-art metadata
+
+- The 784-byte combined album-summary row contains a 384-byte artwork section
+  after its three text tags. Observed `PICP`/`PIC0` entries point to image files
+  under `20P*` directories, so copying this tail from another album would leave
+  incorrect artwork references.
+- Require callers to provide a full artwork-metadata tail when preparing the
+  row. This prevents the helper from silently carrying another album's art
+  references. Image allocation and file generation remain unimplemented, and
+  OpenMG transfer stays disabled.
