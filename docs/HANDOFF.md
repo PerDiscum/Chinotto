@@ -862,3 +862,26 @@ Devices were opened with `LIBMTP_Open_Raw_Device_Uncached`, and libmtp's `flush_
 - Show the linked OMA filename on the existing read-only device page, or an
   explicit missing-link message. This provides a check of the on-disk track
   relationship before building a write path. It does not enable device writes.
+
+## 0079: isolate one OpenMG track addition
+
+- Captured a read-only six-track baseline of the user's NW-S716F database and
+  artwork before the user added one track through ManicStage. The before/after
+  comparison is under `/private/tmp/chinotto-openmg-baseline-6track-current`
+  and the live Walkman volume; no Chinotto command wrote to the device.
+- The new `If We` track is the seventh `04CNTINF.DAT` record (Mariah Carey,
+  `Glitter`, `Pop`, 260884 ms), paired with `10F00/10000007.OMA` through the
+  11-byte key `aa1e4e90edf693b74f7493` at OMA offset `0xC15`.
+- The addition appends one 656-byte track record to `04CNTINF.DAT` and one
+  48-byte key record to `05CIDLST.DAT`. It adds one 0x90-byte record each to
+  `03GINF02.DAT`, `03GINF03.DAT`, and `03GINF04.DAT` for the new artist,
+  album, and genre; `03GINF01.DAT` gains a 0x310-byte combined group record,
+  while `03GINF2D.DAT` gains two 0x210-byte hierarchy records. The matching
+  `01TREE01/02/03/04/2D.DAT` tables and `02TREINF.DAT` also change to reflect
+  the new group and track order.
+- Artwork assets under `20P*` were added or updated as part of this operation,
+  so the eventual writer must account for those references and images as well
+  as the track and group tables. This single insertion isolates the new-group
+  case; it still does not establish all details needed to generate a valid
+  database or OMA file. Keep OpenMG writes disabled until an off-device
+  generator can be checked against these observations.
