@@ -2313,25 +2313,42 @@ LIBMTP_error_number_t configure_usb_device(LIBMTP_raw_device_t *device,
    * have not used LIBMTP_Release_Device on exit
    */
   if ((ret = ptp_opensession(params, 1)) == PTP_ERROR_IO) {
-    LIBMTP_ERROR("PTP_ERROR_IO: failed to open session, trying again after resetting USB interface\n");
-    LIBMTP_ERROR("LIBMTP libusb: Attempt to reset device\n");
-    libusb_reset_device (ptp_usb->handle);
-    close_usb(ptp_usb);
-
-    if(init_ptp_usb(params, ptp_usb, ldevice) <0) {
-      LIBMTP_ERROR("LIBMTP PANIC: Could not init USB on second attempt\n");
-      libusb_free_device_list (devs, 0);
-      free (ptp_usb);
-      return LIBMTP_ERROR_CONNECTING;
+#if defined(__APPLE__)
+    /* The Sansa e260 v2 stalls its bulk-OUT endpoint during the initial
+     * OpenSession on macOS, even though the same command succeeds on Windows.
+     * Try clearing that endpoint halt once before resetting the whole device. */
+    if (device->device_entry.vendor_id == 0x0781 &&
+        device->device_entry.product_id == 0x7422) {
+      err = libusb_clear_halt(ptp_usb->handle, ptp_usb->outep);
+      if (err == LIBUSB_SUCCESS) {
+        LIBMTP_ERROR("Sansa e260 v2: cleared bulk-OUT halt; retrying OpenSession\n");
+        ret = ptp_opensession(params, 1);
+      } else {
+        LIBMTP_ERROR("Sansa e260 v2: could not clear bulk-OUT halt (%d)\n", err);
+      }
     }
+#endif
+    if (ret == PTP_ERROR_IO) {
+      LIBMTP_ERROR("PTP_ERROR_IO: failed to open session, trying again after resetting USB interface\n");
+      LIBMTP_ERROR("LIBMTP libusb: Attempt to reset device\n");
+      libusb_reset_device (ptp_usb->handle);
+      close_usb(ptp_usb);
 
-    /* Normal timeout will have been restored by init_ptp_usb */
-    /* Device has been reset, try again */
-    if ((ret = ptp_opensession(params, 1)) == PTP_ERROR_IO) {
-      LIBMTP_ERROR("LIBMTP PANIC: failed to open session on second attempt\n");
-      libusb_free_device_list (devs, 0);
-      free (ptp_usb);
-      return LIBMTP_ERROR_CONNECTING;
+      if(init_ptp_usb(params, ptp_usb, ldevice) <0) {
+        LIBMTP_ERROR("LIBMTP PANIC: Could not init USB on second attempt\n");
+        libusb_free_device_list (devs, 0);
+        free (ptp_usb);
+        return LIBMTP_ERROR_CONNECTING;
+      }
+
+      /* Normal timeout will have been restored by init_ptp_usb */
+      /* Device has been reset, try again */
+      if ((ret = ptp_opensession(params, 1)) == PTP_ERROR_IO) {
+        LIBMTP_ERROR("LIBMTP PANIC: failed to open session on second attempt\n");
+        libusb_free_device_list (devs, 0);
+        free (ptp_usb);
+        return LIBMTP_ERROR_CONNECTING;
+      }
     }
   }
 
