@@ -514,6 +514,10 @@ pub fn msc_allow(path: String, allow: bool, app: AppHandle) -> Result<PlayerStat
 
 #[tauri::command]
 pub fn msc_set_conversion(path: String, conversion: crate::convert::Conversion, app: AppHandle) -> Result<PlayerState, String> {
+    if is_openmg_root(Path::new(&path)) {
+        app.state::<AppState>().set_conversion(&crate::openmg::identity(Path::new(&path)), conversion)?;
+        return Ok(crate::openmg::state(Path::new(&path), &app));
+    }
     if path.starts_with("mtp:") {
         app.state::<AppState>().set_conversion(&crate::mtp::identity_of(&path, &app)?, conversion)?;
         return crate::mtp::player_state(&path, &app);

@@ -3,6 +3,7 @@
   import { store } from "./store.svelte";
   import { bytes, longDuration } from "./format";
   import { deviceImage, PICTURES } from "./deviceImages";
+  import type { Conversion } from "./types";
 
   // The page of a Sony OpenMG Walkman. Its songs are its "Music" list in the sidebar.
   let { path }: { path: string } = $props();
@@ -21,6 +22,12 @@
   let pictureEl: HTMLElement | undefined = $state();
   function outside(e: MouseEvent) {
     if (choosing && pictureEl && !pictureEl.contains(e.target as Node)) choosing = false;
+  }
+  // Every song goes as MP3 at one bitrate: "mp3_128"…"mp3_320" (see ConversionSettings for other devices' fuller settings).
+  const bitrate = $derived(st?.conversion.format ?? "mp3_320");
+  function setBitrate(format: string) {
+    const c: Conversion = { ...(st?.conversion ?? { format, convertAlac: false, advanced: false, rules: {} }), format };
+    void store.setPlayerConversion(path, c);
   }
 </script>
 
@@ -54,11 +61,23 @@
             </label>
             <p class="note">
               {#if st.writable}
-                {t("Chinotto can add songs to this Walkman (drag them onto it in the sidebar, or use Add Songs…), and change and delete them in its Music list. Songs go as MP3: other formats are converted to 320 kbps. Its database is backed up on the Walkman, in “Chinotto Backups”, before every change.")}
+                {t("Chinotto can add songs to this Walkman (drag them onto it in the sidebar, or use Add Songs…), and change and delete them in its Music list. Songs that aren't already MP3 at one of the bitrates below are converted. Its database is backed up on the Walkman, in “Chinotto Backups”, before every change.")}
               {:else}
                 {t("Chinotto only reads this Walkman: its songs are in its Music list in the sidebar, and play from there. Turn this on to add, change and delete songs. The setting is remembered for this Walkman only.")}
               {/if}
             </p>
+            {#if st.writable}
+              <label class="bitrate">
+                {t("Convert other formats to")}
+                <select value={bitrate} onchange={(e) => setBitrate(e.currentTarget.value)} disabled={!!store.busy}>
+                  <option value="mp3_320">{t("MP3 320 kbps")}</option>
+                  <option value="mp3_256">{t("MP3 256 kbps")}</option>
+                  <option value="mp3_192">{t("MP3 192 kbps")}</option>
+                  <option value="mp3_128">{t("MP3 128 kbps (smaller)")}</option>
+                </select>
+              </label>
+              <p class="note">{t("192 and 256 kbps follow the same pattern as 128 and 320 (which are confirmed to play), but haven't been confirmed yet on every OpenMG Walkman.")}</p>
+            {/if}
           </div>
         {/if}
       </section>
@@ -106,6 +125,8 @@
   dd { margin: 0; min-width: 0; }
   .path { overflow-wrap: anywhere; }
   .note { max-width: 640px; margin: 18px 0 0; color: var(--muted); line-height: 1.55; }
+  .bitrate { display: flex; align-items: center; gap: 8px; margin-top: 14px; font-size: 13px; }
+  .bitrate select { font: inherit; }
   .actions { display: flex; gap: 8px; margin-top: 24px; }
   @container (max-width: 600px) { .picture { display: none; } }
   .changes { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--edge); }
