@@ -720,21 +720,31 @@ pub(crate) fn copy_in(from: &Path, to: &Path, profile: &Profile) -> Result<(), S
 /// A cover as a baseline JPEG of at most `px` a side and `max` bytes (lower
 /// quality until it fits).
 fn small_jpeg(bytes: &[u8], px: u32, max: usize) -> Result<Vec<u8>, String> {
+    if max == 0 {
+        return Err("the player's cover size limit is zero bytes".into());
+    }
     if bytes.len() <= max && bytes.starts_with(&[0xFF, 0xD8]) && !is_progressive(bytes) && img_fits(bytes, px) {
         return Ok(bytes.to_vec()); // already fine
     }
     let img = crate::cover::decode(bytes)?;
-    let small = if img.width() > px || img.height() > px { img.resize(px, px, image::imageops::FilterType::Lanczos3) } else { img };
-    let rgb = small.to_rgb8();
-    let mut jpeg = Vec::new();
-    for q in [90u8, 80, 70, 60, 50, 40] {
-        jpeg.clear();
-        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, q).encode_image(&rgb).map_err(|e| e.to_string())?;
-        if jpeg.len() <= max {
-            break;
+    let mut small = img.resize(px, px, image::imageops::FilterType::Lanczos3);
+    loop {
+        let rgb = small.to_rgb8();
+        let mut jpeg = Vec::new();
+        for q in [90u8, 80, 70, 60, 50, 40] {
+            jpeg.clear();
+            image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, q).encode_image(&rgb).map_err(|e| e.to_string())?;
+            if jpeg.len() <= max {
+                return Ok(jpeg);
+            }
         }
+        let side = small.width().max(small.height());
+        if side <= 1 {
+            return Err(format!("couldn't reduce the cover below {max} bytes"));
+        }
+        let next_side = (side.saturating_mul(4) / 5).max(1);
+        small = small.resize(next_side, next_side, image::imageops::FilterType::Lanczos3);
     }
-    Ok(jpeg)
 }
 
 /// A progressive JPEG (SOF2 marker), which many old players can't show.
