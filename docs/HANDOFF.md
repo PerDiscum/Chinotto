@@ -1031,3 +1031,35 @@ Chinotto writes. So:
   (`oma::rewrite_tag`, first 0xC00 bytes only), so it's kept.
 - This happens on every add, and on demand with "Put Albums in Track Order"
   on the OpenMG page (`openmg_reorder`).
+
+## 0091: OpenMG songs as a Music list; deleting and editing; new pictures
+
+Confirmed on the NW-S716F: "Put Albums in Track Order" works (0090).
+
+- **Music list.** An OpenMG Walkman now has a song list like other players
+  (`openmg::attach`: a library that's never saved, id `o<hash of the path>`,
+  `device` = "openmg:<root>"), shown as "Music" under it in the sidebar, rebuilt
+  from the database after every change and dropped when the Walkman is
+  unplugged. The song table on its page is gone (`openmg_view` is unused).
+  Songs play: `openmg::fetch` copies a file's MP3 part (after 0xC60) into a
+  cache.
+- **Deleting** (select, Delete key or menu, the usual dialog; `msc_delete` routes
+  here). Song N must stay file N (`oma::path_for`), so the deleted songs' files
+  are moved into `.chinotto-omg-deleted`, the remaining files are renumbered in
+  two steps (via `moving/`, so nothing is renamed onto a file still in use),
+  then the database is installed. Any failure undoes every rename in reverse;
+  the deleted files are removed only after the new database is in place.
+  Albums with no songs left lose their pictures.
+- **Editing** (Song Details): title, artist, album, genre, year, track and
+  disc number; the database is rebuilt and each changed file's tag rewritten
+  (numbers live there). A cover set or removed applies to the song's album; a
+  renamed album keeps its pictures. Other fields and ratings have no place on
+  the Walkman and are reported as left out.
+- Backups: the newest ten `Chinotto Backups/OpenMG <time>` folders are kept.
+- Tested on copies of the device with made-up audio (`deletes_on_a_copy`,
+  `edits_on_a_copy`, `installs_on_a_copy`; set `CHINOTTO_TEST_OMG`).
+- **Pictures** added (drawn by the user, transparent, height 512):
+  `ipod-5g-smile`, `ipod-7g-smile`, `sony-a10-smile`, `sony-nwz-smile`,
+  `sony-openmg` (now the automatic picture for OpenMG Walkmans, whose page has
+  the same picture chooser as the iPod's) and `ipod-nano-6g` (the label
+  existed with no picture, so Nano 6s showed the generic player).

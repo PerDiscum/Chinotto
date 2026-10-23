@@ -329,7 +329,7 @@ class Store {
     });
     this.devices = list;
     // Players set up as drives: their songs (and playlists, for the sidebar).
-    for (const d of list) if (d.kind === "msc" && d.library && !this.libViews[d.library]) void this.loadPlayer(d.library);
+    for (const d of list) if ((d.kind === "msc" || d.kind === "openmg") && d.library && !this.libViews[d.library]) void this.loadPlayer(d.library);
     if (!list.some((d) => d.kind === "mtp")) this.mtpInfos = {};
     for (const d of list) if ((d.kind === "msc" || d.kind === "openmg") && !this.playerStates[d.path]) void this.loadPlayerState(d.path);
     // The player being shown was unplugged.

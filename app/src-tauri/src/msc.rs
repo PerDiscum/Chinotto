@@ -866,6 +866,9 @@ fn plain_greek_tags(file: &Path) -> Result<(), String> {
 /// inside its music folder are touched; folders left empty go too.
 #[tauri::command]
 pub fn msc_delete(path: String, ids: Vec<u32>, app: AppHandle) -> Result<Vec<String>, String> {
+    if is_openmg_root(Path::new(&path)) {
+        return crate::openmg::delete(Path::new(&path), &ids, &app);
+    }
     if path.starts_with("mtp:") {
         return crate::mtp::delete(&path, &ids, &app);
     }
