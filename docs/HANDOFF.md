@@ -934,3 +934,14 @@ Devices were opened with `LIBMTP_Open_Raw_Device_Uncached`, and libmtp's `flush_
   their meaning is resolved.
 - This checkpoint records observed structure only. OpenMG transfer stays
   disabled; the current template encoders are not a complete database writer.
+
+## 0085: clarify OpenMG group-duration fields
+
+- Comparing the seven track durations with `03GINF01/02/03/04.DAT` shows each
+  artist, album, and genre row stores the sum of its member tracks' durations.
+  The combined album-summary row stores that album's total as well. For
+  example, `Jagged Little Pill` is 514481 ms across its two tracks, and
+  `Unknown Genre` is 713036 ms across its three tracks.
+- Rename the template-encoder parameters to describe these totals. Database
+  generation must recalculate the affected group totals when adding or removing
+  tracks; no transfer path is enabled by this change.
