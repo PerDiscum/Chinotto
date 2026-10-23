@@ -1,6 +1,6 @@
 [package]
 name = "chinotto-app"
-description = "Chinotto: music library manager and iPod sync"
+description = "Chinotto: music library manager and music player sync"
 edition.workspace = true
 license.workspace = true
 version.workspace = true

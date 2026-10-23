@@ -16,7 +16,7 @@
   const shown = $derived(dragging ?? store.player.positionMs);
 
   const openingName = $derived(
-    store.opening ? (store.devices.find((d) => d.path === store.opening)?.volume ?? t("iPod")) : null,
+    store.opening ? (store.devices.find((d) => d.path === store.opening)?.volume ?? t("device")) : null,
   );
   const sourceName = $derived.by(() => {
     const s = store.source;
@@ -65,7 +65,7 @@
           <span style:width="{(store.progress.done / store.progress.total) * 100}%"></span>
         </span>
       {:else}
-        <span class="sub">{t("Don't unplug the iPod")}</span>
+        <span class="sub">{t("Don't unplug the device")}</span>
       {/if}
     {:else if openingName}
       <strong>{t("Reading {name}…", { name: openingName ?? "" })}</strong>
