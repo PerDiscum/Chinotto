@@ -967,3 +967,48 @@ Devices were opened with `LIBMTP_Open_Raw_Device_Uncached`, and libmtp's `flush_
   sort-title tags and requires correctly tagged 128-byte `PICP` and `PIC0`
   descriptors from the new album. It does not allocate image names, update the
   hierarchy indexes, generate images, or write to the device.
+
+## 0089: OpenMG format solved; adding songs
+
+Worked out from the NW-S716F's own files (seven songs added by other
+software), and checked by rebuilding them: `crates/chinotto-omg`'s test
+`rebuilds_device_tables` regenerates every song-dependent table *and* every
+album picture from the song list alone, byte for byte (run it with
+`CHINOTTO_TEST_OMG` pointing at a copy of OMGAUDIO; never commit the copy).
+
+- **The audio isn't encrypted.** An `.OMA` is a 0xC00-byte `ea3` tag (ID3v2.3
+  with another magic; TIT2, TPE1, TALB, TCON, TYER if any, TLEN; UTF-16BE),
+  a 0x60-byte `EA3` header (`FF FF` = not encrypted; 12-byte content ID after
+  `01 0F 50 00 00 04 00 00`; codec `03 84 D9|DE 00` for 128/320 kbps MP3;
+  length in ms; frame count) and the MP3 frames as they are. The EKB in
+  `00010021.DAT` is for ATRAC and irrelevant here.
+- **Tables** share one layout (see `db.rs`). `04CNTINF` (songs) and
+  `05CIDLST` (content IDs, linking rows to files) are the data. Trees 01–04 and
+  2D, with their `03GINF` group tables, are derived from them (sort rules in
+  `db.rs`: group names by UTF-16 code units; an album's songs in row order).
+  `02TREINF` changes only in its total length (trees 01–04, 2C); `00GTRLST`
+  doesn't change. 0084's "can't be regenerated from a single sort rule" is
+  resolved: each tree has its own rule.
+- **The Walkman rebuilds trees 0C, 0E, 0F and 10–15 itself.** They carry its
+  clock's date (January 2007) yet included the newest song, so they aren't
+  written.
+- **Pictures**: `20Pnn/1Gnnnn{P0,01,02}.JPG` per album group (album tree
+  numbering) and `20Pnn/ITnnnn…` per album row of tree 2D; 200, 96 and 32 px
+  baseline JPEGs. Numbers shift when albums are added, so all picture folders
+  are rewritten (the device had a stale `20P08` from earlier layouts).
+- **Adding songs** (OpenMG page: "Allow changes", Add Songs…, or drag onto the
+  Walkman): MP3s that are MPEG-1 Layer III, 44.1 kHz, CBR 128 or 320 kbps go as
+  they are (tags and any Xing/Info frame stripped); everything else is
+  converted to 320 kbps at 44.1 kHz (`convert::mp3_44k`). Each `.OMA` is
+  written first, then `install` backs up every table and picture folder to
+  `Chinotto Backups/OpenMG <time>` on the Walkman, stages the rebuilt ones in
+  `.chinotto-omg-staging`, and swaps them in (each live file is renamed aside
+  first; on failure the backup is copied back and the new `.OMA` files are
+  removed). New albums get pictures from the song's cover. Tested on a copy
+  of the device (`openmg::tests::installs_on_a_copy`), not yet on the Walkman.
+- **Unconfirmed, so limited**: only the folder `10F00` (255 songs) is used;
+  other bitrates' codec value; songs with several artists in one album (the
+  album row takes the first song's artist and genre). Deleting and editing
+  need rows renumbered and files renamed, and come next.
+- ChatGPT's template helpers (0080–0087) are replaced by the crate and
+  removed; the read-only view (`openmg_view`) is unchanged.

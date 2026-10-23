@@ -533,6 +533,7 @@ dependencies = [
  "chinotto-gpod",
  "chinotto-ipod",
  "chinotto-mtp",
+ "chinotto-omg",
  "chinotto-player",
  "image",
  "libc",
@@ -569,6 +570,10 @@ version = "0.1.0"
 dependencies = [
  "cc",
 ]
+
+[[package]]
+name = "chinotto-omg"
+version = "0.1.0"
 
 [[package]]
 name = "chinotto-player"

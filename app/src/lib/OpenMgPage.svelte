@@ -11,7 +11,9 @@
   let tracks = $state<OpenMgTrack[]>([]);
   let loading = $state(true);
   let error = $state<string | null>(null);
+  const st = $derived(store.playerStates[path]);
   $effect(() => {
+    void store.openMgRevision;
     const currentPath = path;
     loading = true;
     error = null;
@@ -37,10 +39,26 @@
           <dt>{t("Location")}</dt><dd class="path">{device.path}</dd>
         </dl>
         <p class="note">{t("Chinotto recognizes this Walkman as a Sony OpenMG device. Its music and database are stored in OMGAUDIO, not in the regular MUSIC folder.")}</p>
-        <p class="note">{t("Generic drive setup and writing are disabled to protect the device database. OpenMG initialization and song transfer are not available in this version yet.")}</p>
         <div class="actions">
-          {#if !device.manual}<button onclick={() => store.eject(device.path)} disabled={!!store.ejecting}>{t("Eject")}</button>{/if}
+          {#if !device.manual}<button onclick={() => store.eject(device.path)} disabled={!!store.ejecting || !!store.busy}>{t("Eject")}</button>{/if}
+          {#if st?.writable}<button onclick={() => store.pickAndCopyToPlayer(path)} disabled={!!store.busy}>{t("Add Songs…")}</button>{/if}
         </div>
+        {#if st}
+          <div class="changes">
+            <label class="switch">
+              <input type="checkbox" role="switch" checked={st.writable} onchange={(e) => store.setPlayerAllow(path, e.currentTarget.checked)} disabled={!!store.busy} />
+              <span class="track" aria-hidden="true"><span class="knob"></span></span>
+              {t("Allow changes to this device.")}
+            </label>
+            <p class="note">
+              {#if st.writable}
+                {t("Chinotto can add songs to this Walkman (drag them onto it in the sidebar, or use Add Songs…). They go as MP3: other formats are converted to 320 kbps. Its database is backed up on the Walkman, in “Chinotto Backups”, before every change.")}
+              {:else}
+                {t("Chinotto only reads this Walkman. Turn this on to add songs to it. The setting is remembered for this Walkman only.")}
+              {/if}
+            </p>
+          </div>
+        {/if}
       </section>
       <div class="picture"><img src={deviceImage(device.icon)} alt={device.model ?? "Sony Walkman"} /></div>
     </div>
@@ -64,7 +82,7 @@
           </table>
         </div>
       {/if}
-      <p class="note">{t("Audio file names are matched through the OpenMG track keys. This remains a read-only view; Chinotto does not change OpenMG devices yet.")}</p>
+      <p class="note">{t("Audio file names are matched through the OpenMG track keys. Deleting and editing songs on this Walkman come next.")}</p>
     </section>
   </div>
 {/if}
@@ -92,4 +110,13 @@
   td.missing { color: var(--danger, #e07862); }
   .error { color: var(--danger, #e07862); }
   @container (max-width: 600px) { .picture { display: none; } }
+  .changes { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--edge); }
+  .switch { display: inline-flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 500; }
+  .switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .switch .track { position: relative; width: 34px; height: 20px; border-radius: 10px; background: var(--cap-other); transition: background 0.15s; }
+  .switch .knob { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / 0.3); transition: transform 0.15s; }
+  .switch input:checked + .track { background: var(--accent); }
+  .switch input:checked + .track .knob { transform: translateX(14px); }
+  .switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { .switch .track, .switch .knob { transition: none; } }
 </style>

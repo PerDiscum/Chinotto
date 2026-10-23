@@ -481,6 +481,9 @@ pub struct PlayerState {
 
 #[tauri::command]
 pub fn msc_state(path: String, app: AppHandle) -> Result<PlayerState, String> {
+    if is_openmg_root(Path::new(&path)) {
+        return Ok(crate::openmg::state(Path::new(&path), &app));
+    }
     if path.starts_with("mtp:") {
         return crate::mtp::player_state(&path, &app);
     }
@@ -496,6 +499,10 @@ pub fn msc_state(path: String, app: AppHandle) -> Result<PlayerState, String> {
 
 #[tauri::command]
 pub fn msc_allow(path: String, allow: bool, app: AppHandle) -> Result<PlayerState, String> {
+    if is_openmg_root(Path::new(&path)) {
+        app.state::<AppState>().set_writable(&crate::openmg::identity(Path::new(&path)), allow)?;
+        return Ok(crate::openmg::state(Path::new(&path), &app));
+    }
     if path.starts_with("mtp:") {
         app.state::<AppState>().set_writable(&crate::mtp::identity_of(&path, &app)?, allow)?;
         return crate::mtp::player_state(&path, &app);
@@ -582,6 +589,9 @@ pub(crate) fn sources(app: &AppHandle, dbids: &[String], files: &[String], skipp
 /// onto the player, converting what it can't play.
 #[tauri::command]
 pub async fn msc_add(path: String, dbids: Vec<String>, files: Vec<String>, app: AppHandle) -> Result<CopyResult, String> {
+    if is_openmg_root(Path::new(&path)) {
+        return crate::openmg::add(path, dbids, files, app).await;
+    }
     if path.starts_with("mtp:") {
         return crate::mtp::add(path, dbids, files, app).await;
     }

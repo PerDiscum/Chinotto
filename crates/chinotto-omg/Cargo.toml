@@ -1,0 +1,8 @@
+[package]
+name = "chinotto-omg"
+description = "Sony OpenMG Walkmans (OMGAUDIO database and .OMA files)"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]

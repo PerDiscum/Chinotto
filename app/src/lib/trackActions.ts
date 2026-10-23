@@ -32,7 +32,7 @@ function ipodCopy(dbids: string[]) {
 /** "Copy to <player>" for each player set up as a drive or open over MTP (not the one shown). */
 function playerCopies(dbids: string[], shownLib: string | null) {
   return store.devices
-    .filter((d) => (d.kind === "msc" || (d.kind === "mtp" && !!d.library)) && d.library !== shownLib)
+    .filter((d) => (d.kind === "msc" || d.kind === "openmg" || (d.kind === "mtp" && !!d.library)) && d.library !== shownLib)
     .map((d) => ({ label: t("Copy to {name}", { name: d.volume }), action: () => store.copyToPlayer(d.path, dbids) }));
 }
 

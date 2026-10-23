@@ -147,8 +147,8 @@ pub fn convert(src: &Path, dir: &Path, target: &str, n: usize) -> Result<PathBuf
     match target {
         "alac" => encode_alac(src, &mut source, &out, dir, n)?,
         "aac128" => encode_aac(src, &mut source, &out, 128, dir, n)?,
-        "mp3_320" => encode_mp3(&mut source, &out, 320)?,
-        "mp3_192" => encode_mp3(&mut source, &out, 192)?,
+        "mp3_320" => encode_mp3(&mut source, &out, 320, None)?,
+        "mp3_192" => encode_mp3(&mut source, &out, 192, None)?,
         _ => encode_aac(src, &mut source, &out, 256, dir, n)?,
     }
     copy_tags(src, &out).map_err(|e| format!("{name}: {e}"))?;
@@ -168,13 +168,23 @@ fn stereo_chunks(source: &mut Source, mut f: impl FnMut(&[f32]) -> Result<(), St
     Ok(())
 }
 
-fn encode_mp3(source: &mut Source, out: &Path, kbps: u32) -> Result<(), String> {
+/// MP3 at 320 kbps and 44.1 kHz, the only rate OpenMG Walkmans take (no
+/// tags: the device file carries its own).
+pub fn mp3_44k(src: &Path, dir: &Path, n: usize) -> Result<PathBuf, String> {
+    let name = src.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let out = dir.join(format!("{n:05}.mp3"));
+    let mut source = Source::open(src).map_err(|e| format!("{name}: {e}"))?;
+    encode_mp3(&mut source, &out, 320, Some(44_100))?;
+    Ok(out)
+}
+
+fn encode_mp3(source: &mut Source, out: &Path, kbps: u32, rate: Option<u32>) -> Result<(), String> {
     use mp3lame_encoder::{Bitrate, Builder, FlushNoGap, InterleavedPcm, Quality};
     let e = |e: mp3lame_encoder::BuildError| format!("MP3 encoder: {e:?}");
     let mut b = Builder::new().ok_or("MP3 encoder couldn't start")?;
     b.set_num_channels(2).map_err(e)?;
     b.set_sample_rate(source.rate).map_err(e)?;
-    b.set_output_sample_rate(std::num::NonZeroU32::new(out_rate(source.rate))).map_err(e)?;
+    b.set_output_sample_rate(std::num::NonZeroU32::new(rate.unwrap_or_else(|| out_rate(source.rate)))).map_err(e)?;
     b.set_brate(if kbps >= 320 { Bitrate::Kbps320 } else { Bitrate::Kbps192 }).map_err(e)?;
     b.set_quality(Quality::Best).map_err(e)?;
     let mut enc = b.build().map_err(e)?;
