@@ -1100,3 +1100,15 @@ device continue past the kernel-interface guard so libmtp can try the probe.
 The exception is limited to this USB ID. It still needs testing on the player:
 confirm Chinotto opens the device, lists its songs, and can transfer a test
 track before enabling regular use.
+
+## 0096: Retry Sansa e260 v2 OpenSession after clearing the OUT halt
+
+A Windows USB capture from the Sansa e260 v2 (`0781:7422`, firmware
+`V03.01.16A`) shows the standard 16-byte PTP `OpenSession` command sent on
+bulk OUT endpoint `0x01`, followed by a successful `0x2001` response on bulk IN
+endpoint `0x81`. The Mac libusb log reports a stall on the bulk-OUT transfer
+itself before any response is read. On Apple builds, this change tries
+`libusb_clear_halt` on that device's OUT endpoint and retries `OpenSession`
+once before falling back to libmtp's existing device-reset retry. Other devices
+and platforms are unchanged. This is an experimental fix; the user must test
+whether Chinotto can open and list the Sansa on macOS.
