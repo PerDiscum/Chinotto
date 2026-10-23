@@ -1112,3 +1112,15 @@ itself before any response is read. On Apple builds, this change tries
 once before falling back to libmtp's existing device-reset retry. Other devices
 and platforms are unchanged. This is an experimental fix; the user must test
 whether Chinotto can open and list the Sansa on macOS.
+
+## 0097: Re-select the Sansa e260 v2 USB configuration on macOS
+
+Patch 0096's log showed that clearing the Sansa's bulk-OUT halt did not open
+the session: the first retry timed out, and after libmtp reset the device the
+OpenSession command was sent but the bulk-IN response stalled. In the Windows
+capture, Windows explicitly sends `SET_CONFIGURATION 1` before claiming the
+MTP interface; libmtp skips this when configuration 1 is already active. On
+Apple builds only, libmtp now re-selects the active configuration for USB
+`0781:7422` before claiming the interface and opening the session. This is a
+narrow experimental attempt to match the known-good Windows setup sequence;
+it needs testing on the Sansa.

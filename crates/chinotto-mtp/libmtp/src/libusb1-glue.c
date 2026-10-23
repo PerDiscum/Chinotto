@@ -1968,6 +1968,23 @@ static int init_ptp_usb(PTPParams* params, PTP_USB* ptp_usb, libusb_device* dev)
       return -1;
     }
   }
+#if defined(__APPLE__)
+  /* Windows explicitly selects configuration 1 for the Sansa e260 v2 before
+   * opening its MTP session. Re-select it on macOS too, even when it already
+   * appears active, to reset the device's endpoint state before claiming it. */
+  if (ptp_usb->rawdevice.device_entry.vendor_id == 0x0781 &&
+      ptp_usb->rawdevice.device_entry.product_id == 0x7422 &&
+      config->bConfigurationValue == ptp_usb->config) {
+    fprintf(stderr, "Sansa e260 v2: re-selecting active USB configuration %d\n",
+            ptp_usb->config);
+    ret = libusb_set_configuration(device_handle, ptp_usb->config);
+    if (ret != LIBUSB_SUCCESS) {
+      fprintf(stderr, "Sansa e260 v2: could not re-select USB configuration (%d)\n",
+              ret);
+    }
+  }
+#endif
+
   if (config->bConfigurationValue != ptp_usb->config) {
     fprintf(stderr, "desired configuration different from current, trying to set configuration\n");
     if (libusb_set_configuration(device_handle, ptp_usb->config)) {
