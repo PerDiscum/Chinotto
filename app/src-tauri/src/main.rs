@@ -59,6 +59,7 @@ fn main() {
             mtp::mtp_close,
             mtp::mtp_info,
             openmg::openmg_view,
+            openmg::openmg_reorder,
             msc::msc_save,
             msc::msc_state,
             msc::msc_allow,

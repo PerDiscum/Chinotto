@@ -34,6 +34,11 @@ pub struct Tags {
     pub album: String,
     pub genre: String,
     pub year: Option<u32>,
+    /// Track and disc number (0: unknown). The Walkman's database has no
+    /// place for them, so they're kept in the file's tag (TRCK, TPOS),
+    /// where Chinotto reads them to order albums.
+    pub track: u32,
+    pub disc: u32,
 }
 
 fn text_frame(id: &[u8; 4], text: &str) -> Vec<u8> {
@@ -56,6 +61,12 @@ pub fn tag(tags: &Tags, length_ms: u32) -> Vec<u8> {
     t.extend(text_frame(b"TCON", &tags.genre));
     if let Some(y) = tags.year.filter(|y| *y > 0) {
         t.extend(text_frame(b"TYER", &y.to_string()));
+    }
+    if tags.track > 0 {
+        t.extend(text_frame(b"TRCK", &tags.track.to_string()));
+    }
+    if tags.disc > 0 {
+        t.extend(text_frame(b"TPOS", &tags.disc.to_string()));
     }
     t.extend(text_frame(b"TLEN", &length_ms.to_string()));
     t.resize(TAG_SIZE, 0);
@@ -80,6 +91,47 @@ pub fn build(mp3: &Mp3, tags: &Tags, cid: &[u8; 12]) -> Vec<u8> {
     f.extend(header(cid, codec_params(mp3.bitrate_index), mp3.length_ms, mp3.frames));
     f.extend_from_slice(&mp3.audio);
     f
+}
+
+/// Track and disc number from an `ea3` tag (the file's first 0xC00 bytes).
+pub fn numbers(head: &[u8]) -> (u32, u32) {
+    let (mut track, mut disc) = (0, 0);
+    if head.get(..3) != Some(b"ea3") {
+        return (0, 0);
+    }
+    let mut p = 10;
+    while let Some(id) = head.get(p..p + 4).filter(|id| id.iter().all(|b| b.is_ascii_alphanumeric())) {
+        let Some(size) = head.get(p + 4..p + 8).map(|s| u32::from_be_bytes(s.try_into().unwrap()) as usize) else { break };
+        let Some(body) = head.get(p + 10..p + 10 + size) else { break };
+        let text = match body.first() {
+            Some(2) => String::from_utf16_lossy(&body[1..].chunks_exact(2).map(|c| u16::from_be_bytes([c[0], c[1]])).collect::<Vec<_>>()),
+            Some(0) | Some(3) => String::from_utf8_lossy(&body[1..]).into_owned(),
+            _ => String::new(),
+        };
+        let n = text.trim_matches('\0').split('/').next().and_then(|n| n.trim().parse().ok()).unwrap_or(0);
+        match id {
+            b"TRCK" => track = n,
+            b"TPOS" => disc = n,
+            _ => {}
+        }
+        p += 10 + size;
+    }
+    (track, disc)
+}
+
+/// Replace the tag of the `.OMA` file at `path` (its first 0xC00 bytes; the
+/// header and audio are left alone).
+pub fn rewrite_tag(path: &std::path::Path, tags: &Tags, length_ms: u32) -> std::io::Result<()> {
+    use std::io::{Read, Seek, SeekFrom, Write};
+    let mut f = std::fs::OpenOptions::new().read(true).write(true).open(path)?;
+    let mut head = vec![0u8; TAG_SIZE + 3];
+    f.read_exact(&mut head)?;
+    if &head[..3] != b"ea3" || &head[TAG_SIZE..] != b"EA3" {
+        return Err(std::io::Error::other("not an OpenMG file"));
+    }
+    f.seek(SeekFrom::Start(0))?;
+    f.write_all(&tag(tags, length_ms))?;
+    f.sync_all()
 }
 
 /// The content ID of an `.OMA` file (from its first 0xC20 bytes).
@@ -125,8 +177,14 @@ mod tests {
     fn file_layout() {
         let data: Vec<u8> = (0..5).flat_map(|i| crate::mp3::tests::frame(9, i == 2)).collect();
         let mp3 = crate::mp3::prepare(&data).unwrap();
-        let tags =
-            Tags { title: "If We".into(), artist: "Mariah Carey".into(), album: "Glitter".into(), genre: "Pop".into(), year: Some(2001) };
+        let tags = Tags {
+            title: "If We".into(),
+            artist: "Mariah Carey".into(),
+            album: "Glitter".into(),
+            genre: "Pop".into(),
+            year: Some(2001),
+            ..Default::default()
+        };
         let cid = [0x77, 0xaa, 0x1e, 0x4e, 0x90, 0xed, 0xf6, 0x93, 0xb7, 0x4f, 0x74, 0x93];
         let f = build(&mp3, &tags, &cid);
         // As the device's own files: tag header, first frame, EA3 header.
@@ -139,6 +197,10 @@ mod tests {
         assert_eq!(f.len(), 0xC60 + data.len());
         assert_eq!(&f[0xC60..], &data[..]);
         assert_eq!(codec_params(14), [0x03, 0x84, 0xDE, 0x00]);
+        assert_eq!(numbers(&f), (0, 0));
+        let numbered = tag(&Tags { track: 3, disc: 1, ..tags }, 1000);
+        assert_eq!(numbered.len(), TAG_SIZE);
+        assert_eq!(numbers(&numbered), (3, 1));
     }
 
     #[test]

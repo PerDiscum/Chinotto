@@ -1012,3 +1012,22 @@ album picture from the song list alone, byte for byte (run it with
   need rows renumbered and files renamed, and come next.
 - ChatGPT's template helpers (0080–0087) are replaced by the crate and
   removed; the read-only view (`openmg_view`) is unchanged.
+
+## 0090: OpenMG albums in track order
+
+Confirmed on the NW-S716F: songs added by 0089 transfer, play, seek and skip,
+with correct tags. But an album's songs played in the order they were added.
+The tables have no field for track numbers (a song row holds title, artist,
+album, genre and year only); the Walkman follows the trees' song order, which
+Chinotto writes. So:
+
+- New `.OMA` files carry TRCK and TPOS in their `ea3` tag. `Database::read`
+  reads them back from every file (matched by content ID), and each tree
+  orders an album's songs by disc and track, then unnumbered songs in the
+  order added (the device test still rebuilds the device's tables byte for
+  byte: none of its songs has a number).
+- Songs without a number get one from the computer's libraries (same title,
+  artist and album). It's written into their file's tag in place
+  (`oma::rewrite_tag`, first 0xC00 bytes only), so it's kept.
+- This happens on every add, and on demand with "Put Albums in Track Order"
+  on the OpenMG page (`openmg_reorder`).

@@ -10,6 +10,7 @@ export const closeIpod = () => invoke<void>("close_ipod");
 export const eject = (path: string) => invoke<void>("eject", { path });
 export const startupFolder = () => invoke<string | null>("startup_folder");
 export const openMgView = (path: string) => invoke<OpenMgView>("openmg_view", { path });
+export const openMgReorder = (path: string) => invoke<number>("openmg_reorder", { path });
 
 export const onDevicesChanged = (f: (d: DeviceInfo[]) => void): Promise<UnlistenFn> =>
   listen<DeviceInfo[]>("devices-changed", (e) => f(e.payload));

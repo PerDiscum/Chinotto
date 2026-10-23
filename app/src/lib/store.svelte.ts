@@ -527,6 +527,22 @@ class Store {
   /** Bumped after songs are added to an OpenMG Walkman (its page reads its list again). */
   openMgRevision = $state(0);
 
+  /** Put an OpenMG Walkman's albums in track order (numbers from the libraries). */
+  async reorderOpenMg(path: string) {
+    if (this.busy) return;
+    this.busy = t("Putting albums in track order…");
+    this.error = null;
+    try {
+      const n = await api.openMgReorder(path);
+      this.openMgRevision++;
+      this.dialog = { kind: "report", title: t("Albums are in track order"), lines: [tn(n, "Track number found for {n} song in your libraries.", "Track numbers found for {n} songs in your libraries.")] };
+    } catch (e) {
+      this.error = String(e);
+    } finally {
+      this.busy = null;
+    }
+  }
+
   async pickAndCopyToPlayer(path: string) {
     const files = await api.pickMusicFiles();
     if (files.length) await this.copyToPlayer(path, [], files);
