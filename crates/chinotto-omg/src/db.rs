@@ -532,6 +532,37 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// A nearly full Walkman (255 songs, many albums with pictures) rebuilds
+    /// and reads back, quickly.
+    #[test]
+    fn many_songs() {
+        let dir = std::env::temp_dir().join(format!("chinotto-omg-many-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        empty(&dir);
+        let mut db = Database::read(&dir).unwrap();
+        for i in 0..255u32 {
+            let album = format!("Album {}", i / 4);
+            let mut s = song(&format!("Song {i}"), &format!("Artist {}", i / 9), &album, &format!("G{}", i % 7), 1000 + i);
+            s.cid = [(i % 251) as u8; 12];
+            s.cid[0] = (i >> 8) as u8;
+            s.cid[1] = i as u8;
+            s.track = i % 4 + 1;
+            db.songs.push(s);
+            db.art.insert(album, Art { large: vec![0xFF, 0xD8, 1], medium: vec![0xFF, 0xD8, 2], small: vec![0xFF, 0xD8, 3] });
+        }
+        let t0 = std::time::Instant::now();
+        let tables = db.tables();
+        let pictures = db.pictures();
+        assert!(t0.elapsed().as_secs() < 5, "{:?}", t0.elapsed());
+        for (name, bytes) in tables {
+            std::fs::write(dir.join(name), bytes).unwrap();
+        }
+        assert!(!pictures.is_empty());
+        let back = Database::read(&dir).unwrap();
+        assert_eq!(back.songs.len(), 255);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn albums_go_in_track_order() {
         let dir = std::env::temp_dir().join(format!("chinotto-omg-order-{}", std::process::id()));
