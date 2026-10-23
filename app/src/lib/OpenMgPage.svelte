@@ -41,7 +41,10 @@
         <p class="note">{t("Chinotto recognizes this Walkman as a Sony OpenMG device. Its music and database are stored in OMGAUDIO, not in the regular MUSIC folder.")}</p>
         <div class="actions">
           {#if !device.manual}<button onclick={() => store.eject(device.path)} disabled={!!store.ejecting || !!store.busy}>{t("Eject")}</button>{/if}
-          {#if st?.writable}<button onclick={() => store.pickAndCopyToPlayer(path)} disabled={!!store.busy}>{t("Add Songs…")}</button>{/if}
+          {#if st?.writable}
+            <button onclick={() => store.pickAndCopyToPlayer(path)} disabled={!!store.busy}>{t("Add Songs…")}</button>
+            <button onclick={() => store.reorderOpenMg(path)} disabled={!!store.busy} title={t("Albums play in track order; songs added by other programs get their numbers from your libraries.")}>{t("Put Albums in Track Order")}</button>
+          {/if}
         </div>
         {#if st}
           <div class="changes">

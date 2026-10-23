@@ -51,6 +51,12 @@ pub struct Song {
     /// The codec field (0 in songs some software added; `oma::codec_params` otherwise).
     pub codec: [u8; 4],
     pub cid: [u8; 12],
+    /// Track and disc number (0: unknown), from the file's tag: the tables
+    /// have no place for them. An album's songs go in this order.
+    pub track: u32,
+    pub disc: u32,
+    /// The song's file inside OMGAUDIO ("10F00/10000001.OMA"), if found.
+    pub file: Option<String>,
 }
 
 /// An album's pictures: 200, 96 and 32 pixels square (baseline JPEG).
@@ -172,6 +178,30 @@ impl Database {
                 }
             }
         }
+        // Each song's file (by content ID) and the numbers in its tag.
+        let mut by_cid: HashMap<[u8; 12], (String, (u32, u32))> = HashMap::new();
+        for dir in std::fs::read_dir(omgaudio).map_err(|e| e.to_string())?.flatten() {
+            let d = dir.file_name().to_string_lossy().into_owned();
+            if !d.to_ascii_uppercase().starts_with("10F") || !dir.file_type().is_ok_and(|t| t.is_dir()) {
+                continue;
+            }
+            for f in std::fs::read_dir(dir.path()).map_err(|e| e.to_string())?.flatten() {
+                let n = f.file_name().to_string_lossy().into_owned();
+                if n.starts_with('.') || !n.to_ascii_uppercase().ends_with(".OMA") {
+                    continue;
+                }
+                let mut head = vec![0u8; crate::oma::TAG_SIZE + 0x20];
+                let read = std::fs::File::open(f.path()).and_then(|mut h| std::io::Read::read_exact(&mut h, &mut head));
+                if let (Ok(()), Some(cid)) = (read, crate::oma::content_id(&head)) {
+                    by_cid.insert(cid, (format!("{d}/{n}"), crate::oma::numbers(&head)));
+                }
+            }
+        }
+        for s in &mut songs {
+            if let Some((file, (track, disc))) = by_cid.remove(&s.cid) {
+                (s.file, s.track, s.disc) = (Some(file), track, disc);
+            }
+        }
         let treinf = file("02TREINF.DAT")?;
         let list = file("00GTRLST.DAT")?;
         let (lat, ln, lsize) = section(&list, b"GTLT", 1)?;
@@ -187,7 +217,8 @@ impl Database {
         let key = |s: &str| s.encode_utf16().collect::<Vec<u16>>();
         let song = |id: u16| &songs[id as usize - 1];
         // Groups of `by`, sorted, each with its songs in `inner` order.
-        let grouped = |by: &dyn Fn(&Song) -> &str, inner: &dyn Fn(u16) -> (Vec<u16>, Vec<u16>, u16)| {
+        type Order = (Vec<u16>, Vec<u16>, (bool, u32, u32, u16));
+        let grouped = |by: &dyn Fn(&Song) -> &str, inner: &dyn Fn(u16) -> Order| {
             let mut g: BTreeMap<Vec<u16>, (String, Vec<u16>)> = BTreeMap::new();
             for &id in &ids {
                 let name = by(song(id));
@@ -201,9 +232,14 @@ impl Database {
                 .collect::<Vec<_>>()
         };
         let total = |m: &[u16]| m.iter().map(|&id| song(id).length_ms).sum::<u32>();
-        let by_number = |id: u16| (Vec::new(), Vec::new(), id);
-        let by_album = |id: u16| (key(&song(id).album), Vec::new(), id);
-        let by_artist_album = |id: u16| (key(&song(id).artist), key(&song(id).album), id);
+        // In an album: by disc and track number, then songs without one, in the order they were added.
+        let order = |id: u16| {
+            let s = song(id);
+            (s.track == 0, s.disc, s.track, id)
+        };
+        let by_number = |id: u16| (Vec::new(), Vec::new(), order(id));
+        let by_album = |id: u16| (key(&song(id).album), Vec::new(), order(id));
+        let by_artist_album = |id: u16| (key(&song(id).artist), key(&song(id).album), order(id));
 
         let mut out = Vec::new();
         // 04CNTINF, 05CIDLST
@@ -493,6 +529,30 @@ mod tests {
         let (at, _, size) = section(&inf, b"GTIF", 0).unwrap();
         let totals: Vec<u32> = (0..6).map(|r| be32(&inf, at + r * size + 8)).collect();
         assert_eq!(totals, [6000, 6000, 6000, 6000, 0, 6000]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn albums_go_in_track_order() {
+        let dir = std::env::temp_dir().join(format!("chinotto-omg-order-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        empty(&dir);
+        let mut db = Database::read(&dir).unwrap();
+        // Added as: track 4, unnumbered, track 1, disc 2 track 1, track 3.
+        db.songs = vec![
+            Song { track: 4, ..song("Ironic", "A", "J", "R", 1) },
+            song("Bonus", "A", "J", "R", 1),
+            Song { track: 1, ..song("All I Really Want", "A", "J", "R", 1) },
+            Song { track: 1, disc: 2, ..song("Disc two", "A", "J", "R", 1) },
+            Song { track: 3, ..song("Head Over Feet", "A", "J", "R", 1) },
+        ];
+        let tables: HashMap<String, Vec<u8>> = db.tables().into_iter().collect();
+        for name in ["01TREE01.DAT", "01TREE02.DAT", "01TREE04.DAT", "01TREE2D.DAT"] {
+            let t = &tables[name];
+            let (at, n, _) = section(t, b"TREE", 1).unwrap();
+            let order: Vec<usize> = (0..n).map(|i| be16(t, at + i * 2)).collect();
+            assert_eq!(order, [3, 5, 1, 4, 2], "{name}");
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 

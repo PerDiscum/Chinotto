@@ -237,6 +237,8 @@ pub async fn add(path: String, dbids: Vec<String>, files: Vec<String>, app: AppH
                 album: text(&info.album, "Unknown Album"),
                 genre: text(&info.genre, "Unknown Genre"),
                 year: (info.year > 0).then_some(info.year as u32),
+                track: info.track_nr.max(0) as u32,
+                disc: info.disc_nr.max(0) as u32,
             };
             let mut song = Song {
                 title: chinotto_omg::fit(&tags.title),
@@ -244,6 +246,8 @@ pub async fn add(path: String, dbids: Vec<String>, files: Vec<String>, app: AppH
                 album: chinotto_omg::fit(&tags.album),
                 genre: chinotto_omg::fit(&tags.genre),
                 year: tags.year,
+                track: tags.track,
+                disc: tags.disc,
                 ..Default::default()
             };
             if !on_device.insert(same_song(&song)) {
@@ -274,6 +278,7 @@ pub async fn add(path: String, dbids: Vec<String>, files: Vec<String>, app: AppH
             song.codec = oma::codec_params(mp3.bitrate_index);
             song.cid = oma::new_content_id(&db.songs.iter().map(|s| s.cid).collect::<Vec<_>>());
             let id = db.songs.len() as u32 + 1;
+            song.file = Some(oma::path_for(id));
             let dest = omg.join(oma::path_for(id));
             let part = dest.with_extension("part");
             let write = std::fs::create_dir_all(dest.parent().unwrap())
@@ -301,6 +306,8 @@ pub async fn add(path: String, dbids: Vec<String>, files: Vec<String>, app: AppH
         let _ = app.emit("add-progress", crate::write::AddProgress { done: total, total, current: String::new() });
         drop(tmp);
         if db.songs.len() > before {
+            // Songs already there that have no track number: from the libraries.
+            let numbered = number_from_libraries(&app, &mut db);
             if let Err(e) = install(&root, &db) {
                 // The database is as it was: the new files would only be clutter.
                 for f in &written {
@@ -308,8 +315,91 @@ pub async fn add(path: String, dbids: Vec<String>, files: Vec<String>, app: AppH
                 }
                 return Err(e);
             }
+            res.skipped.extend(save_numbers(&omg, &db, &numbered));
         }
         Ok(res)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Give songs without a track number the number of the same song (title,
+/// artist and album) in the computer's libraries; the indexes of those changed.
+fn number_from_libraries(app: &AppHandle, db: &mut Database) -> Vec<usize> {
+    let key = |t: &str, a: &str, b: &str| {
+        (chinotto_omg::fit(t).to_lowercase(), chinotto_omg::fit(a).to_lowercase(), chinotto_omg::fit(b).to_lowercase())
+    };
+    let known: HashMap<(String, String, String), (u32, u32)> = {
+        let state = app.state::<AppState>();
+        let libs = state.libraries.lock().unwrap();
+        libs.list
+            .iter()
+            .filter(|l| l.device.is_none())
+            .flat_map(|l| l.tracks.iter())
+            .filter(|t| t.tags.track_nr > 0)
+            .map(|t| {
+                let g = &t.tags;
+                let or = |v: &Option<String>, d: &str| v.as_deref().map(str::trim).filter(|v| !v.is_empty()).unwrap_or(d).to_string();
+                (key(&or(&g.title, ""), &or(&g.artist, "Unknown Artist"), &or(&g.album, "Unknown Album")), (g.track_nr, g.disc_nr))
+            })
+            .collect()
+    };
+    let mut changed = Vec::new();
+    for (i, s) in db.songs.iter_mut().enumerate() {
+        if s.track == 0 {
+            if let Some(&(track, disc)) = known.get(&key(&s.title, &s.artist, &s.album)) {
+                (s.track, s.disc) = (track, disc);
+                changed.push(i);
+            }
+        }
+    }
+    changed
+}
+
+/// Keep track numbers found for songs already on the Walkman in their files'
+/// tags (the database has no place for them); problems, as report lines.
+fn save_numbers(omg: &Path, db: &Database, which: &[usize]) -> Vec<String> {
+    let mut problems = Vec::new();
+    for &i in which {
+        let s = &db.songs[i];
+        let Some(file) = &s.file else { continue };
+        let tags = oma::Tags {
+            title: s.title.clone(),
+            artist: s.artist.clone(),
+            album: s.album.clone(),
+            genre: s.genre.clone(),
+            year: s.year,
+            track: s.track,
+            disc: s.disc,
+        };
+        if let Err(e) = oma::rewrite_tag(&omg.join(file), &tags, s.length_ms) {
+            problems.push(format!("{}: couldn't keep its track number ({e})", s.title));
+        }
+    }
+    problems
+}
+
+/// Put the albums on the Walkman in track order: numbers for songs without
+/// one come from the libraries; the database is rebuilt. How many songs got a number.
+#[tauri::command]
+pub async fn openmg_reorder(path: String, app: AppHandle) -> Result<usize, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let root = PathBuf::from(&path);
+        if !msc::is_openmg_root(&root) {
+            return Err("This drive is not a recognized Sony OpenMG Walkman.".into());
+        }
+        if !app.state::<AppState>().is_writable(&identity(&root)) {
+            return Err(SWITCHED_OFF.into());
+        }
+        let omg = root.join("OMGAUDIO");
+        let mut db = Database::read(&omg).map_err(|e| format!("Couldn't read the Walkman's database: {e}"))?;
+        let numbered = number_from_libraries(&app, &mut db);
+        install(&root, &db)?;
+        let problems = save_numbers(&omg, &db, &numbered);
+        if let Some(p) = problems.first() {
+            return Err(p.clone());
+        }
+        Ok(numbered.len())
     })
     .await
     .map_err(|e| e.to_string())?
@@ -465,6 +555,7 @@ mod tests {
             length_ms: 1000,
             codec: oma::codec_params(14),
             cid: oma::new_content_id(&[]),
+            ..Default::default()
         });
         install(&root, &db).unwrap();
         let back = Database::read(&omg).unwrap();
