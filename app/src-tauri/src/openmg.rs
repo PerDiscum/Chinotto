@@ -314,6 +314,8 @@ pub async fn add(path: String, dbids: Vec<String>, files: Vec<String>, app: AppH
         let _ = app.emit("add-progress", crate::write::AddProgress { done: total, total, current: String::new() });
         drop(tmp);
         if db.songs.len() > before {
+            // Saving the database can take minutes on the Walkman's slow FAT: say so.
+            let _ = app.emit("add-progress", crate::write::AddProgress { done: 0, total: 0, current: "openmg-database".into() });
             // Songs already there that have no track number: from the libraries.
             let numbered = number_from_libraries(&app, &mut db);
             if let Err(e) = install(&root, &db) {
@@ -412,12 +414,21 @@ fn install(root: &Path, db: &Database) -> Result<(), String> {
     let omg = root.join("OMGAUDIO");
     let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     let backup = root.join(BACKUPS).join(format!("OpenMG {stamp:012}"));
-    backup_omg(&omg, &backup).map_err(|e| format!("Couldn't back up the Walkman's database, so nothing was changed: {e}"))?;
-    // Keep the newest ten backups (names sort by time).
+    // The Walkman's FAT is slow with many small files (each one takes a
+    // second or more), so the pictures are left alone when they're the same.
+    let pictures = db.pictures();
+    let same_pictures = pictures_unchanged(&omg, &pictures);
+    backup_omg(&omg, &backup, !same_pictures)
+        .map_err(|e| format!("Couldn't back up the Walkman's database, so nothing was changed: {e}"))?;
+    // Keep the newest ten backups (by the time in their names, which older
+    // versions didn't pad with zeros, so they don't sort as text).
     if let Ok(rd) = std::fs::read_dir(root.join(BACKUPS)) {
+        let time = |p: &PathBuf| -> u64 {
+            p.file_name().and_then(|n| n.to_str()).and_then(|n| n.strip_prefix("OpenMG ")).and_then(|t| t.trim().parse().ok()).unwrap_or(0)
+        };
         let mut old: Vec<PathBuf> =
             rd.flatten().map(|e| e.path()).filter(|p| p.file_name().is_some_and(|n| n.to_string_lossy().starts_with("OpenMG "))).collect();
-        old.sort();
+        old.sort_by_key(time);
         while old.len() > 10 {
             let _ = std::fs::remove_dir_all(old.remove(0));
         }
@@ -429,7 +440,7 @@ fn install(root: &Path, db: &Database) -> Result<(), String> {
         for (name, bytes) in db.tables() {
             std::fs::write(stage.join("tables").join(name), bytes)?;
         }
-        for (rel, bytes) in db.pictures() {
+        for (rel, bytes) in pictures.iter().filter(|_| !same_pictures) {
             let p = stage.join("pictures").join(rel);
             std::fs::create_dir_all(p.parent().unwrap())?;
             std::fs::write(p, bytes)?;
@@ -449,6 +460,9 @@ fn install(root: &Path, db: &Database) -> Result<(), String> {
             }
             std::fs::rename(e.path(), &live)?;
         }
+        if same_pictures {
+            return Ok(());
+        }
         for d in picture_dirs(&omg)? {
             std::fs::rename(&d, stage.join("old").join(d.file_name().unwrap()))?;
         }
@@ -460,7 +474,7 @@ fn install(root: &Path, db: &Database) -> Result<(), String> {
         Ok(())
     })();
     if let Err(e) = swapped {
-        let restored = restore_omg(&omg, &backup);
+        let restored = restore_omg(&omg, &backup, !same_pictures);
         let _ = std::fs::remove_dir_all(&stage);
         return Err(match restored {
             Ok(()) => format!("Couldn't update the Walkman's database ({e}); it's back as it was."),
@@ -483,40 +497,67 @@ fn picture_dirs(omg: &Path) -> std::io::Result<Vec<PathBuf>> {
         .collect())
 }
 
-/// Copy the tables (not RESERVED.DAT, which nothing changes) and picture folders.
-fn backup_omg(omg: &Path, backup: &Path) -> std::io::Result<()> {
+/// Whether the picture folders already hold exactly `pictures`.
+fn pictures_unchanged(omg: &Path, pictures: &[(String, Vec<u8>)]) -> bool {
+    let Ok(dirs) = picture_dirs(omg) else { return false };
+    let mut on_disk = 0;
+    for d in &dirs {
+        let Ok(rd) = std::fs::read_dir(d) else { return false };
+        on_disk += rd.flatten().filter(|f| !f.file_name().to_string_lossy().starts_with("._") && f.path().is_file()).count();
+    }
+    on_disk == pictures.len() && pictures.iter().all(|(rel, bytes)| std::fs::read(omg.join(rel)).is_ok_and(|b| &b == bytes))
+}
+
+/// A plain copy: the bytes only (`fs::copy` also copies extended
+/// attributes, which on FAT means a "._" file for each, twice the writing).
+fn copy_plain(from: &Path, to: &Path) -> std::io::Result<()> {
+    std::fs::write(to, std::fs::read(from)?)
+}
+
+/// Copy the tables (not RESERVED.DAT, which nothing changes) and, if asked,
+/// the picture folders.
+fn backup_omg(omg: &Path, backup: &Path, with_pictures: bool) -> std::io::Result<()> {
     std::fs::create_dir_all(backup)?;
     for e in std::fs::read_dir(omg)?.flatten() {
         let n = e.file_name().to_string_lossy().into_owned();
         if e.file_type()?.is_file() && n.to_ascii_uppercase().ends_with(".DAT") && !n.starts_with("._") && n != "RESERVED.DAT" {
-            std::fs::copy(e.path(), backup.join(&n))?;
+            copy_plain(&e.path(), &backup.join(&n))?;
         }
+    }
+    if !with_pictures {
+        return Ok(());
     }
     for d in picture_dirs(omg)? {
         let to = backup.join(d.file_name().unwrap());
         std::fs::create_dir_all(&to)?;
         for f in std::fs::read_dir(&d)?.flatten() {
             if f.file_type()?.is_file() && !f.file_name().to_string_lossy().starts_with("._") {
-                std::fs::copy(f.path(), to.join(f.file_name()))?;
+                copy_plain(&f.path(), &to.join(f.file_name()))?;
             }
         }
     }
     Ok(())
 }
 
-fn restore_omg(omg: &Path, backup: &Path) -> std::io::Result<()> {
-    for d in picture_dirs(omg)? {
-        std::fs::remove_dir_all(d)?;
+/// Put a backup back; its picture folders only if it has them (`pictures`).
+fn restore_omg(omg: &Path, backup: &Path, pictures: bool) -> std::io::Result<()> {
+    if pictures {
+        for d in picture_dirs(omg)? {
+            std::fs::remove_dir_all(d)?;
+        }
     }
     for e in std::fs::read_dir(backup)?.flatten() {
         if e.file_type()?.is_dir() {
+            if !pictures {
+                continue;
+            }
             let to = omg.join(e.file_name());
             std::fs::create_dir_all(&to)?;
             for f in std::fs::read_dir(e.path())?.flatten() {
-                std::fs::copy(f.path(), to.join(f.file_name()))?;
+                copy_plain(&f.path(), &to.join(f.file_name()))?;
             }
         } else {
-            std::fs::copy(e.path(), omg.join(e.file_name()))?;
+            copy_plain(&e.path(), &omg.join(e.file_name()))?;
         }
     }
     Ok(())

@@ -303,6 +303,13 @@ class Store {
     });
     void api.playerVolume(this.volume);
     await api.onAddProgress((p) => {
+      // A late event after the work finished mustn't bring the status back.
+      if (!this.busy) return;
+      if (p.current === "openmg-database") {
+        this.progress = null;
+        this.busy = t("Saving the Walkman's song list… (this can take a few minutes; don't unplug it)");
+        return;
+      }
       this.progress = p;
       const n = { done: Math.min(p.done + 1, p.total), total: p.total };
       if (p.total) this.busy = (this.ripping ? t("Ripping {done} of {total}", n) : t("Adding {done} of {total}", n)) + (p.current ? `: ${p.current}` : "");
