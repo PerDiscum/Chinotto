@@ -178,6 +178,38 @@ pub(crate) fn prepare_track_record(
     Ok(record)
 }
 
+/// Prepare a one-value artist, album, or genre row from a matching table row.
+#[allow(dead_code)]
+pub(crate) fn prepare_group_value_record(template: &[u8], value: &str, representative_length_ms: u32) -> Result<Vec<u8>, String> {
+    if template.len() != 144 {
+        return Err("OpenMG group-value template must be exactly 144 bytes.".into());
+    }
+    let mut record = template.to_vec();
+    record[8..12].copy_from_slice(&representative_length_ms.to_be_bytes());
+    write_tag(&mut record, 16, b"TIT2", value, 128)?;
+    Ok(record)
+}
+
+/// Prepare the combined album, artist, and genre row from a matching row.
+#[allow(dead_code)]
+pub(crate) fn prepare_album_summary_record(
+    template: &[u8],
+    album: &str,
+    artist: &str,
+    genre: &str,
+    representative_length_ms: u32,
+) -> Result<Vec<u8>, String> {
+    if template.len() != 0x310 {
+        return Err("OpenMG album-summary template must be exactly 784 bytes.".into());
+    }
+    let mut record = template.to_vec();
+    record[8..12].copy_from_slice(&representative_length_ms.to_be_bytes());
+    write_tag(&mut record, 16, b"TIT2", album, 128)?;
+    write_tag(&mut record, 144, b"TPE1", artist, 128)?;
+    write_tag(&mut record, 272, b"TCON", genre, 128)?;
+    Ok(record)
+}
+
 fn write_tag(record: &mut [u8], offset: usize, id: &[u8; 4], value: &str, size: usize) -> Result<(), String> {
     let block = record.get_mut(offset..offset + size).ok_or_else(|| "OpenMG tag block is outside the track record.".to_string())?;
     let encoded: Vec<u16> = value.encode_utf16().collect();

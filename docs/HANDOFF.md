@@ -907,3 +907,13 @@ Devices were opened with `LIBMTP_Open_Raw_Device_Uncached`, and libmtp's `flush_
 - These helpers do not write files or update group/tree relationships. They
   are groundwork for an off-device generator only; device writing remains
   disabled until the full database can be generated and validated together.
+
+## 0082: prepare OpenMG group metadata records
+
+- Add template-based encoders for the fixed 144-byte artist, album, and genre
+  rows and the 784-byte combined album-summary row observed in this device's
+  `03GINF` tables. They update the metadata text and representative duration
+  while preserving unknown bytes from a same-table template.
+- These records still need stable group identifiers and corresponding
+  `01TREE`/`03GINF2D` hierarchy references. The helpers are not connected to
+  transfer and do not write to the Walkman.
