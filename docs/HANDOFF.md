@@ -885,3 +885,14 @@ Devices were opened with `LIBMTP_Open_Raw_Device_Uncached`, and libmtp's `flush_
   case; it still does not establish all details needed to generate a valid
   database or OMA file. Keep OpenMG writes disabled until an off-device
   generator can be checked against these observations.
+
+## 0080: add an isolated OpenMG track-record encoder
+
+- Add an internal helper that prepares one 656-byte `04CNTINF.DAT` track
+  record by copying a known-good template, replacing the observed duration
+  field, and encoding the four metadata tags as UTF-16BE.
+- Preserve all unknown record bytes from the template. Reject tag values that
+  exceed the fixed record capacity rather than silently truncating them.
+- This is only an off-device building block. It is not called by a transfer
+  command and does not update `05CIDLST`, group tables, tree indexes, artwork,
+  or OMA files. OpenMG device writes remain disabled.
