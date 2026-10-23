@@ -1,11 +1,28 @@
 <script lang="ts">
   import { t } from "./i18n";
   import { store } from "./store.svelte";
-  import { bytes } from "./format";
+  import { bytes, duration } from "./format";
   import { deviceImage } from "./deviceImages";
+  import { openMgView } from "./api";
+  import type { OpenMgTrack } from "./types";
 
   let { path }: { path: string } = $props();
   const device = $derived(store.devices.find((d) => d.path === path));
+  let tracks = $state<OpenMgTrack[]>([]);
+  let loading = $state(true);
+  let error = $state<string | null>(null);
+  $effect(() => {
+    const currentPath = path;
+    loading = true;
+    error = null;
+    void openMgView(currentPath).then((view) => {
+      if (path === currentPath) tracks = view.tracks;
+    }).catch((e: unknown) => {
+      if (path === currentPath) error = String(e);
+    }).finally(() => {
+      if (path === currentPath) loading = false;
+    });
+  });
 </script>
 
 {#if device}
@@ -27,6 +44,28 @@
       </section>
       <div class="picture"><img src={deviceImage(device.icon)} alt={device.model ?? "Sony Walkman"} /></div>
     </div>
+    <section class="tracks">
+      <h2>{t("Songs on this Walkman")}</h2>
+      {#if loading}
+        <p class="note">{t("Reading the Walkman database…")}</p>
+      {:else if error}
+        <p class="note error" role="alert">{t("Could not read the Walkman track list: {error}", { error })}</p>
+      {:else if tracks.length === 0}
+        <p class="note">{t("No songs are listed in the Walkman database.")}</p>
+      {:else}
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>{t("Title")}</th><th>{t("Artist")}</th><th>{t("Album")}</th><th>{t("Genre")}</th><th>{t("Time")}</th></tr></thead>
+            <tbody>
+              {#each tracks as track (track.number)}
+                <tr><td>{track.title ?? t("Untitled")}</td><td>{track.artist ?? "—"}</td><td>{track.album ?? "—"}</td><td>{track.genre ?? "—"}</td><td>{duration(track.lengthMs)}</td></tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      {/if}
+      <p class="note">{t("This is a read-only view of the Walkman's track database. Chinotto does not change OpenMG devices yet.")}</p>
+    </section>
   </div>
 {/if}
 
@@ -43,5 +82,13 @@
   .path { overflow-wrap: anywhere; }
   .note { max-width: 640px; margin: 18px 0 0; color: var(--muted); line-height: 1.55; }
   .actions { display: flex; gap: 8px; margin-top: 24px; }
+  .tracks { max-width: 1100px; margin-top: 32px; }
+  h2 { margin: 0 0 12px; font-size: 18px; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; text-align: left; }
+  th, td { padding: 9px 12px; border-bottom: 1px solid var(--chrome-edge); }
+  th { color: var(--muted); font-weight: 600; }
+  td:last-child, th:last-child { text-align: right; white-space: nowrap; }
+  .error { color: var(--danger, #e07862); }
   @container (max-width: 600px) { .picture { display: none; } }
 </style>

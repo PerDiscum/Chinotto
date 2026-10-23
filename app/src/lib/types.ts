@@ -40,6 +40,20 @@ export interface MscProfile {
   playlistFormat: "m3u8" | "m3u" | "pls";
 }
 
+/** Read-only metadata from a Sony OpenMG Walkman's track table. */
+export interface OpenMgTrack {
+  number: number;
+  title: string | null;
+  artist: string | null;
+  album: string | null;
+  genre: string | null;
+  lengthMs: number;
+}
+
+export interface OpenMgView {
+  tracks: OpenMgTrack[];
+}
+
 export interface DriveInfo {
   path: string;
   volume: string;

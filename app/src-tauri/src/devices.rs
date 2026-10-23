@@ -169,7 +169,10 @@ impl Scanner {
         self.known.retain(|p, _| now.iter().any(|(q, _)| q == p));
         let mut out = Vec::new();
         for (p, manual) in now {
-            let probe = |p: &Path| (is_ipod_root(p) || needs_setup(p) || crate::msc::is_openmg_root(p) || p.join(crate::msc::CONFIG).is_file()).then(|| describe(p, manual));
+            let probe = |p: &Path| {
+                (is_ipod_root(p) || needs_setup(p) || crate::msc::is_openmg_root(p) || p.join(crate::msc::CONFIG).is_file())
+                    .then(|| describe(p, manual))
+            };
             let entry = self.known.entry(p.clone()).or_insert_with(|| (std::time::Instant::now(), probe(&p)));
             // A volume can show up a moment before it's readable: keep looking for a few seconds.
             if entry.1.is_none() && entry.0.elapsed() < Duration::from_secs(8) {
