@@ -719,7 +719,7 @@ pub(crate) fn copy_in(from: &Path, to: &Path, profile: &Profile) -> Result<(), S
 
 /// A cover as a baseline JPEG of at most `px` a side and `max` bytes (lower
 /// quality until it fits).
-fn small_jpeg(bytes: &[u8], px: u32, max: usize) -> Result<Vec<u8>, String> {
+pub(crate) fn small_jpeg(bytes: &[u8], px: u32, max: usize) -> Result<Vec<u8>, String> {
     if max == 0 {
         return Err("the player's cover size limit is zero bytes".into());
     }
@@ -727,7 +727,8 @@ fn small_jpeg(bytes: &[u8], px: u32, max: usize) -> Result<Vec<u8>, String> {
         return Ok(bytes.to_vec()); // already fine
     }
     let img = crate::cover::decode(bytes)?;
-    let mut small = img.resize(px, px, image::imageops::FilterType::Lanczos3);
+    // Only ever smaller (`resize` would also enlarge a small cover to `px`).
+    let mut small = if img.width() > px || img.height() > px { img.resize(px, px, image::imageops::FilterType::Lanczos3) } else { img };
     loop {
         let rgb = small.to_rgb8();
         let mut jpeg = Vec::new();

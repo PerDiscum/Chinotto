@@ -579,7 +579,7 @@ pub async fn lib_edit_tracks(
     // Songs on an open MTP device: changed in its database.
     if crate::mtp::is_mtp_library(&app, &lib) {
         let app2 = app.clone();
-        return tauri::async_runtime::spawn_blocking(move || crate::mtp::edit(&app2, &lib, &ids, &fields, rating, cover.is_some()))
+        return tauri::async_runtime::spawn_blocking(move || crate::mtp::edit(&app2, &lib, &ids, &fields, rating, cover.as_ref()))
             .await
             .map_err(|e| e.to_string())?;
     }
