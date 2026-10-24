@@ -1,3 +1,12 @@
+/* Handjet (Rosetta Type, SIL Open Font License 1.1: see assets/fonts/OFL.txt),
+   for the status display's mode titles. Basic Latin and Latin-1 only. */
+@font-face {
+  font-family: "Handjet";
+  src: url("./assets/fonts/handjet-semibold.woff2") format("woff2");
+  font-weight: 600;
+  font-display: swap;
+}
+
 /* Chinotto colour tokens. Named after the bitter citrus soda: smoked-glass
    brown chrome, amber label, and a deep chinotto-brown for selection. */
 :root {

@@ -25,7 +25,7 @@ export const run = {
   openFile: () => void store.pickAndOpenSongs(),
   openDevice: () => void store.openFolder(),
   ripCd: () => {
-    if (!store.busy) store.dialog = { kind: "rip", disc: null };
+    if (!store.busy) void store.showDisc();
   },
   setUpIpod: () => void store.pickDriveToSetUp(),
   addToIpod: () => store.ipod?.writable && void store.pickAndAddFiles(),

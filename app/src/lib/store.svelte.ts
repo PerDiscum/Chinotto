@@ -25,7 +25,6 @@ export type Dialog =
   | { kind: "remove-from-library"; ids: number[] }
   /** Set up an iPod with no database, or (rebuild) replace a lost or broken one. */
   | { kind: "setup"; path: string; rebuild: boolean }
-  | { kind: "rip"; disc: string | null }
   /** Set up (or change the settings of) a player that shows up as a drive. */
   | { kind: "msc"; path: string }
   | { kind: "delete-player-songs"; path: string; ids: number[] };
@@ -821,6 +820,41 @@ class Store {
   async refreshDiscs() {
     const d = await api.cdList().catch(() => []);
     if (JSON.stringify(d) !== JSON.stringify(this.discs)) this.discs = d;
+    const s = this.source;
+    if (s.kind === "disc" && !d.some((x) => x.id === s.id)) this.select({ kind: "none" });
+    for (const id of Object.keys(this.discDrafts)) if (!d.some((x) => x.id === id)) delete this.discDrafts[id];
+    for (const x of d) if (!this.discDrafts[x.id]) this.discDrafts[x.id] = this.newDraft(x.name);
+  }
+
+  /** What's been typed for each disc in a drive. */
+  discDrafts = $state<Record<string, import("./types").DiscDraft>>({});
+
+  private newDraft(name: string): import("./types").DiscDraft {
+    let format = "alac";
+    try {
+      format = localStorage.getItem("chinotto.ripFormat") ?? "alac";
+    } catch {
+      /* not kept */
+    }
+    // A disc's volume name is often its title (CD-Text); "Audio CD" isn't.
+    return { artist: "", album: name === "Audio CD" ? "" : name, year: "", genre: "", format, titles: {}, skip: {}, cover: null, preview: null };
+  }
+
+  /** Show the Rip page: of `id`, else the first disc (looking for one first on Linux). */
+  async showDisc(id: string | null = null) {
+    if (!this.discs.length) await this.refreshDiscs();
+    const d = this.discs.find((x) => x.id === id) ?? this.discs[0];
+    if (d) this.select({ kind: "disc", id: d.id });
+    else this.error = t("No audio CD found. Put one in the drive, then try again. (On Linux, ripping needs cdparanoia.)");
+  }
+
+  async ejectDisc(id: string) {
+    try {
+      await api.cdEject(id);
+      await this.refreshDiscs();
+    } catch (e) {
+      this.error = String(e);
+    }
   }
 
   /** Ask for a folder, then rip into it. Libraries whose folders hold it scan it. */

@@ -53,6 +53,9 @@ pub struct RipRequest {
     pub year: i32,
     pub genre: String,
     pub tracks: Vec<RipTrack>,
+    /// An image file for the album's cover, put into every song.
+    #[serde(default)]
+    pub cover: Option<String>,
 }
 
 #[derive(Serialize, Default)]
@@ -138,6 +141,23 @@ pub async fn cd_list() -> Vec<Disc> {
     tauri::async_runtime::spawn_blocking(|| if cfg!(target_os = "macos") { mac_discs() } else { linux_discs() }).await.unwrap_or_default()
 }
 
+/// Eject the disc (its volume on macOS, its drive on Linux).
+#[tauri::command]
+pub async fn cd_eject(id: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let (prog, args): (&str, Vec<&str>) =
+            if cfg!(target_os = "macos") { ("diskutil", vec!["eject", &id]) } else { ("eject", vec![&id]) };
+        let out = Command::new(prog).args(&args).output().map_err(|e| format!("Couldn't eject the disc: {e}"))?;
+        if out.status.success() {
+            Ok(())
+        } else {
+            Err(format!("Couldn't eject the disc: {}", String::from_utf8_lossy(&out.stderr).trim()))
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// A name that's safe as a file or folder name anywhere.
 fn clean(s: &str, fallback: &str) -> String {
     if s.trim().is_empty() {
@@ -173,6 +193,21 @@ fn rip(req: RipRequest, app: &AppHandle) -> Result<RipResult, String> {
     let ext = crate::convert::extension(&req.format);
     let count = req.tracks.len();
     let mut res = RipResult { folder: dir.to_string_lossy().into_owned(), ..Default::default() };
+    let cover = match req.cover.as_deref().filter(|c| !c.is_empty()) {
+        Some(c) => {
+            let bytes = std::fs::read(c).map_err(|e| format!("Couldn't read the cover: {e}"))?;
+            let mime =
+                if bytes.starts_with(&[0x89, b'P', b'N', b'G']) { lofty::picture::MimeType::Png } else { lofty::picture::MimeType::Jpeg };
+            // Not PNG or JPEG: made into a JPEG.
+            let bytes = if bytes.starts_with(&[0x89, b'P']) || bytes.starts_with(&[0xFF, 0xD8]) {
+                bytes
+            } else {
+                crate::msc::small_jpeg(&bytes, 1400, 2_000_000)?
+            };
+            Some(crate::tagwrite::CoverChange::Set(bytes, mime))
+        }
+        None => None,
+    };
     let mac = cfg!(target_os = "macos");
     let prog = if mac {
         None
@@ -228,7 +263,7 @@ fn rip(req: RipRequest, app: &AppHandle) -> Result<RipResult, String> {
             Field::TrackNr(t.number as i32),
             Field::TrackCount(count as i32),
         ];
-        if let Err(e) = crate::tagwrite::write(&encoded, &fields, None) {
+        if let Err(e) = crate::tagwrite::write(&encoded, &fields, cover.as_ref()) {
             res.problems.push(format!("{title}: its tags couldn't be written ({e})"));
         }
         let name = format!("{head} - {:02} - {}.{ext}", t.number, clean(&title, "Track"));

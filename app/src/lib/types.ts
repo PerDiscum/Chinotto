@@ -175,7 +175,9 @@ export type Source =
   /** The page of a player that shows up as a drive (MSC). */
   | { kind: "player"; path: string }
   /** The informational page for a legacy Sony OpenMG Walkman. */
-  | { kind: "openmg"; path: string };
+  | { kind: "openmg"; path: string }
+  /** An audio CD: its page names the songs and rips them. */
+  | { kind: "disc"; id: string };
 
 export interface LibrarySummary {
   id: string;
@@ -308,6 +310,22 @@ export interface RipRequest {
   year: number;
   genre: string;
   tracks: { number: number; title: string }[];
+  /** An image file to use as the cover. */
+  cover: string | null;
+}
+
+/** What's been typed for a disc so far (kept while it's in the drive). */
+export interface DiscDraft {
+  artist: string;
+  album: string;
+  year: string;
+  genre: string;
+  format: string;
+  titles: Record<number, string>;
+  skip: Record<number, boolean>;
+  /** An image file for the cover, and its preview (a data: URL). */
+  cover: string | null;
+  preview: string | null;
 }
 
 export interface RipResult {
