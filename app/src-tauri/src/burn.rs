@@ -555,11 +555,35 @@ fn burn(path: &str, speed: u32, verify: bool, app: &AppHandle) -> Result<Vec<Str
                 }
                 run_with_progress(app, cmd, pct_of_mb)
             };
-            match write(Some("generic-mmc-raw")) {
+            // macOS lets only one program at a time talk to the drive this way:
+            // right after Chinotto (drutil) or the Finder looked at the disc, it
+            // can still be taken for a few seconds. Wait and try again.
+            let busy = |f: &BurnFail| !f.started && f.msg.contains("Cannot setup device");
+            let attempt = |driver: &str| -> Result<(), BurnFail> {
+                let mut last = None;
+                for wait in [0u64, 3, 5, 8, 12] {
+                    std::thread::sleep(std::time::Duration::from_secs(wait));
+                    match write(Some(driver)) {
+                        Err(f) if busy(&f) => last = Some(f),
+                        other => return other,
+                    }
+                }
+                let f = last.unwrap();
+                Err(BurnFail {
+                    msg: if cfg!(target_os = "macos") {
+                        format!("The burner is being used by something else, so cdrdao couldn't take it. Close the Finder's \u{201c}blank disc\u{201d} message (choose Ignore) and any other burning or disc app, then try again. ({})", f.msg)
+                    } else {
+                        f.msg
+                    },
+                    started: false,
+                })
+            };
+            match attempt("generic-mmc-raw") {
                 Ok(()) => report.push("Written raw: every sector as it is in the image.".into()),
+                Err(f) if f.msg.contains("burner is being used") => return Err(f.msg),
                 // The drive can't write raw, and nothing was written yet: cooked (it makes the error correction).
                 Err(f) if !f.started => {
-                    write(Some("generic-mmc"))?;
+                    attempt("generic-mmc")?;
                     report.push("This drive can't write raw, so it wrote the sectors' error correction itself: right for ordinary discs, but sectors deliberately damaged in the image aren't reproduced.".into());
                 }
                 Err(f) => return Err(f.msg),
