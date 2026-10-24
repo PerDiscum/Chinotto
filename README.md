@@ -88,12 +88,16 @@ onto a blank CD-R/RW or DVD±R/RW. It burns at the slowest speed the drive and
 disc allow unless you choose otherwise, in one pass, closes the disc, and
 then checks it against the image.
 
-- `.bin`/`.cue` images are burned raw (every sector exactly as in the image)
-  by `cdrdao`. The macOS app carries its own copy, so there's nothing to
-  install; if macOS asks what to do with the blank disc, choose Ignore.
-- macOS: ISO images use `hdiutil`, part of macOS, which also does the check.
-- Linux: `wodim` (CDs), `growisofs` (DVDs) and `cdrdao`; the .deb and .rpm
-  packages recommend them, or `sudo apt install wodim growisofs cdrdao`.
+- macOS: nothing to install. ISO images go through `hdiutil`; `.bin`/`.cue`
+  images (PlayStation and other mode 2 discs, audio, several tracks) through
+  Apple's Disc Recording framework, as the Finder and Burn.app do,
+  session-at-once with every track's sectors taken from the image (the drive
+  writes each sector's sync, header and error correction). macOS reads the
+  disc back to check it.
+- Linux: `wodim` (CDs), `growisofs` (DVDs) and `cdrdao`, which writes
+  `.bin`/`.cue` images raw (every sector exactly as in the image); the .deb
+  and .rpm packages recommend them, or `sudo apt install wodim growisofs
+  cdrdao`.
 
 ## Tested devices
 
@@ -251,16 +255,14 @@ git-ignored for keeping such copies inside the checkout.
 
 Chinotto is MIT-licensed. It's built with other people's software under
 their own licences — among them the LGPL libraries libgpod, libmtp, libusb,
-glib and LAME, built into it, and cdrdao (GPL), which the macOS app carries
-as a separate program. **Chinotto → Acknowledgements and Licences** (or
+glib and LAME, built into it. **Chinotto → Acknowledgements and Licences** (or
 `THIRD-PARTY-LICENSES.txt` in the app) lists all of it with the full licence
 texts; `scripts/licenses.py` regenerates that list, and every build does.
 
 What those licences ask, and how Chinotto does it:
 
-- **Source**: everything built into Chinotto is in this repository (cdrdao's
-  unmodified release in `third_party/sources`), and each release has the
-  cdrdao and glib sources attached.
+- **Source**: everything built into Chinotto is in this repository, and each
+  release has the glib source it was built with attached.
 - **Replacing the LGPL libraries**: since Chinotto's own source is public too,
   anyone can rebuild it with modified versions of them (see Building it
   yourself).

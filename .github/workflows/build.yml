@@ -54,18 +54,6 @@ jobs:
       - name: Use static glib (macOS)
         if: runner.os == 'macOS'
         run: echo "CHINOTTO_DEPS=$GITHUB_WORKSPACE/deps" >> "$GITHUB_ENV"
-      # cdrdao (GPL, unmodified) rides along in the app as a separate program,
-      # for burning .bin/.cue images raw. Linux packages recommend the distro's.
-      - name: Cache cdrdao (macOS)
-        if: runner.os == 'macOS'
-        id: cdrdao-cache
-        uses: actions/cache@v4
-        with:
-          path: app/src-tauri/binaries
-          key: cdrdao-macos-${{ hashFiles('scripts/build-cdrdao.sh', 'third_party/sources/cdrdao-*') }}
-      - name: Build cdrdao (macOS)
-        if: runner.os == 'macOS' && steps.cdrdao-cache.outputs.cache-hit != 'true'
-        run: scripts/build-cdrdao.sh
 
       - uses: dtolnay/rust-toolchain@1.97.0
         with:
@@ -117,11 +105,7 @@ jobs:
           npm ci
           # The list of third-party software and licences that ships inside the app.
           python3 ../scripts/licenses.py
-          if [ "$RUNNER_OS" = macOS ]; then
-            npx tauri build ${{ matrix.args }} --config '{"bundle":{"externalBin":["binaries/cdrdao"]}}'
-          else
-            npx tauri build ${{ matrix.args }}
-          fi
+          npx tauri build ${{ matrix.args }}
 
       - uses: actions/upload-artifact@v4
         with:
@@ -144,6 +128,5 @@ jobs:
             ${{ matrix.out }}/appimage/*.AppImage
             ${{ matrix.out }}/rpm/*.rpm
             app/src-tauri/licenses/THIRD-PARTY-LICENSES.txt
-            third_party/sources/*
             deps/.build/glib-*.tar.xz
             deps/.build/glib-*/subprojects/packagecache/*

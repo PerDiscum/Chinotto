@@ -7,7 +7,7 @@ licence texts (each text once). The file ships inside the app.
 
 Run it after changing dependencies; CI runs it before every build.
 """
-import hashlib, json, os, re, subprocess, sys, tarfile
+import hashlib, json, os, re, subprocess, sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -109,14 +109,6 @@ vendored = [
 for name, lic, folder in vendored:
     entries.append((name, lic, f"this repository, {folder}", [add_text(t, name) for t in licence_files(ROOT / folder)]))
 
-# cdrdao: a separate program in the macOS app, from the unmodified release.
-cdrdao = next((ROOT / "third_party/sources").glob("cdrdao-*.tar.bz2"))
-with tarfile.open(cdrdao) as tf:
-    copying = next(m for m in tf.getmembers() if m.name.count("/") == 1 and m.name.endswith("/COPYING"))
-    gpl = tf.extractfile(copying).read().decode(errors="replace")
-entries.append((cdrdao.name.removesuffix(".tar.bz2") + " (separate program, unmodified; macOS app)", "GPL-2.0-or-later",
-                f"this repository, third_party/sources/{cdrdao.name}, and attached to each release", [add_text(gpl, "cdrdao")]))
-
 # glib: built from GNOME's release into the macOS app (scripts/build-glib-macos.sh).
 glib = re.search(r'GLIB_VERSION="\$\{GLIB_VERSION:-([0-9.]+)\}"', (ROOT / "scripts/build-glib-macos.sh").read_text()).group(1)
 lgpl21 = next(t for t, users in texts.values() if "libgpod" in users)
@@ -136,9 +128,7 @@ lines = [
     "complete source, including theirs, is in its repository, and the build",
     "scripts there rebuild Chinotto with whatever versions you put in their place.",
     "",
-    "cdrdao (GPL) is a separate program that the macOS app carries and runs to",
-    "burn .bin/.cue images; Chinotto doesn't link it. Its unmodified source is in",
-    "the repository and attached to each release, as is glib's.",
+    "glib's source, as built for the macOS app, is attached to each release.",
     "",
     "Source for each item: where it says. Licence texts follow the list.",
     "",

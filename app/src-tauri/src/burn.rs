@@ -55,23 +55,11 @@ pub struct ImageInfo {
     pub needs_cdrdao: bool,
 }
 
-/// A program: Chinotto's own copy (cdrdao, next to it in the app), else the
-/// system's, also where Homebrew puts them (apps don't get the shell's PATH).
+/// A program: next to Chinotto in the app, else the system's, also where
+/// Homebrew puts them (apps don't get the shell's PATH).
 fn tool(name: &str) -> Option<PathBuf> {
     if let Some(own) = std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.join(name))).filter(|p| p.is_file()) {
         return Some(own);
-    }
-    // Built on this computer: the copy scripts/build-cdrdao.sh made in the
-    // source folder (the official builds carry it in the app instead).
-    let built = Path::new(env!("CARGO_MANIFEST_DIR")).join("binaries");
-    if let Some(p) = std::fs::read_dir(&built)
-        .into_iter()
-        .flatten()
-        .flatten()
-        .map(|e| e.path())
-        .find(|p| p.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with(&format!("{name}-")) && !n.ends_with("COPYING")))
-    {
-        return Some(p);
     }
     let dirs = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/opt/local/bin"];
     if let Some(p) = std::env::var_os("PATH") {
@@ -263,6 +251,192 @@ fn cue_for(path: &Path) -> Option<PathBuf> {
 }
 
 /// A single MODE1 data track: it can go to the disc as an ISO.
+/// One track of a .cue, located in its file.
+#[derive(Debug, Clone, PartialEq)]
+struct PlanTrack {
+    file: PathBuf,
+    mode: String,
+    /// Byte offset of INDEX 01 in the file.
+    offset: u64,
+    file_sector: u32,
+    /// Sectors from INDEX 01 to the next track (or the end of the file).
+    length: u32,
+    /// Sectors before INDEX 01: from the file (INDEX 00), else silence (PREGAP).
+    pregap: u32,
+    pregap_offset: Option<u64>,
+}
+
+/// "mm:ss:ff" → frames (75 a second).
+fn msf(s: &str) -> Option<u64> {
+    let mut p = s.trim().split(':').map(|x| x.parse::<u64>().ok());
+    let (m, sec, f) = (p.next()??, p.next()??, p.next()??);
+    Some((m * 60 + sec) * 75 + f)
+}
+
+/// The tracks of a .cue: where each one's sectors are in its file.
+fn cue_plan(cue: &Path) -> Result<Vec<PlanTrack>, String> {
+    let c = parse_cue(cue)?;
+    let text = String::from_utf8_lossy(&std::fs::read(cue).map_err(|e| e.to_string())?).into_owned();
+    // (file index, mode, INDEX 00, INDEX 01, PREGAP) per track, in order.
+    type Raw = (usize, String, Option<u64>, Option<u64>, u64);
+    let mut raw: Vec<Raw> = Vec::new();
+    let mut file: Option<usize> = None;
+    for l in text.lines() {
+        let w: Vec<&str> = l.split_whitespace().collect();
+        match w.first().map(|x| x.to_ascii_uppercase()).as_deref() {
+            Some("FILE") => file = Some(file.map_or(0, |f| f + 1)),
+            Some("TRACK") => {
+                raw.push((file.ok_or("The .cue has a TRACK before any FILE")?, w.get(2).unwrap_or(&"").to_ascii_uppercase(), None, None, 0))
+            }
+            Some("INDEX") => {
+                let t = raw.last_mut().ok_or("The .cue has an INDEX before any TRACK")?;
+                let at = w.get(2).and_then(|x| msf(x)).ok_or("The .cue has an INDEX it can't read")?;
+                match w.get(1).and_then(|n| n.parse::<u32>().ok()) {
+                    Some(0) => t.2 = Some(at),
+                    Some(1) => t.3 = Some(at),
+                    _ => {}
+                }
+            }
+            Some("PREGAP") => {
+                if let Some(t) = raw.last_mut() {
+                    t.4 = w.get(1).and_then(|x| msf(x)).unwrap_or(0);
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut out = Vec::new();
+    for (i, (f, mode, idx0, idx1, gap)) in raw.iter().enumerate() {
+        let idx1 = idx1.ok_or_else(|| format!("Track {} of the .cue has no INDEX 01", i + 1))?;
+        let path = c.files.get(*f).ok_or("The .cue's files don't match its tracks")?.clone();
+        let sector = sector_size(mode) as u32;
+        let size = std::fs::metadata(&path).map_err(|e| e.to_string())?.len();
+        // Ends where the next track in the same file starts (its pregap included).
+        let end = match raw.get(i + 1) {
+            Some((nf, _, n0, n1, _)) if nf == f => n0.or(*n1).ok_or("A track of the .cue has no INDEX 01")?,
+            _ => size / sector as u64,
+        };
+        let length = end.checked_sub(idx1).filter(|l| *l > 0).ok_or_else(|| format!("Track {} of the .cue has no sectors", i + 1))?;
+        let (pregap, pregap_offset) = match idx0 {
+            Some(z) if *z < idx1 => ((idx1 - z) as u32, Some(z * sector as u64)),
+            // The first track's 2 seconds of lead-in pregap are never in the file.
+            _ if i == 0 => (150, None),
+            _ => (*gap as u32, None),
+        };
+        out.push(PlanTrack {
+            file: path,
+            mode: mode.clone(),
+            offset: idx1 * sector as u64,
+            file_sector: sector,
+            length: length as u32,
+            pregap,
+            pregap_offset,
+        });
+    }
+    if out.is_empty() {
+        return Err("That .cue doesn't list any tracks.".into());
+    }
+    Ok(out)
+}
+
+#[cfg_attr(not(any(target_os = "macos", test)), allow(dead_code))]
+/// The drive's block format for a track mode: (bytes skipped in each file
+/// sector, block size, block type, data form, track mode).
+fn dr_format(mode: &str) -> Option<(u32, u32, u32, u32, u32)> {
+    Some(match mode {
+        "AUDIO" => (0, 2352, 0, 0, 0),
+        "MODE1/2352" => (16, 2048, 8, 16, 4),
+        "MODE1/2048" => (0, 2048, 8, 16, 4),
+        // Mode 2 (CD-ROM XA, PlayStation): subheader and data, 2332 bytes.
+        "MODE2/2352" => (16, 2332, 13, 32, 4),
+        "MODE2/2336" => (0, 2332, 13, 32, 4),
+        _ => return None,
+    })
+}
+
+#[cfg(target_os = "macos")]
+fn dr_burn(plan: &[PlanTrack], speed: u32, verify: bool, app: &AppHandle) -> Result<(), String> {
+    use std::ffi::{c_char, c_int, c_void, CString};
+    #[repr(C)]
+    struct DrTrack {
+        path: *const c_char,
+        offset: u64,
+        file_sector: u32,
+        skip: u32,
+        block_size: u32,
+        block_type: u32,
+        data_form: u32,
+        track_mode: u32,
+        session_format: u32,
+        length: u32,
+        pregap: u32,
+        pregap_offset: i64,
+    }
+    extern "C" {
+        fn chinotto_dr_burn(
+            tracks: *const DrTrack,
+            count: c_int,
+            speed_x: f64,
+            verify: c_int,
+            progress: extern "C" fn(*mut c_void, c_int, f64),
+            ctx: *mut c_void,
+            err: *mut c_char,
+            errlen: usize,
+        ) -> c_int;
+    }
+    extern "C" fn on_progress(ctx: *mut c_void, phase: c_int, fraction: f64) {
+        let app = unsafe { &*(ctx as *const AppHandle) };
+        progress(app, if phase == 1 { "verify" } else { "burn" }, (fraction * 1000.0) as usize);
+    }
+    let xa = plan.iter().any(|t| t.mode.starts_with("MODE2"));
+    let paths: Vec<CString> = plan
+        .iter()
+        .map(|t| CString::new(t.file.to_string_lossy().as_bytes()).map_err(|_| "bad path".to_string()))
+        .collect::<Result<_, _>>()?;
+    let mut tracks = Vec::new();
+    for (t, p) in plan.iter().zip(&paths) {
+        let (skip, block_size, block_type, data_form, track_mode) =
+            dr_format(&t.mode).ok_or_else(|| format!("Chinotto can't burn {} tracks yet.", t.mode))?;
+        tracks.push(DrTrack {
+            path: p.as_ptr(),
+            offset: t.offset,
+            file_sector: t.file_sector,
+            skip,
+            block_size,
+            block_type,
+            data_form,
+            track_mode,
+            session_format: if xa { 0x20 } else { 0 },
+            length: t.length,
+            pregap: t.pregap,
+            pregap_offset: t.pregap_offset.map_or(-1, |o| o as i64),
+        });
+    }
+    let mut err = vec![0 as c_char; 1024];
+    let rc = unsafe {
+        chinotto_dr_burn(
+            tracks.as_ptr(),
+            tracks.len() as c_int,
+            speed as f64,
+            verify as c_int,
+            on_progress,
+            app as *const AppHandle as *mut c_void,
+            err.as_mut_ptr(),
+            err.len(),
+        )
+    };
+    if rc == 0 {
+        Ok(())
+    } else {
+        Err(unsafe { std::ffi::CStr::from_ptr(err.as_ptr()) }.to_string_lossy().into_owned())
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn dr_burn(_: &[PlanTrack], _: u32, _: bool, _: &AppHandle) -> Result<(), String> {
+    Err("Disc Recording is only on macOS.".into())
+}
+
 fn single_data_track(c: &Cue) -> Option<u64> {
     (c.modes.len() == 1 && c.files.len() == 1 && c.modes[0].starts_with("MODE1/")).then(|| sector_size(&c.modes[0]))
 }
@@ -482,8 +656,11 @@ fn burn(path: &str, speed: u32, verify: bool, app: &AppHandle) -> Result<Vec<Str
     // error-correction data included (some discs depend on theirs). Without
     // cdrdao, a single MODE1 data track can still go as its ISO: the drive
     // writes fresh error correction, which is the same for an ordinary disc.
-    let cdrdao = tool("cdrdao");
-    if info.kind == "cue" && !info.needs_cdrdao && cdrdao.is_none() {
+    // macOS burns .cue images itself (Disc Recording); cdrdao can't open
+    // a drive macOS is using.
+    let mac = cfg!(target_os = "macos");
+    let cdrdao = if mac { None } else { tool("cdrdao") };
+    if info.kind == "cue" && !info.needs_cdrdao && cdrdao.is_none() && !mac {
         let c = parse_cue(Path::new(&info.path))?;
         let out = tmp.0.join("image.iso");
         bin_to_iso(&c.files[0], single_data_track(&c).unwrap(), &out, &|p| progress(app, "prepare", p))?;
@@ -525,19 +702,28 @@ fn burn(path: &str, speed: u32, verify: bool, app: &AppHandle) -> Result<Vec<Str
             }
             let _ = Command::new("eject").arg(dev).status();
         }
-        None => {
-            // A .cue: cdrdao, disc-at-once, raw (PlayStation and other mode 2
-            // discs, audio, mixed mode, several tracks).
-            let c = cdrdao.ok_or(if cfg!(target_os = "macos") {
-                "Burning a .bin/.cue needs cdrdao, which the official Chinotto app carries. This copy of Chinotto was built without it: run scripts/build-cdrdao.sh in Chinotto's source folder once and rebuild (or install it with Homebrew: brew install cdrdao)."
-            } else {
-                "Burning a .bin/.cue exactly (PlayStation and other mode 2 discs, audio, several tracks) needs cdrdao (e.g. sudo apt install cdrdao)."
-            })?;
+        None if mac => {
             if media.dvd {
                 return Err("A .bin/.cue image goes on a CD-R, not a DVD.".into());
             }
-            // macOS: "0,0,0" is cdrdao's first CD/DVD drive.
-            let dev = if cfg!(target_os = "macos") { "0,0,0" } else { linux_device().ok_or("No disc burner found.")? };
+            let plan = cue_plan(Path::new(&info.path))?;
+            dr_burn(&plan, speed, verify, app)?;
+            report.push("Burned session-at-once, every track's sectors from the image; the drive writes each sector's sync, header and error correction, which is the same for any disc made the standard way.".into());
+            report.push(if verify {
+                "macOS read the disc back and it matches the image.".into()
+            } else {
+                "Not checked against the image.".into()
+            });
+            report.push("Subchannel data (.sub/.sbi files, used by a few protected PlayStation games) isn't written.".into());
+        }
+        None => {
+            // A .cue: cdrdao, disc-at-once, raw (PlayStation and other mode 2
+            // discs, audio, mixed mode, several tracks).
+            let c = cdrdao.ok_or("Burning a .bin/.cue exactly (PlayStation and other mode 2 discs, audio, several tracks) needs cdrdao (e.g. sudo apt install cdrdao).")?;
+            if media.dvd {
+                return Err("A .bin/.cue image goes on a CD-R, not a DVD.".into());
+            }
+            let dev = linux_device().ok_or("No disc burner found.")?;
             // cdrdao opens a .cue's files relative to where it's run, not to
             // the .cue: give it a copy naming them by full path (as found
             // by parse_cue, including a .bin renamed with its .cue).
@@ -555,9 +741,8 @@ fn burn(path: &str, speed: u32, verify: bool, app: &AppHandle) -> Result<Vec<Str
                 }
                 run_with_progress(app, cmd, pct_of_mb)
             };
-            // macOS lets only one program at a time talk to the drive this way:
-            // right after Chinotto (drutil) or the Finder looked at the disc, it
-            // can still be taken for a few seconds. Wait and try again.
+            // The drive may still be busy for a moment (the desktop looking at
+            // the new disc): wait and try again.
             let busy = |f: &BurnFail| !f.started && f.msg.contains("Cannot setup device");
             let attempt = |driver: &str| -> Result<(), BurnFail> {
                 let mut last = None;
@@ -569,18 +754,11 @@ fn burn(path: &str, speed: u32, verify: bool, app: &AppHandle) -> Result<Vec<Str
                     }
                 }
                 let f = last.unwrap();
-                Err(BurnFail {
-                    msg: if cfg!(target_os = "macos") {
-                        format!("The burner is being used by something else, so cdrdao couldn't take it. Close the Finder's \u{201c}blank disc\u{201d} message (choose Ignore) and any other burning or disc app, then try again. ({})", f.msg)
-                    } else {
-                        f.msg
-                    },
-                    started: false,
-                })
+                Err(BurnFail { msg: f.msg, started: false })
             };
             match attempt("generic-mmc-raw") {
                 Ok(()) => report.push("Written raw: every sector as it is in the image.".into()),
-                Err(f) if f.msg.contains("burner is being used") => return Err(f.msg),
+                Err(f) if busy(&f) => return Err(f.msg),
                 // The drive can't write raw, and nothing was written yet: cooked (it makes the error correction).
                 Err(f) if !f.started => {
                     attempt("generic-mmc")?;
@@ -641,6 +819,19 @@ mod tests {
         let text = std::fs::read_to_string(&abs).unwrap();
         assert!(text.starts_with(&format!("FILE \"{}\" BINARY\n", bin.display())), "{text}");
         assert!(text.contains("TRACK 01 MODE1/2352"));
+        // A PlayStation-style layout: data, then audio with a 2-second pregap in the file.
+        let mixed = tmp.0.join("Mixed.bin");
+        std::fs::write(&mixed, vec![0u8; 2352 * (100 + 150 + 300)]).unwrap();
+        std::fs::write(
+            tmp.0.join("Psx.cue"),
+            "FILE \"Mixed.bin\" BINARY\r\n  TRACK 01 MODE2/2352\r\n    INDEX 01 00:00:00\r\n  TRACK 02 AUDIO\r\n    INDEX 00 00:01:25\r\n    INDEX 01 00:03:25\r\n",
+        )
+        .unwrap();
+        let plan = cue_plan(&tmp.0.join("Psx.cue")).unwrap();
+        assert_eq!(plan.len(), 2);
+        assert_eq!((plan[0].offset, plan[0].length, plan[0].pregap, plan[0].pregap_offset), (0, 100, 150, None));
+        assert_eq!((plan[1].offset, plan[1].length, plan[1].pregap, plan[1].pregap_offset), (250 * 2352, 300, 150, Some(100 * 2352)));
+        assert_eq!(dr_format("MODE2/2352"), Some((16, 2332, 13, 32, 4)));
         let iso = tmp.0.join("out.iso");
         bin_to_iso(&bin, 2352, &iso, &|_| {}).unwrap();
         let out = std::fs::read(&iso).unwrap();
