@@ -34,6 +34,7 @@
   "⤮ Shuffle": "",
   "192 and 256 kbps follow the same pattern as 128 and 320 (which are confirmed to play), but haven't been confirmed yet on every OpenMG Walkman.": "",
   "A .bin/.cue is burned raw with cdrdao when it's installed: every sector exactly as in the image. Without it, this one's data track is burned as an ISO, which is the same disc unless the image has deliberately damaged sectors.": "",
+  "A .bin/.cue is burned through macOS's own disc burning, session-at-once, with every track's sectors from the image; the drive writes each sector's sync, header and error correction, and macOS can check the disc afterwards.": "",
   "A .bin/.cue like this one (PlayStation and other mode 2 discs, audio, several tracks) is burned raw with cdrdao: every sector exactly as in the image, in one pass. cdrdao can't check the disc afterwards.": "",
   "A library holds the music on your computer: choose its folders and Chinotto lists what's in them, without changing your files.": "",
   "A library's playlists can only hold songs from that library.": "",

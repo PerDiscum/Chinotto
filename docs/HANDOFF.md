@@ -1368,3 +1368,33 @@ writes fresh EDC/ECC, so deliberately damaged sectors aren't reproduced. Now:
   subproject) source archives and the licence list.
 - Not built on macOS here (no Mac in the sandbox): the first CI run builds
   cdrdao there; the Linux build of the same script was tested.
+
+## 0112: macOS burns .bin/.cue through Disc Recording; cdrdao dropped there
+
+On the developer's Mac, cdrdao couldn't open the drive at all, even with
+Chinotto closed and no Finder message: `IOCreatePlugInInterfaceForService`
+→ `kIOReturnNoResources`. macOS keeps the burner's MMC interface for its own
+disc-burning service, so cdrdao (and cdrecord) are shut out. So on macOS:
+
+- `native/drburn.c` (built by build.rs with `cc`, linked against
+  DiscRecording and CoreFoundation, macOS only) burns through Apple's Disc
+  Recording C API, like the Finder and Burn.app: one DRTrack per .cue track,
+  session-at-once required, requested speed x-factor × 176.4 kB/s (1× for
+  "slowest": the drive raises it to its minimum), eject when done, progress
+  by polling `DRBurnCopyStatus`.
+- `burn::cue_plan` reads the .cue fully (FILE, TRACK, INDEX 00/01, PREGAP):
+  each track's offset and length in its file, and its pregap (from the file
+  when INDEX 00 is there, 150 blocks of silence for track 1, else PREGAP).
+- Block formats (`dr_format`): AUDIO 2352 as is; MODE1 2048 (16 bytes of
+  sync/header skipped from 2352-byte sectors); MODE2 (PlayStation, XA) 2332
+  bytes = subheader + data, block type 13, data form 32, session format
+  0x20 for the whole disc when any track is mode 2. The drive writes sync,
+  header and EDC/ECC — identical for discs made the standard way; sectors
+  deliberately damaged in an image aren't reproduced (Disc Recording has no
+  raw mode).
+- Verification: `kDRVerificationTypeReceiveData`: Disc Recording reads each
+  track back and the callback compares it with the image, block by block.
+- Header constants were checked against the macOS 10.15 SDK headers; the C
+  file was syntax-checked here against a stub, but not compiled on a Mac.
+- cdrdao is no longer bundled anywhere (no build script, vendored tarball,
+  CI step or licence entry); Linux still uses the distro's cdrdao.

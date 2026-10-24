@@ -1,6 +1,6 @@
 <script lang="ts">
   import { t } from "./i18n";
-  import { store } from "./store.svelte";
+  import { store, isMac } from "./store.svelte";
   import { bytes } from "./format";
   import happyDisc from "../assets/disc-happy.webp";
 
@@ -57,9 +57,11 @@
     {#if img && !fits}<p class="warn">{t("The image is bigger than the disc.")}</p>{/if}
     {#if img?.kind === "cue"}
       <p class="muted note">
-        {img.needsCdrdao
-          ? t("A .bin/.cue like this one (PlayStation and other mode 2 discs, audio, several tracks) is burned raw with cdrdao: every sector exactly as in the image, in one pass. cdrdao can't check the disc afterwards.")
-          : t("A .bin/.cue is burned raw with cdrdao when it's installed: every sector exactly as in the image. Without it, this one's data track is burned as an ISO, which is the same disc unless the image has deliberately damaged sectors.")}
+        {isMac
+          ? t("A .bin/.cue is burned through macOS's own disc burning, session-at-once, with every track's sectors from the image; the drive writes each sector's sync, header and error correction, and macOS can check the disc afterwards.")
+          : img.needsCdrdao
+            ? t("A .bin/.cue like this one (PlayStation and other mode 2 discs, audio, several tracks) is burned raw with cdrdao: every sector exactly as in the image, in one pass. cdrdao can't check the disc afterwards.")
+            : t("A .bin/.cue is burned raw with cdrdao when it's installed: every sector exactly as in the image. Without it, this one's data track is burned as an ISO, which is the same disc unless the image has deliberately damaged sectors.")}
       </p>
     {/if}
     <div class="controls">
