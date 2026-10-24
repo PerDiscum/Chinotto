@@ -588,6 +588,28 @@ fn bin_to_iso(bin: &Path, sector: u64, out: &Path, on: &dyn Fn(usize)) -> Result
     w.flush().map_err(|e| e.to_string())
 }
 
+/// Read the image's files through once before burning: a file kept online
+/// (iCloud, Proton Drive, Dropbox…) is downloaded now rather than while the
+/// drive waits for data, which it doesn't do for long; and it's known to be
+/// readable before a disc is used.
+fn read_through(files: &[PathBuf], app: &AppHandle) -> Result<(), String> {
+    let total: u64 = files.iter().map(|f| std::fs::metadata(f).map(|m| m.len()).unwrap_or(0)).sum::<u64>().max(1);
+    let mut done = 0u64;
+    let mut buf = vec![0u8; 4 << 20];
+    for f in files {
+        let mut r = std::fs::File::open(f).map_err(|e| format!("Couldn't open {}: {e}", f.display()))?;
+        loop {
+            let n = r.read(&mut buf).map_err(|e| format!("Couldn't read {}: {e}", f.display()))?;
+            if n == 0 {
+                break;
+            }
+            done += n as u64;
+            progress(app, "prepare", (done * 1000 / total) as usize);
+        }
+    }
+    Ok(())
+}
+
 /// Linux: read the disc back and compare it with the image.
 fn verify_disc(dev: &str, image: &Path, app: &AppHandle) -> Result<(), String> {
     let len = std::fs::metadata(image).map_err(|e| e.to_string())?.len();
@@ -667,6 +689,9 @@ fn burn(path: &str, speed: u32, verify: bool, app: &AppHandle) -> Result<Vec<Str
         iso = Some(out);
         report.push("cdrdao isn't installed, so the image's data track was burned as an ISO: the data is the same, but sectors deliberately damaged in the image (some copy protections) aren't reproduced.".into());
     }
+    if let Some(i) = &iso {
+        read_through(std::slice::from_ref(i), app)?;
+    }
     progress(app, "burn", 0);
     match iso {
         Some(iso) if cfg!(target_os = "macos") => {
@@ -707,6 +732,9 @@ fn burn(path: &str, speed: u32, verify: bool, app: &AppHandle) -> Result<Vec<Str
                 return Err("A .bin/.cue image goes on a CD-R, not a DVD.".into());
             }
             let plan = cue_plan(Path::new(&info.path))?;
+            let mut files: Vec<PathBuf> = plan.iter().map(|t| t.file.clone()).collect();
+            files.dedup();
+            read_through(&files, app)?;
             dr_burn(&plan, speed, verify, app)?;
             report.push("Burned session-at-once, every track's sectors from the image; the drive writes each sector's sync, header and error correction, which is the same for any disc made the standard way.".into());
             report.push(if verify {
