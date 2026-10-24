@@ -14,6 +14,7 @@
   import DevicePage from "./lib/DevicePage.svelte";
   import PlayerPage from "./lib/PlayerPage.svelte";
   import OpenMgPage from "./lib/OpenMgPage.svelte";
+  import DiscPage from "./lib/DiscPage.svelte";
   import MtpPage from "./lib/MtpPage.svelte";
   import ArtworkPane from "./lib/ArtworkPane.svelte";
   import Welcome from "./lib/Welcome.svelte";
@@ -184,7 +185,9 @@
       </div>
     {/if}
 
-    {#if store.source.kind === "openmg"}
+    {#if store.source.kind === "disc"}
+      <DiscPage id={store.source.id} />
+    {:else if store.source.kind === "openmg"}
       <OpenMgPage path={store.source.path} />
     {:else if store.source.kind === "player" && store.source.path.startsWith("mtp:")}
       <MtpPage path={store.source.path} />

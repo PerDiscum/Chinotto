@@ -170,22 +170,26 @@
       {/each}
     </ul>
   {/if}
-  <h2>{t("Devices")}</h2>
   {#if store.discs.length}
+    <h2>{t("Optical")}</h2>
     <ul class="libs">
       {#each store.discs as d (d.id)}
         <li>
-          <div class="row device">
-            <button class="name" onclick={() => (store.dialog = { kind: "rip", disc: d.id })} title={t("Rip this CD…")}>
+          <div class="row device" class:active={store.source.kind === "disc" && store.source.id === d.id}>
+            <button class="name" onclick={() => store.select({ kind: "disc", id: d.id })} title={t("Rip this CD")}>
               <Icon name="disc" />
-              <span>{d.name}</span>
+              <span>{store.discDrafts[d.id]?.album || d.name}</span>
+            </button>
+            <button class="eject" title={t("Eject {name}", { name: d.name })} aria-label={t("Eject {name}", { name: d.name })} disabled={!!store.busy} onclick={() => store.ejectDisc(d.id)}>
+              <Icon name="eject" size={13} />
             </button>
           </div>
         </li>
       {/each}
     </ul>
   {/if}
-  {#if store.devices.length === 0 && store.discs.length === 0}
+  <h2>{t("Devices")}</h2>
+  {#if store.devices.length === 0}
     <p class="hint">{t("Connect your device, and it will show up here.")}</p>
   {/if}
   <ul>
@@ -314,7 +318,7 @@
   </ul>
   {#if !isMac && !store.discs.length}
     <!-- Linux: no menu bar, and the drive isn't read until asked. -->
-    <button class="rip" onclick={() => (store.dialog = { kind: "rip", disc: null })}><Icon name="disc" /> {t("Rip CD…")}</button>
+    <button class="rip" onclick={() => store.showDisc()}><Icon name="disc" /> {t("Rip CD…")}</button>
   {/if}
 </nav>
 

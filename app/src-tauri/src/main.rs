@@ -63,6 +63,7 @@ fn main() {
             openmg::openmg_reorder,
             rip::cd_list,
             rip::cd_rip,
+            rip::cd_eject,
             msc::msc_save,
             msc::msc_state,
             msc::msc_allow,

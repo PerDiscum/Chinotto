@@ -67,10 +67,11 @@ isn't needed again once the Walkman is reformatted.
 
 ## Ripping CDs
 
-Put in an audio CD: on a Mac it shows up under Devices (or use **File → Rip
-CD…**); on Linux, click **Rip CD…** under Devices. Name the artist, album,
-year and songs (there's no online lookup yet), choose Apple Lossless, FLAC,
-AAC or MP3, then **Rip…** and the folder to save into. Songs are saved as
+Put in an audio CD: on a Mac it shows up under **Optical** in the sidebar (or
+use **File → Rip CD…**); on Linux, click **Rip CD…** under Devices. Its page
+takes the artist, album, year, genre, cover and song names (there's no online
+lookup yet); choose Apple Lossless, FLAC, AAC or MP3, then **Rip…** and the
+folder to save into. Songs are saved as
 `Artist/Artist - Year - Album/Artist - Year - Album - 01 - Title`, never over
 an existing file. They join a library only if that folder is inside one of
 the library's folders. Linux needs `cdparanoia` to read the disc (and
@@ -244,3 +245,6 @@ git-ignored for keeping such copies inside the checkout.
   Center/SonicStage lock-in and into plain OpenMG folder access (see
   "A Walkman still locked to Media Center or SonicStage" above): no code
   from it is used in Chinotto.
+- The status display's mode titles use the Handjet typeface by Rosetta Type
+  (The Handjet Project Authors), under the SIL Open Font License 1.1 — see
+  `app/src/assets/fonts/OFL.txt`. Chinotto ships a Latin-only subset.

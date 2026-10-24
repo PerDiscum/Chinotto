@@ -1271,3 +1271,22 @@ staging folder. Now:
 
 Still slow: adding a new album renumbers the pictures, so all of them are
 rewritten. Writing only the changed picture files is the next step.
+
+## 0105: Rip page instead of a dialog
+
+- An audio CD is listed under a new **Optical** sidebar section (above
+  Devices; burning will join it), with an eject button (`cd_eject`:
+  `diskutil eject` / `eject`). Selecting it shows `DiscPage.svelte` (source
+  kind `disc`): editable artist/album/year/genre over an optional cover
+  (chosen image, embedded in every ripped song via `RipRequest.cover`), the
+  format, "Fetch from MusicBrainz" (disabled for now), Rip…, and the editable
+  track list. The happy-disc picture (`assets/disc-happy.webp`, from the
+  developer's drawing, background made transparent) sits on the right.
+- What's typed is kept per disc in `store.discDrafts` (made in
+  `refreshDiscs`, dropped when the disc goes) and the sidebar shows the typed
+  album name.
+- The status display reads "Disc Rip Mode" in Handjet (Rosetta Type, SIL OFL
+  1.1; Latin subset as WOFF2, `assets/fonts/`, licence alongside, credited in
+  the README).
+- RipDialog.svelte is gone; File → Rip CD… and Linux's sidebar link open the
+  page (`store.showDisc`).

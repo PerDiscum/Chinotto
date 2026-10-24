@@ -193,3 +193,4 @@ export const mtpInfo = (key: string) => invoke<MtpInfo | null>("mtp_info", { key
 // ---- Audio CDs ----
 export const cdList = () => invoke<import("./types").Disc[]>("cd_list");
 export const cdRip = (req: import("./types").RipRequest) => invoke<import("./types").RipResult>("cd_rip", { req });
+export const cdEject = (id: string) => invoke<void>("cd_eject", { id });
