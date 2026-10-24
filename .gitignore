@@ -5,3 +5,6 @@
 /deps
 # Finder
 .DS_Store
+
+# cdrdao built by scripts/build-cdrdao.sh (bundled by CI, not committed)
+app/src-tauri/binaries/
