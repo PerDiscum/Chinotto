@@ -221,6 +221,26 @@ fn parse_cue(cue: &Path) -> Result<Cue, String> {
     Ok(c)
 }
 
+/// A copy of `cue` at `out` whose FILE lines name their files by full path.
+fn absolute_cue(cue: &Path, out: &Path) -> Result<(), String> {
+    let c = parse_cue(cue)?;
+    let text = String::from_utf8_lossy(&std::fs::read(cue).map_err(|e| e.to_string())?).into_owned();
+    let mut files = c.files.iter();
+    let mut lines = Vec::new();
+    for l in text.lines() {
+        let t = l.trim_start();
+        if t.len() >= 5 && t[..5].eq_ignore_ascii_case("FILE ") {
+            let path = files.next().ok_or("The .cue changed while reading it")?;
+            // The file type (BINARY, WAVE…) stays as it was.
+            let kind = t.rsplit(|ch: char| ch == '"' || ch.is_whitespace()).next().filter(|k| !k.is_empty()).unwrap_or("BINARY");
+            lines.push(format!("FILE \"{}\" {kind}", path.display()));
+        } else {
+            lines.push(l.to_string());
+        }
+    }
+    std::fs::write(out, lines.join("\n") + "\n").map_err(|e| format!("Couldn't prepare the .cue: {e}"))
+}
+
 fn sector_size(mode: &str) -> u64 {
     match mode {
         "MODE1/2048" | "MODE2/2048" => 2048,
@@ -518,13 +538,21 @@ fn burn(path: &str, speed: u32, verify: bool, app: &AppHandle) -> Result<Vec<Str
             }
             // macOS: "0,0,0" is cdrdao's first CD/DVD drive.
             let dev = if cfg!(target_os = "macos") { "0,0,0" } else { linux_device().ok_or("No disc burner found.")? };
+            // cdrdao opens a .cue's files relative to where it's run, not to
+            // the .cue: give it a copy naming them by full path (as found
+            // by parse_cue, including a .bin renamed with its .cue).
+            let cue = tmp.0.join("image.cue");
+            absolute_cue(Path::new(&info.path), &cue)?;
             let write = |driver: Option<&str>| -> Result<(), BurnFail> {
                 let mut cmd = Command::new(&c);
                 cmd.args(["write", "--device", dev, "--speed", &x, "--eject", "-n"]);
                 if let Some(d) = driver {
                     cmd.args(["--driver", d]);
                 }
-                cmd.arg(&info.path);
+                cmd.arg(&cue);
+                if let Some(dir) = Path::new(&info.path).parent() {
+                    cmd.current_dir(dir);
+                }
                 run_with_progress(app, cmd, pct_of_mb)
             };
             match write(Some("generic-mmc-raw")) {
@@ -584,6 +612,11 @@ mod tests {
         let m = burn_inspect(tmp.0.join("Mixed.cue").to_string_lossy().into_owned()).unwrap();
         assert!(m.needs_cdrdao);
         assert_eq!(m.description, "Data + 1 audio tracks");
+        let abs = tmp.0.join("abs.cue");
+        absolute_cue(Path::new(&i.path), &abs).unwrap();
+        let text = std::fs::read_to_string(&abs).unwrap();
+        assert!(text.starts_with(&format!("FILE \"{}\" BINARY\n", bin.display())), "{text}");
+        assert!(text.contains("TRACK 01 MODE1/2352"));
         let iso = tmp.0.join("out.iso");
         bin_to_iso(&bin, 2352, &iso, &|_| {}).unwrap();
         let out = std::fs::read(&iso).unwrap();
