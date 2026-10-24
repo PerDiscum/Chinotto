@@ -1322,3 +1322,20 @@ rewritten. Writing only the changed picture files is the next step.
     Homebrew's folders; no verification possible there.
   - Checks: burner present, blank disc, image fits.
 - Untested on a real burner.
+
+## 0107: .bin/.cue burned raw
+
+Asked whether converting .bin/.cue to ISO breaks e.g. PlayStation homebrew.
+PlayStation discs are MODE2/2352 (XA), which 0106 never converted (only a
+single MODE1 track was), but converting is still a loss in general: the drive
+writes fresh EDC/ECC, so deliberately damaged sectors aren't reproduced. Now:
+
+- Any .cue goes to `cdrdao write --driver generic-mmc-raw` (raw: every 2352-byte
+  sector as in the image), disc-at-once, at the chosen speed.
+- If the drive can't write raw and cdrdao fails before any data was written
+  (`BurnFail.started`), it's retried cooked (`generic-mmc`), and the report
+  says so.
+- Only when cdrdao isn't installed does a single MODE1 track go as its ISO,
+  with a report line about it. Mode 2/audio/multi-track without cdrdao: an
+  error asking to install it.
+- Not supported: subchannel data (.sub/.sbi, LibCrypt); the report says so.
