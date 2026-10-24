@@ -3,11 +3,10 @@
  * properly with the system; cdrdao can't open a drive macOS is using.
  *
  * Each track's sectors are read from the image and handed to the drive in
- * the drive's own block format (burn.rs works out the layout from the .cue):
- * audio as 2352-byte blocks; mode 1 data as 2048 bytes; mode 2 (PlayStation,
- * CD-ROM XA) as 2332 bytes, subheader included. The drive writes the sync
- * pattern, header and error correction. Session-at-once, then (if asked) the
- * disc is read back and compared with the image. */
+ * raw 2352-byte sectors as they are in the image (burn.rs works out the
+ * layout from the .cue; data tracks use the raw cue-sheet data forms, as
+ * Burn.app does). Session-at-once, then (if asked) the disc is read back and
+ * compared with the image. */
 #include <DiscRecording/DiscRecording.h>
 #include <fcntl.h>
 #include <stdint.h>
@@ -208,7 +207,7 @@ int chinotto_dr_burn(const chinotto_dr_track *tracks, int count, double speed_x,
   DRBurnSetProperties(burn, bp);
   CFRelease(bp);
 
-  int result = 1;
+  int result = 1, saw_verify = 0;
   OSStatus st = DRBurnWriteLayout(burn, layout);
   if (st != noErr) {
     snprintf(err, errlen, "The burn couldn't start (error %d).", (int)st);
@@ -222,6 +221,7 @@ int chinotto_dr_burn(const chinotto_dr_track *tracks, int count, double speed_x,
       float f = -1;
       if (pct) CFNumberGetValue(pct, kCFNumberFloatType, &f);
       int verifying = state && CFEqual(state, kDRStatusStateVerifying);
+      if (verifying) saw_verify = 1;
       if (progress && f >= 0) progress(ctx, verifying ? 1 : 0, f);
       if (state && CFEqual(state, kDRStatusStateDone)) {
         result = 0;
@@ -229,7 +229,10 @@ int chinotto_dr_burn(const chinotto_dr_track *tracks, int count, double speed_x,
         break;
       }
       if (state && CFEqual(state, kDRStatusStateFailed)) {
-        copy_error(status, err, errlen);
+        char why[900];
+        copy_error(status, why, sizeof why);
+        /* Failing while checking: the disc itself is written. */
+        snprintf(err, errlen, "%s%s", saw_verify ? "The disc was written, but checking it against the image failed: " : "", why);
         CFRelease(status);
         break;
       }

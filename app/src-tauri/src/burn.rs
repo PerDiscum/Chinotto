@@ -353,15 +353,17 @@ fn cue_plan(cue: &Path) -> Result<Vec<PlanTrack>, String> {
 
 #[cfg_attr(not(any(target_os = "macos", test)), allow(dead_code))]
 /// The drive's block format for a track mode: (bytes skipped in each file
-/// sector, block size, block type, data form, track mode).
+/// sector, block size, block type, data form, track mode). Data tracks go
+/// raw, whole 2352-byte sectors with their sync, header and error
+/// correction as in the image (cue-sheet data forms 0x11 and 0x21), as
+/// Burn.app does.
 fn dr_format(mode: &str) -> Option<(u32, u32, u32, u32, u32)> {
     Some(match mode {
         "AUDIO" => (0, 2352, 0, 0, 0),
-        "MODE1/2352" => (16, 2048, 8, 16, 4),
-        "MODE1/2048" => (0, 2048, 8, 16, 4),
-        // Mode 2 (CD-ROM XA, PlayStation): subheader and data, 2332 bytes.
-        "MODE2/2352" => (16, 2332, 13, 32, 4),
-        "MODE2/2336" => (0, 2332, 13, 32, 4),
+        "MODE1/2352" => (0, 2352, 8, 0x11, 4),
+        "MODE1/2048" => (0, 2048, 8, 0x10, 4),
+        "MODE2/2352" => (0, 2352, 12, 0x21, 4),
+        "MODE2/2336" => (0, 2336, 9, 0x30, 4),
         _ => return None,
     })
 }
@@ -761,7 +763,7 @@ fn burn(path: &str, speed: u32, verify: bool, app: &AppHandle) -> Result<Vec<Str
             files.dedup();
             read_through(&files, app)?;
             dr_burn(&plan, speed, verify, app)?;
-            report.push("Burned session-at-once, every track's sectors from the image; the drive writes each sector's sync, header and error correction, which is the same for any disc made the standard way.".into());
+            report.push("Burned session-at-once and raw: every sector exactly as in the image, error correction included.".into());
             report.push(if verify {
                 "macOS read the disc back and it matches the image.".into()
             } else {
@@ -886,7 +888,7 @@ mod tests {
         assert_eq!(plan.len(), 2);
         assert_eq!((plan[0].offset, plan[0].length, plan[0].pregap, plan[0].pregap_offset), (0, 100, 150, None));
         assert_eq!((plan[1].offset, plan[1].length, plan[1].pregap, plan[1].pregap_offset), (250 * 2352, 300, 150, Some(100 * 2352)));
-        assert_eq!(dr_format("MODE2/2352"), Some((16, 2332, 13, 32, 4)));
+        assert_eq!(dr_format("MODE2/2352"), Some((0, 2352, 12, 0x21, 4)));
         let iso = tmp.0.join("out.iso");
         bin_to_iso(&bin, 2352, &iso, &|_| {}).unwrap();
         let out = std::fs::read(&iso).unwrap();
