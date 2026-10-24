@@ -170,9 +170,8 @@
       {/each}
     </ul>
   {/if}
-  {#if store.discs.length}
-    <h2>{t("Optical")}</h2>
-    <ul class="libs">
+  <h2>{t("Optical")}</h2>
+  <ul class="optical">
       {#each store.discs as d (d.id)}
         <li>
           <div class="row device" class:active={store.source.kind === "disc" && store.source.id === d.id}>
@@ -186,8 +185,19 @@
           </div>
         </li>
       {/each}
+      {#if !isMac && !store.discs.length}
+        <!-- Linux: the drive isn't read until asked (it spins up). -->
+        <li><div class="row device"><button class="name" onclick={() => store.showDisc()}><Icon name="disc" /><span>{t("Rip CD…")}</span></button></div></li>
+      {/if}
+      <li>
+        <div class="row device" class:active={store.source.kind === "burn"}>
+          <button class="name" onclick={() => store.select({ kind: "burn" })} title={t("Burn an .iso or .bin/.cue onto a blank CD or DVD")}>
+            <Icon name="burn" />
+            <span>{t("Burn Image")}</span>
+          </button>
+        </div>
+      </li>
     </ul>
-  {/if}
   <h2>{t("Devices")}</h2>
   {#if store.devices.length === 0}
     <p class="hint">{t("Connect your device, and it will show up here.")}</p>
@@ -316,15 +326,9 @@
       </li>
     {/each}
   </ul>
-  {#if !isMac && !store.discs.length}
-    <!-- Linux: no menu bar, and the drive isn't read until asked. -->
-    <button class="rip" onclick={() => store.showDisc()}><Icon name="disc" /> {t("Rip CD…")}</button>
-  {/if}
 </nav>
 
 <style>
-  .rip { display: flex; align-items: center; gap: 6px; margin: 4px 14px; padding: 2px 0; border: 0; background: none; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
-  .rip:hover { color: var(--ink); }
   .sources {
     flex: 1;
     overflow-y: auto;

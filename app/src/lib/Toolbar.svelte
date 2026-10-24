@@ -75,6 +75,8 @@
       <span class="sub">{t("Don't unplug yet")}</span>
     {:else if store.source.kind === "disc"}
       <strong class="mode">{t("Disc Rip Mode")}</strong>
+    {:else if store.source.kind === "burn"}
+      <strong class="mode">{t("Burn Image Mode")}</strong>
     {:else if song}
       <strong>{song.title ?? t("Untitled")}</strong>
       <span class="sub">{[song.artist, song.album].filter(Boolean).join(" — ")}</span>
@@ -143,7 +145,7 @@
   .mode {
     font-family: "Handjet", var(--ui);
     font-weight: 600;
-    font-size: 30px;
+    font-size: 42px;
     line-height: 1;
     letter-spacing: 0.04em;
     text-transform: uppercase;

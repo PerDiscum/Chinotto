@@ -304,6 +304,12 @@ class Store {
     await api.onAddProgress((p) => {
       // A late event after the work finished mustn't bring the status back.
       if (!this.busy) return;
+      if (this.burning) {
+        const n = { p: Math.floor(p.done / 10) };
+        this.progress = p;
+        this.busy = p.current === "verify" ? t("Checking the disc… {p}%", n) : p.current === "prepare" ? t("Preparing the image… {p}%", n) : t("Burning… {p}%", n);
+        return;
+      }
       if (p.current === "openmg-database") {
         this.progress = null;
         this.busy = t("Saving the Walkman's song list… (this can take a few minutes; don't unplug it)");
@@ -824,6 +830,51 @@ class Store {
     if (s.kind === "disc" && !d.some((x) => x.id === s.id)) this.select({ kind: "none" });
     for (const id of Object.keys(this.discDrafts)) if (!d.some((x) => x.id === id)) delete this.discDrafts[id];
     for (const x of d) if (!this.discDrafts[x.id]) this.discDrafts[x.id] = this.newDraft(x.name);
+  }
+
+  // ---- Burning disc images ----
+
+  burning = $state(false);
+  burnStatus = $state<import("./types").BurnStatus | null>(null);
+  burnImage = $state<import("./types").DiscImage | null>(null);
+  /** 0: the slowest the drive and disc allow. */
+  burnSpeed = $state(0);
+  burnVerify = $state(true);
+
+  async refreshBurn() {
+    if (this.burning) return;
+    const s = await api.burnStatus().catch(() => null);
+    if (JSON.stringify(s) !== JSON.stringify(this.burnStatus)) this.burnStatus = s;
+  }
+
+  async chooseBurnImage() {
+    const path = await api.pickDiscImage();
+    if (!path) return;
+    try {
+      this.burnImage = await api.burnInspect(path);
+      this.error = null;
+    } catch (e) {
+      this.error = String(e);
+    }
+  }
+
+  async burn() {
+    const img = this.burnImage;
+    if (!img || this.busy) return;
+    this.burning = true;
+    this.busy = t("Burning…");
+    this.error = null;
+    try {
+      const lines = await api.burnImage(img.path, this.burnSpeed, this.burnVerify);
+      this.dialog = { kind: "report", title: t("The disc is ready"), lines };
+    } catch (e) {
+      this.error = String(e);
+    } finally {
+      this.burning = false;
+      this.busy = null;
+      this.progress = null;
+      void this.refreshBurn();
+    }
   }
 
   /** What's been typed for each disc in a drive. */
