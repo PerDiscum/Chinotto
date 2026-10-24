@@ -1409,3 +1409,17 @@ before writing anything, while Burn.app burns the same image fine. Now
 status`'s "Write Speeds" (`Media.speeds`, also shown in the speed menu), and
 in drburn.c the minimum of `kDRDeviceBurnSpeedsKey`. A chosen speed the drive
 doesn't list becomes the nearest listed one at or above it.
+
+## 0115: Disc Recording burns .bin/.cue raw, as Burn.app does
+
+0114's listed speed (10×) didn't stop the SuperDrive resetting. Burn.app's
+source (KWTrackProducer, `getTracksOfLayout`) shows how it burns the same
+images on the same drive: whole 2352-byte sectors with the raw cue-sheet data
+forms — MODE1/2352: block type 8, data form 0x11; MODE2/2352: block type 12,
+data form 0x21, session format 0x20; MODE2/2336: block type 9, data form
+0x30. 0112 used the "cooked" mode 2 format (2332 bytes, type 13, form 0x20),
+which the SuperDrive's firmware evidently can't take. `dr_format` now uses
+Burn.app's values, so sectors go to the disc exactly as in the image, error
+correction included. Burn.app doesn't verify .cue burns; Chinotto still asks
+Disc Recording to (ReceiveData), and a failure while checking is reported as
+"the disc was written, but checking it … failed".

@@ -58,7 +58,7 @@
     {#if img?.kind === "cue"}
       <p class="muted note">
         {isMac
-          ? t("A .bin/.cue is burned through macOS's own disc burning, session-at-once, with every track's sectors from the image; the drive writes each sector's sync, header and error correction, and macOS can check the disc afterwards.")
+          ? t("A .bin/.cue is burned through macOS's own disc burning, session-at-once and raw: every sector exactly as in the image, error correction included. macOS can check the disc afterwards.")
           : img.needsCdrdao
             ? t("A .bin/.cue like this one (PlayStation and other mode 2 discs, audio, several tracks) is burned raw with cdrdao: every sector exactly as in the image, in one pass. cdrdao can't check the disc afterwards.")
             : t("A .bin/.cue is burned raw with cdrdao when it's installed: every sector exactly as in the image. Without it, this one's data track is burned as an ISO, which is the same disc unless the image has deliberately damaged sectors.")}

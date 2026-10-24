@@ -91,9 +91,8 @@ then checks it against the image.
 - macOS: nothing to install. ISO images go through `hdiutil`; `.bin`/`.cue`
   images (PlayStation and other mode 2 discs, audio, several tracks) through
   Apple's Disc Recording framework, as the Finder and Burn.app do,
-  session-at-once with every track's sectors taken from the image (the drive
-  writes each sector's sync, header and error correction). macOS reads the
-  disc back to check it.
+  session-at-once and raw: every sector exactly as in the image, error
+  correction included. macOS reads the disc back to check it.
 - Linux: `wodim` (CDs), `growisofs` (DVDs) and `cdrdao`, which writes
   `.bin`/`.cue` images raw (every sector exactly as in the image); the .deb
   and .rpm packages recommend them, or `sudo apt install wodim growisofs
