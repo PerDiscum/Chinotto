@@ -280,3 +280,19 @@ pub fn set_device_icon(identity: String, icon: Option<String>, state: State<'_, 
 pub fn system_locales() -> Vec<String> {
     sys_locale::get_locales().collect()
 }
+
+/// Open the list of third-party software and licences that ships with Chinotto.
+#[tauri::command]
+pub fn open_licences(app: AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+    let file = app.path().resource_dir().map_err(|e| e.to_string())?.join("THIRD-PARTY-LICENSES.txt");
+    if !file.is_file() {
+        return Err(format!("{} is missing", file.display()));
+    }
+    let opener = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
+    let mut cmd = std::process::Command::new(opener);
+    if cfg!(target_os = "macos") {
+        cmd.arg("-t"); // as text, in the default text editor
+    }
+    cmd.arg(&file).spawn().map(|_| ()).map_err(|e| e.to_string())
+}

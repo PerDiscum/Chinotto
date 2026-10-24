@@ -1339,3 +1339,32 @@ writes fresh EDC/ECC, so deliberately damaged sectors aren't reproduced. Now:
   with a report line about it. Mode 2/audio/multi-track without cdrdao: an
   error asking to install it.
 - Not supported: subchannel data (.sub/.sbi, LibCrypt); the report says so.
+
+## 0108: cdrdao in the macOS app; licences in order
+
+- cdrdao 1.2.6 (GPL v2+, unmodified release vendored in
+  `third_party/sources/`, checksum-checked) is built by
+  `scripts/build-cdrdao.sh` as one universal binary (no MP3/Ogg/GUI, system
+  libraries only) and bundled in the macOS app via Tauri `externalBin`, added
+  only in CI (`--config`) so local builds don't need it. `burn::tool` looks
+  next to Chinotto's own executable first. macOS device is `0,0,0` (cdrdao's
+  first drive; its other form is an IORegistry path, so the old
+  `IODVDServices` was wrong); the cooked fallback names `generic-mmc`.
+  Linux packages don't bundle it (it would clash with the distro's
+  /usr/bin/cdrdao): .deb and .rpm *recommend* cdrdao, wodim, growisofs
+  (dvd+rw-tools), cdparanoia.
+- Licences: `scripts/licenses.py` writes
+  `app/src-tauri/licenses/THIRD-PARTY-LICENSES.txt` (every crate from cargo
+  metadata, the npm packages bundled in the window, the vendored C libraries,
+  LAME inside mp3lame-sys, glib for macOS, cdrdao, Handjet; each licence text
+  once; crates without a licence file get the standard text of their licence
+  and their authors). CI regenerates it before every build; it ships in the
+  app (bundle resources, with Chinotto's LICENSE) and opens from Chinotto →
+  Acknowledgements and Licences (`open_licences`).
+- LGPL (libgpod, libmtp, libusb, glib static on macOS, LAME/mp3lame LGPL 3):
+  the notice file says so, and relinking is possible because Chinotto's whole
+  source, theirs included, is public with build scripts. GPL 3 text included
+  for the LGPL 3. Releases attach cdrdao's and glib's (plus glib's meson
+  subproject) source archives and the licence list.
+- Not built on macOS here (no Mac in the sandbox): the first CI run builds
+  cdrdao there; the Linux build of the same script was tested.
