@@ -194,3 +194,14 @@ export const mtpInfo = (key: string) => invoke<MtpInfo | null>("mtp_info", { key
 export const cdList = () => invoke<import("./types").Disc[]>("cd_list");
 export const cdRip = (req: import("./types").RipRequest) => invoke<import("./types").RipResult>("cd_rip", { req });
 export const cdEject = (id: string) => invoke<void>("cd_eject", { id });
+export const cdMusicInfo = () =>
+  invoke<{ artist: string; album: string; year: number; genre: string; titles: { number: number; title: string }[] }>("cd_music_info");
+
+// ---- Burning disc images ----
+export const burnStatus = () => invoke<import("./types").BurnStatus>("burn_status");
+export const burnInspect = (path: string) => invoke<import("./types").DiscImage>("burn_inspect", { path });
+export const burnImage = (path: string, speed: number, verify: boolean) => invoke<string[]>("burn_image", { path, speed, verify });
+export async function pickDiscImage(): Promise<string | null> {
+  const r = await open({ multiple: false, directory: false, title: "Choose a disc image", filters: [{ name: "Disc images", extensions: ["iso", "cue", "bin", "img", "cdr", "toast"] }] });
+  return typeof r === "string" ? r : null;
+}

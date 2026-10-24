@@ -141,6 +141,84 @@ pub async fn cd_list() -> Vec<Disc> {
     tauri::async_runtime::spawn_blocking(|| if cfg!(target_os = "macos") { mac_discs() } else { linux_discs() }).await.unwrap_or_default()
 }
 
+/// What Music (iTunes) found for the CD in the drive (from Gracenote).
+#[derive(Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscInfo {
+    pub artist: String,
+    pub album: String,
+    pub year: i32,
+    pub genre: String,
+    pub titles: Vec<RipTitle>,
+}
+
+#[derive(Serialize)]
+pub struct RipTitle {
+    pub number: u32,
+    pub title: String,
+}
+
+/// macOS: the names Music shows for the audio CD (it looks CDs up with
+/// Gracenote when it sees them), asked through AppleScript. The first time,
+/// macOS asks whether Chinotto may control Music.
+#[tauri::command]
+pub async fn cd_music_info() -> Result<DiscInfo, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        if !cfg!(target_os = "macos") {
+            return Err("Song names from Music are only on macOS.".to_string());
+        }
+        const SCRIPT: &str = r#"
+tell application "Music"
+	set cds to (every source whose kind is audio CD)
+	if cds is {} then return ""
+	set p to first audio CD playlist of item 1 of cds
+	set us to ASCII character 31
+	set rs to ASCII character 30
+	set out to ""
+	repeat with t in tracks of p
+		set out to out & (track number of t as text) & us & (name of t) & us & (artist of t) & us & (album of t) & us & (year of t as text) & us & (genre of t) & us & (album artist of t) & rs
+	end repeat
+	return out
+end tell"#;
+        let out = Command::new("osascript").args(["-e", SCRIPT]).output().map_err(|e| e.to_string())?;
+        if !out.status.success() {
+            return Err(format!("Music didn't answer: {}", String::from_utf8_lossy(&out.stderr).trim()));
+        }
+        Ok(parse_music(&String::from_utf8_lossy(&out.stdout)))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+fn parse_music(text: &str) -> DiscInfo {
+    let mut info = DiscInfo::default();
+    let mut artists: Vec<String> = Vec::new();
+    for rec in text.trim_end_matches(['\n', '\r']).split('\u{1e}').filter(|r| !r.trim().is_empty()) {
+        let f: Vec<&str> = rec.split('\u{1f}').collect();
+        let Some(number) = f.first().and_then(|n| n.trim().parse().ok()) else { continue };
+        let get = |i: usize| f.get(i).map(|s| s.trim().to_string()).unwrap_or_default();
+        info.titles.push(RipTitle { number, title: get(1) });
+        let album_artist = get(6);
+        artists.push(if album_artist.is_empty() { get(2) } else { album_artist });
+        if info.album.is_empty() {
+            info.album = get(3);
+        }
+        if info.year == 0 {
+            info.year = get(4).parse().unwrap_or(0);
+        }
+        if info.genre.is_empty() {
+            info.genre = get(5);
+        }
+    }
+    // The album's artist: the same on every song, else "Various Artists".
+    info.artist = match artists.first() {
+        Some(a) if artists.iter().all(|x| x == a) => a.clone(),
+        Some(_) => "Various Artists".into(),
+        None => String::new(),
+    };
+    info
+}
+
 /// Eject the disc (its volume on macOS, its drive on Linux).
 #[tauri::command]
 pub async fn cd_eject(id: String) -> Result<(), String> {
@@ -193,18 +271,12 @@ fn rip(req: RipRequest, app: &AppHandle) -> Result<RipResult, String> {
     let ext = crate::convert::extension(&req.format);
     let count = req.tracks.len();
     let mut res = RipResult { folder: dir.to_string_lossy().into_owned(), ..Default::default() };
+    // The cover, at most 800 × 800 (a baseline JPEG, which every player shows).
     let cover = match req.cover.as_deref().filter(|c| !c.is_empty()) {
         Some(c) => {
             let bytes = std::fs::read(c).map_err(|e| format!("Couldn't read the cover: {e}"))?;
-            let mime =
-                if bytes.starts_with(&[0x89, b'P', b'N', b'G']) { lofty::picture::MimeType::Png } else { lofty::picture::MimeType::Jpeg };
-            // Not PNG or JPEG: made into a JPEG.
-            let bytes = if bytes.starts_with(&[0x89, b'P']) || bytes.starts_with(&[0xFF, 0xD8]) {
-                bytes
-            } else {
-                crate::msc::small_jpeg(&bytes, 1400, 2_000_000)?
-            };
-            Some(crate::tagwrite::CoverChange::Set(bytes, mime))
+            let jpeg = crate::msc::small_jpeg(&bytes, 800, 4_000_000).map_err(|e| format!("Couldn't use the cover: {e}"))?;
+            Some(crate::tagwrite::CoverChange::Set(jpeg, lofty::picture::MimeType::Jpeg))
         }
         None => None,
     };
@@ -284,6 +356,16 @@ fn rip(req: RipRequest, app: &AppHandle) -> Result<RipResult, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn music_answer() {
+        let i = parse_music("1\u{1f}Hung Up\u{1f}Madonna\u{1f}Confessions\u{1f}2005\u{1f}Pop\u{1f}\u{1e}2\u{1f}Get Together\u{1f}Madonna\u{1f}Confessions\u{1f}2005\u{1f}Pop\u{1f}\u{1e}\n");
+        assert_eq!(
+            (i.artist.as_str(), i.album.as_str(), i.year, i.genre.as_str(), i.titles.len()),
+            ("Madonna", "Confessions", 2005, "Pop", 2)
+        );
+        assert_eq!(i.titles[1].title, "Get Together");
+    }
 
     #[test]
     fn names() {

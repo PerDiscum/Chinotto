@@ -1290,3 +1290,35 @@ rewritten. Writing only the changed picture files is the next step.
   the README).
 - RipDialog.svelte is gone; File → Rip CD… and Linux's sidebar link open the
   page (`store.showDisc`).
+
+## 0106: Rip page tweaks, names from Music, Burn Image
+
+- Rip page: the artist field shows what's typed (no forced capitals); the
+  mascot no longer pushes the controls down; covers become baseline JPEGs of
+  at most 800 × 800 (`msc::small_jpeg`); the Optical rows line up with Devices.
+- Happy disc: the developer's export had the background showing as a ragged
+  black ring between the hub and the disc; now a clean transparent ring and
+  hole (cut with circles measured from the drawing).
+- "Disc Rip Mode" / "Burn Image Mode": 42 px, like a stereo's display.
+- **Get Names from Music** (macOS, `rip::cd_music_info`): AppleScript asks
+  Music for its audio CD playlist's tracks (name, artist, album artist,
+  album, year, genre), which Music filled in from Gracenote — the same names
+  XLD can use. macOS asks once whether Chinotto may control Music
+  (`NSAppleEventsUsageDescription` in Info.plist). Mixed artists →
+  "Various Artists".
+- **Burn Image** (`burn.rs`, `BurnPage.svelte`, source kind `burn`, always
+  under Optical, File → Burn Image…): .iso, or .bin + .cue.
+  - Media: macOS `drutil info`/`status` (type, blank, free blocks); Linux
+    udev's cdrom_id properties (`udevadm info`), nominal capacities.
+  - Speed defaults to the slowest (x-factor 1, which drives raise to their
+    lowest supported speed); 2–24× can be chosen.
+  - macOS ISO: `hdiutil burn -speed N -puppetstrings` (progress), verifying
+    unless switched off. Linux ISO: `wodim -dao` (CD) or `growisofs
+    -dvd-compat` (DVD), then the disc is read back and compared byte for
+    byte.
+  - .cue with one MODE1 data track: its 2048-byte user data are taken out as
+    an ISO (identical disc) and burned as above. Anything else (audio, mixed,
+    several tracks): `cdrdao write` (raw, disc-at-once), found in PATH or
+    Homebrew's folders; no verification possible there.
+  - Checks: burner present, blank disc, image fits.
+- Untested on a real burner.

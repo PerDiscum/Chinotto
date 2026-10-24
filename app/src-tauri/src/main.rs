@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod artwork;
+mod burn;
 mod commands;
 mod convert;
 mod cover;
@@ -64,6 +65,10 @@ fn main() {
             rip::cd_list,
             rip::cd_rip,
             rip::cd_eject,
+            rip::cd_music_info,
+            burn::burn_status,
+            burn::burn_inspect,
+            burn::burn_image,
             msc::msc_save,
             msc::msc_state,
             msc::msc_allow,

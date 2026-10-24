@@ -177,7 +177,9 @@ export type Source =
   /** The informational page for a legacy Sony OpenMG Walkman. */
   | { kind: "openmg"; path: string }
   /** An audio CD: its page names the songs and rips them. */
-  | { kind: "disc"; id: string };
+  | { kind: "disc"; id: string }
+  /** Burning a disc image (.iso, .bin + .cue). */
+  | { kind: "burn" };
 
 export interface LibrarySummary {
   id: string;
@@ -332,4 +334,25 @@ export interface RipResult {
   ripped: number;
   folder: string;
   problems: string[];
+}
+
+export interface BurnMedia {
+  kind: string;
+  blank: boolean;
+  freeSectors: number;
+  dvd: boolean;
+}
+
+export interface BurnStatus {
+  drive: string | null;
+  media: BurnMedia | null;
+}
+
+export interface DiscImage {
+  path: string;
+  kind: "iso" | "cue";
+  description: string;
+  sectors: number;
+  bytes: number;
+  needsCdrdao: boolean;
 }

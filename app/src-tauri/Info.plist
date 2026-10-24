@@ -4,7 +4,9 @@
 <dict>
 	<!-- Shown in macOS's permission prompt. Merged into the app's Info.plist by Tauri. -->
 	<key>NSRemovableVolumesUsageDescription</key>
-	<string>Chinotto reads and changes the music on your iPod.</string>
+	<string>Chinotto reads and changes the music on your iPod and other players.</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Chinotto asks Music for the song names it found for an audio CD.</string>
 	<!-- Languages Chinotto is translated into (macOS then offers them to the app). -->
 	<key>CFBundleLocalizations</key>
 	<array>

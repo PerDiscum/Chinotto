@@ -2,7 +2,8 @@
   import { t } from "./i18n";
   import { store } from "./store.svelte";
   import { duration } from "./format";
-  import { imagePreview, pickImage } from "./api";
+  import { cdMusicInfo, imagePreview, pickImage } from "./api";
+  import { isMac } from "./store.svelte";
   import happyDisc from "../assets/disc-happy.webp";
 
   // An audio CD's page: name it (no online lookup yet), choose a format and
@@ -24,6 +25,30 @@
       problem = null;
     } catch (e) {
       problem = String(e);
+    }
+  }
+
+  let asking = $state(false);
+  /** The names Music (iTunes) found for this CD with Gracenote. */
+  async function fromMusic() {
+    if (!draft) return;
+    asking = true;
+    problem = null;
+    try {
+      const i = await cdMusicInfo();
+      if (!i.titles.length) {
+        problem = t("Music doesn't show this CD. Open Music, let it look the CD up, then try again.");
+        return;
+      }
+      draft.artist = i.artist;
+      draft.album = i.album;
+      if (i.year) draft.year = String(i.year);
+      draft.genre = i.genre;
+      for (const x of i.titles) draft.titles[x.number] = x.title;
+    } catch (e) {
+      problem = String(e);
+    } finally {
+      asking = false;
     }
   }
 
@@ -76,6 +101,7 @@
         <option value="mp3_192">{t("MP3 192 kbps")}</option>
         <option value="mp3_128">{t("MP3 128 kbps (smaller)")}</option>
       </select>
+      {#if isMac}<button onclick={fromMusic} disabled={asking} title={t("The names Music found for this CD (Music looks CDs up with Gracenote)")}>{asking ? t("Asking Music…") : t("Get Names from Music")}</button>{/if}
       <button disabled title={t("Coming soon")}>{t("Fetch from MusicBrainz")}</button>
       <button class="primary" onclick={rip} disabled={!chosen.length || !!store.busy}>{t("Rip…")}</button>
     </div>
@@ -99,8 +125,8 @@
 {/if}
 
 <style>
-  .page { flex: 1; overflow: auto; padding: 32px 40px; background: var(--bg); }
-  .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; max-width: 980px; }
+  .page { position: relative; flex: 1; overflow: auto; padding: 32px 40px; background: var(--bg); }
+  .top { padding-right: 230px; }
   .head { display: flex; align-items: flex-end; gap: 18px; min-width: 0; }
   .cover { flex: none; width: 160px; height: 160px; padding: 0; border: 1px dashed var(--edge); border-radius: 12px; background: var(--zebra); color: var(--muted); font: inherit; font-size: 12px; overflow: hidden; cursor: pointer; }
   .cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -108,13 +134,14 @@
   .names input { border: 1px solid transparent; border-radius: 5px; padding: 1px 4px; margin-left: -5px; background: none; color: var(--ink); font: inherit; min-width: 0; }
   .names input:hover, .names input:focus { border-color: var(--edge); background: var(--bg); outline: none; }
   .names input::placeholder { color: var(--muted); opacity: 0.7; }
-  .artist { font-size: 22px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; }
+  .artist { font-size: 22px; font-weight: 700; }
   .album { font-size: 22px; color: var(--muted) !important; }
   .line { display: flex; gap: 8px; }
   .year { width: 5ch; font-size: 20px; color: var(--muted) !important; }
   .genre { font-size: 14px; color: var(--muted) !important; align-self: center; }
-  .mascot { width: 200px; height: auto; flex: none; }
-  .controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 24px 0 14px; }
+  /* Out of the flow, so it doesn't push the controls down. */
+  .mascot { position: absolute; top: 28px; right: 40px; width: 200px; height: auto; pointer-events: none; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 10px; }
   .controls select, .controls button { font: inherit; font-size: 13px; padding: 4px 10px; border: 1px solid var(--edge); border-radius: 6px; background: var(--zebra); color: var(--ink); }
   .controls button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   .controls button:disabled { opacity: 0.5; }
@@ -128,5 +155,5 @@
   .len { color: var(--muted); font-variant-numeric: tabular-nums; }
   .note { max-width: 760px; color: var(--muted); font-size: 12px; line-height: 1.5; }
   .problem { color: #b3261e; font-size: 12px; }
-  @media (max-width: 760px) { .mascot { display: none; } }
+  @media (max-width: 760px) { .mascot { display: none; } .top { padding-right: 0; } }
 </style>

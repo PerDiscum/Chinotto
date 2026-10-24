@@ -77,6 +77,23 @@ an existing file. They join a library only if that folder is inside one of
 the library's folders. Linux needs `cdparanoia` to read the disc (and
 `ffmpeg` for Apple Lossless and AAC); FLAC and MP3 are built in.
 
+On a Mac, **Get Names from Music** fills in what Music (iTunes) found for the
+CD with Gracenote; MusicBrainz lookup is planned. Covers are reduced to
+800 × 800.
+
+## Burning disc images
+
+**Burn Image** (under Optical) burns an `.iso`, or a `.bin` with its `.cue`,
+onto a blank CD-R/RW or DVD±R/RW. It burns at the slowest speed the drive and
+disc allow unless you choose otherwise, in one pass, closes the disc, and
+then checks it against the image.
+
+- macOS: ISO images (and .cue images with one data track) use `hdiutil`,
+  part of macOS, which also does the check. Images with audio or several
+  tracks need `cdrdao` (`brew install cdrdao`).
+- Linux: `wodim` (CDs), `growisofs` (DVDs) and `cdrdao` (.cue with audio or
+  several tracks), e.g. `sudo apt install wodim growisofs cdrdao`.
+
 ## Tested devices
 
 So far, this is the developer's own hardware, run through the app itself
