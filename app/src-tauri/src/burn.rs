@@ -30,6 +30,8 @@ pub struct Media {
     /// Free 2048-byte sectors.
     pub free_sectors: u64,
     pub dvd: bool,
+    /// Write speeds (x) the drive offers for this disc, slowest first (macOS; empty when unknown).
+    pub speeds: Vec<u32>,
 }
 
 #[derive(Serialize, Default)]
@@ -92,6 +94,15 @@ fn parse_drutil(text: &str) -> Option<Media> {
         let l = l.trim();
         if let Some(rest) = l.strip_prefix("Type:") {
             m.kind = rest.trim().split("  ").next().unwrap_or("").trim().to_string();
+        } else if let Some(rest) = l.strip_prefix("Write Speeds:") {
+            // "10x, 16x, 24x" (DVDs can have "2.4x")
+            m.speeds = rest
+                .split(',')
+                .filter_map(|x| x.trim().trim_end_matches(['x', 'X']).parse::<f32>().ok())
+                .map(|x| x.ceil() as u32)
+                .collect();
+            m.speeds.sort_unstable();
+            m.speeds.dedup();
         } else if l.starts_with("Space Free:") {
             m.free_sectors = l.split("blocks:").nth(1).and_then(|b| b.split('/').next()).and_then(|n| n.trim().parse().ok()).unwrap_or(0);
         } else if let Some(rest) = l.strip_prefix("Writability:") {
@@ -126,6 +137,7 @@ fn parse_udev(text: &str) -> Option<Media> {
     let blank = get("ID_CDROM_MEDIA_STATE") == Some("blank");
     let dl = kind.contains("DL");
     Some(Media {
+        speeds: Vec::new(),
         free_sectors: if !blank {
             0
         } else if dl {
@@ -665,10 +677,23 @@ fn burn(path: &str, speed: u32, verify: bool, app: &AppHandle) -> Result<Vec<Str
             (media.free_sectors * 2048) >> 20
         ));
     }
+    // Only ask for a speed the drive offers for this disc (the SuperDrive, asked
+    // for 1× on a CD-R it writes at 10× at the slowest, reset itself): the
+    // slowest it lists, or the nearest at or above the one chosen.
+    let speed = match (speed, media.speeds.first()) {
+        (0, Some(min)) => *min,
+        (s, Some(_)) => media.speeds.iter().copied().find(|x| *x >= s).unwrap_or(*media.speeds.last().unwrap()),
+        (s, None) => s,
+    };
     let x = if speed == 0 { "1".to_string() } else { speed.to_string() };
+    let slowest = media.speeds.first() == Some(&speed) || speed == 0;
     let mut report = vec![format!(
         "Burned at {} onto a {}.",
-        if speed == 0 { "the slowest speed the drive allows".to_string() } else { format!("{speed}×") },
+        match (speed, slowest) {
+            (0, _) => "the slowest speed the drive allows".to_string(),
+            (s, true) => format!("{s}×, the slowest this drive offers for this disc"),
+            (s, false) => format!("{s}×"),
+        },
         media.kind
     )];
     let tmp = crate::convert::TempDir::new()?;
@@ -811,6 +836,8 @@ mod tests {
         let s = "           Type: CD-R               Name: /dev/disk4\n     Space Free:   79:59:74         blocks:   359999 / 737.28MB / 703.12MiB\n    Writability: appendable, blank, overwritable\n";
         let m = parse_drutil(s).unwrap();
         assert_eq!((m.kind.as_str(), m.blank, m.free_sectors, m.dvd), ("CD-R", true, 359_999, false));
+        let sd = parse_drutil("           Type: CD-R                 Name: /dev/disk4\n   Write Speeds: 24x, 10x, 16x\n").unwrap();
+        assert_eq!(sd.speeds, [10, 16, 24]);
         assert!(parse_drutil("           Type: No Media Inserted\n").is_none());
         let u = parse_udev("ID_CDROM_MEDIA=1\nID_CDROM_MEDIA_DVD_PLUS_R=1\nID_CDROM_MEDIA_STATE=blank\n").unwrap();
         assert_eq!((u.kind.as_str(), u.blank, u.dvd), ("DVD+R", true, true));

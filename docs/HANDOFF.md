@@ -1398,3 +1398,14 @@ disc-burning service, so cdrdao (and cdrecord) are shut out. So on macOS:
   file was syntax-checked here against a stub, but not compiled on a Mac.
 - cdrdao is no longer bundled anywhere (no build script, vendored tarball,
   CI step or licence entry); Linux still uses the distro's cdrdao.
+
+## 0114: burn only at speeds the drive lists
+
+The SuperDrive (firmware 2.03, `drutil info`: CD-TAO, CD-SAO, CD-Raw) writes
+CD-R at 10×, 16× or 24× only. Asked for 1× through Disc Recording it reset
+itself (sense 06 "power on, reset, or bus device reset", error 0x80020022)
+before writing anything, while Burn.app burns the same image fine. Now
+"Slowest" means the slowest speed the drive lists for the disc: `drutil
+status`'s "Write Speeds" (`Media.speeds`, also shown in the speed menu), and
+in drburn.c the minimum of `kDRDeviceBurnSpeedsKey`. A chosen speed the drive
+doesn't list becomes the nearest listed one at or above it.

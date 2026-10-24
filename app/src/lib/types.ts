@@ -341,6 +341,8 @@ export interface BurnMedia {
   blank: boolean;
   freeSectors: number;
   dvd: boolean;
+  /** Write speeds (x) the drive offers for this disc, slowest first; empty when unknown. */
+  speeds: number[];
 }
 
 export interface BurnStatus {

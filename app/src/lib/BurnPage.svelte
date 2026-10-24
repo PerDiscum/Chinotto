@@ -45,8 +45,8 @@
       <dt>{t("Speed")}</dt>
       <dd>
         <select bind:value={store.burnSpeed} disabled={!!store.busy}>
-          <option value={0}>{t("Slowest (most reliable)")}</option>
-          {#each [2, 4, 8, 16, 24] as x (x)}<option value={x}>{x}×</option>{/each}
+          <option value={0}>{media?.speeds.length ? t("Slowest ({x}×, most reliable)", { x: media.speeds[0] }) : t("Slowest (most reliable)")}</option>
+          {#each (media?.speeds.length ? media.speeds.slice(1) : [2, 4, 8, 16, 24]) as x (x)}<option value={x}>{x}×</option>{/each}
         </select>
       </dd>
       <dt></dt>

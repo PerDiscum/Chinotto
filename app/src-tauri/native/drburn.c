@@ -179,7 +179,24 @@ int chinotto_dr_burn(const chinotto_dr_track *tracks, int count, double speed_x,
 
   DRBurnRef burn = DRBurnCreate(device);
   CFMutableDictionaryRef bp = CFDictionaryCreateMutable(NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-  float kps = (float)(speed_x > 0 ? speed_x : 1.0) * kDRDeviceBurnSpeedCD1x;
+  /* Speed: as asked, else the slowest the drive offers for this disc (never
+   * one it doesn't list: some drives reset rather than slow down). */
+  float kps = (float)speed_x * kDRDeviceBurnSpeedCD1x;
+  if (speed_x <= 0) {
+    kps = kDRDeviceBurnSpeedCD1x;
+    CFDictionaryRef ds = DRDeviceCopyStatus(device);
+    CFDictionaryRef media = ds ? (CFDictionaryRef)CFDictionaryGetValue(ds, kDRDeviceMediaInfoKey) : NULL;
+    CFArrayRef speeds = media ? (CFArrayRef)CFDictionaryGetValue(media, kDRDeviceBurnSpeedsKey) : NULL;
+    if (!speeds && ds) speeds = (CFArrayRef)CFDictionaryGetValue(ds, kDRDeviceBurnSpeedsKey);
+    float min = 0;
+    for (CFIndex i = 0; speeds && i < CFArrayGetCount(speeds); i++) {
+      float v = 0;
+      CFNumberGetValue((CFNumberRef)CFArrayGetValueAtIndex(speeds, i), kCFNumberFloatType, &v);
+      if (v > 0 && (min == 0 || v < min)) min = v;
+    }
+    if (min > 0) kps = min;
+    if (ds) CFRelease(ds);
+  }
   CFNumberRef speed = CFNumberCreate(NULL, kCFNumberFloatType, &kps);
   CFDictionarySetValue(bp, kDRBurnRequestedSpeedKey, speed);
   CFRelease(speed);
