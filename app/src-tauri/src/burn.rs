@@ -61,6 +61,18 @@ fn tool(name: &str) -> Option<PathBuf> {
     if let Some(own) = std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.join(name))).filter(|p| p.is_file()) {
         return Some(own);
     }
+    // Built on this computer: the copy scripts/build-cdrdao.sh made in the
+    // source folder (the official builds carry it in the app instead).
+    let built = Path::new(env!("CARGO_MANIFEST_DIR")).join("binaries");
+    if let Some(p) = std::fs::read_dir(&built)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path())
+        .find(|p| p.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with(&format!("{name}-")) && !n.ends_with("COPYING")))
+    {
+        return Some(p);
+    }
     let dirs = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/opt/local/bin"];
     if let Some(p) = std::env::var_os("PATH") {
         for d in std::env::split_paths(&p) {
@@ -497,7 +509,7 @@ fn burn(path: &str, speed: u32, verify: bool, app: &AppHandle) -> Result<Vec<Str
             // A .cue: cdrdao, disc-at-once, raw (PlayStation and other mode 2
             // discs, audio, mixed mode, several tracks).
             let c = cdrdao.ok_or(if cfg!(target_os = "macos") {
-                "Burning a .bin/.cue exactly (PlayStation and other mode 2 discs, audio, several tracks) needs cdrdao: install it with Homebrew (brew install cdrdao)."
+                "Burning a .bin/.cue needs cdrdao, which the official Chinotto app carries. This copy of Chinotto was built without it: run scripts/build-cdrdao.sh in Chinotto's source folder once and rebuild (or install it with Homebrew: brew install cdrdao)."
             } else {
                 "Burning a .bin/.cue exactly (PlayStation and other mode 2 discs, audio, several tracks) needs cdrdao (e.g. sudo apt install cdrdao)."
             })?;
