@@ -35,6 +35,8 @@ typedef void (*chinotto_dr_progress)(void *ctx, int phase, double fraction);
 #define MAX_TRACKS 99
 static const chinotto_dr_track *g_tracks;
 static int g_fds[MAX_TRACKS];
+/* What went wrong in a callback, for the error message. */
+static char g_problem[256];
 
 /* Fill `buf` with `count` blocks of track `t`, from block `first` of the
  * track (or of its pregap). */
@@ -49,7 +51,10 @@ static int produce_blocks(int t, int pregap, uint64_t first, uint32_t count, uin
     }
     off_t at = (off_t)base + (off_t)(first + b) * tr->file_sector + tr->skip;
     ssize_t n = pread(g_fds[t], out, tr->block_size, at);
-    if (n != (ssize_t)tr->block_size) return -1;
+    if (n != (ssize_t)tr->block_size) {
+      snprintf(g_problem, sizeof g_problem, "Couldn't read track %d of the image at byte %lld.", t + 1, (long long)at);
+      return -1;
+    }
   }
   return 0;
 }
@@ -86,8 +91,11 @@ static OSStatus track_callback(DRTrackRef track, DRTrackMessage message, void *i
         uint32_t step = count - done > 64 ? 64 : count - done;
         if (produce_blocks(t, message == kDRTrackMessageVerifyPreGap, info->requestedAddress / bs + done, step, expected) != 0)
           return kDRVerificationFailedErr;
-        if (memcmp(expected, (uint8_t *)info->buffer + (size_t)done * bs, (size_t)step * bs) != 0)
+        if (memcmp(expected, (uint8_t *)info->buffer + (size_t)done * bs, (size_t)step * bs) != 0) {
+          snprintf(g_problem, sizeof g_problem, "Track %d differs from the image near block %llu.", t + 1,
+                   (unsigned long long)(info->requestedAddress / bs + done));
           return kDRVerificationFailedErr;
+        }
         done += step;
       }
       return noErr;
@@ -104,15 +112,22 @@ static void set_int(CFMutableDictionaryRef d, CFStringRef key, int64_t v) {
 }
 
 static void copy_error(CFDictionaryRef status, char *err, size_t errlen) {
-  snprintf(err, errlen, "The burn failed.");
+  char a[512] = "", b[512] = "", sense[256] = "", asc[256] = "";
+  int code = 0;
   CFDictionaryRef e = status ? (CFDictionaryRef)CFDictionaryGetValue(status, kDRErrorStatusKey) : NULL;
-  if (!e) return;
-  CFStringRef s = (CFStringRef)CFDictionaryGetValue(e, kDRErrorStatusErrorStringKey);
-  CFStringRef info = (CFStringRef)CFDictionaryGetValue(e, kDRErrorStatusErrorInfoStringKey);
-  char a[512] = "", b[512] = "";
-  if (s) CFStringGetCString(s, a, sizeof a, kCFStringEncodingUTF8);
-  if (info) CFStringGetCString(info, b, sizeof b, kCFStringEncodingUTF8);
-  snprintf(err, errlen, "%s%s%s", a[0] ? a : "The burn failed.", b[0] ? " " : "", b);
+  if (e) {
+    CFStringRef s;
+    CFNumberRef n;
+    if ((s = (CFStringRef)CFDictionaryGetValue(e, kDRErrorStatusErrorStringKey))) CFStringGetCString(s, a, sizeof a, kCFStringEncodingUTF8);
+    if ((s = (CFStringRef)CFDictionaryGetValue(e, kDRErrorStatusErrorInfoStringKey))) CFStringGetCString(s, b, sizeof b, kCFStringEncodingUTF8);
+    if ((s = (CFStringRef)CFDictionaryGetValue(e, kDRErrorStatusSenseCodeStringKey))) CFStringGetCString(s, sense, sizeof sense, kCFStringEncodingUTF8);
+    if ((s = (CFStringRef)CFDictionaryGetValue(e, kDRErrorStatusAdditionalSenseStringKey))) CFStringGetCString(s, asc, sizeof asc, kCFStringEncodingUTF8);
+    if ((n = (CFNumberRef)CFDictionaryGetValue(e, kDRErrorStatusErrorKey))) CFNumberGetValue(n, kCFNumberIntType, &code);
+  }
+  /* "message (more) [drive: sense / additional sense] {our problem} (error 0x…)" */
+  snprintf(err, errlen, "%s%s%s%s%s%s%s%s%s%s (error 0x%08x)", a[0] ? a : "The burn failed.", b[0] ? " " : "", b,
+           sense[0] || asc[0] ? " [drive: " : "", sense, sense[0] && asc[0] ? " / " : "", asc, sense[0] || asc[0] ? "]" : "",
+           g_problem[0] ? " " : "", g_problem, (unsigned)code);
 }
 
 /* Returns 0 when the disc is burned (and verified, if asked); else 1, with
@@ -132,6 +147,7 @@ int chinotto_dr_burn(const chinotto_dr_track *tracks, int count, double speed_x,
   DRDeviceRef device = (DRDeviceRef)CFArrayGetValueAtIndex(devices, 0);
 
   g_tracks = tracks;
+  g_problem[0] = 0;
   for (int i = 0; i < count; i++) g_fds[i] = -1;
   for (int i = 0; i < count; i++) {
     g_fds[i] = open(tracks[i].path, O_RDONLY);
