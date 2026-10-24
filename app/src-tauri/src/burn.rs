@@ -55,8 +55,12 @@ pub struct ImageInfo {
     pub needs_cdrdao: bool,
 }
 
-/// A program, also where Homebrew puts them (apps don't get the shell's PATH).
+/// A program: Chinotto's own copy (cdrdao, next to it in the app), else the
+/// system's, also where Homebrew puts them (apps don't get the shell's PATH).
 fn tool(name: &str) -> Option<PathBuf> {
+    if let Some(own) = std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.join(name))).filter(|p| p.is_file()) {
+        return Some(own);
+    }
     let dirs = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/opt/local/bin"];
     if let Some(p) = std::env::var_os("PATH") {
         for d in std::env::split_paths(&p) {
@@ -500,8 +504,9 @@ fn burn(path: &str, speed: u32, verify: bool, app: &AppHandle) -> Result<Vec<Str
             if media.dvd {
                 return Err("A .bin/.cue image goes on a CD-R, not a DVD.".into());
             }
-            let dev = if cfg!(target_os = "macos") { "IODVDServices" } else { linux_device().ok_or("No disc burner found.")? };
-            let write = |driver: Option<&str>| {
+            // macOS: "0,0,0" is cdrdao's first CD/DVD drive.
+            let dev = if cfg!(target_os = "macos") { "0,0,0" } else { linux_device().ok_or("No disc burner found.")? };
+            let write = |driver: Option<&str>| -> Result<(), BurnFail> {
                 let mut cmd = Command::new(&c);
                 cmd.args(["write", "--device", dev, "--speed", &x, "--eject", "-n"]);
                 if let Some(d) = driver {
@@ -514,7 +519,7 @@ fn burn(path: &str, speed: u32, verify: bool, app: &AppHandle) -> Result<Vec<Str
                 Ok(()) => report.push("Written raw: every sector as it is in the image.".into()),
                 // The drive can't write raw, and nothing was written yet: cooked (it makes the error correction).
                 Err(f) if !f.started => {
-                    write(None)?;
+                    write(Some("generic-mmc"))?;
                     report.push("This drive can't write raw, so it wrote the sectors' error correction itself: right for ordinary discs, but sectors deliberately damaged in the image aren't reproduced.".into());
                 }
                 Err(f) => return Err(f.msg),

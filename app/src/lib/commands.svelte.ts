@@ -5,6 +5,7 @@
 // handler here acts it calls preventDefault and the menu stays quiet; menu
 // clicks run the same functions.
 
+import * as api from "./api";
 import { store, isMac, type MusicView } from "./store.svelte";
 import { t } from "./i18n";
 import type { Track } from "./types";
@@ -110,6 +111,7 @@ export async function installMenu() {
     text: "Chinotto",
     items: [
       await PredefinedMenuItem.new({ item: { About: null }, text: t("About Chinotto") }),
+      await item(t("Acknowledgements and Licences"), () => void api.openLicences().catch((e) => (store.error = String(e)))),
       sep,
       { item: "Services" },
       sep,

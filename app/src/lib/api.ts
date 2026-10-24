@@ -205,3 +205,4 @@ export async function pickDiscImage(): Promise<string | null> {
   const r = await open({ multiple: false, directory: false, title: "Choose a disc image", filters: [{ name: "Disc images", extensions: ["iso", "cue", "bin", "img", "cdr", "toast"] }] });
   return typeof r === "string" ? r : null;
 }
+export const openLicences = () => invoke<void>("open_licences");
