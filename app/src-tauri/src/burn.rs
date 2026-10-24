@@ -272,13 +272,32 @@ fn progress(app: &AppHandle, phase: &str, permille: usize) {
 
 /// Run a burning program, turning its output into progress with `percent`
 /// (a line → percent done). Both stdout and stderr are read.
-fn run_with_progress(app: &AppHandle, mut cmd: Command, percent: fn(&str) -> Option<f64>) -> Result<(), String> {
+/// A burning program that failed; `started`: it had begun writing (so the
+/// disc is used up), else trying again another way is safe.
+struct BurnFail {
+    msg: String,
+    started: bool,
+}
+
+impl From<BurnFail> for String {
+    fn from(f: BurnFail) -> String {
+        f.msg
+    }
+}
+
+fn run_with_progress(app: &AppHandle, mut cmd: Command, percent: fn(&str) -> Option<f64>) -> Result<(), BurnFail> {
     let name = cmd.get_program().to_string_lossy().into_owned();
-    let mut child = cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|e| format!("Couldn't start {name}: {e}"))?;
+    let mut child = cmd
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| BurnFail { msg: format!("Couldn't start {name}: {e}"), started: false })?;
+    let started = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let out = child.stdout.take().unwrap();
     let err = child.stderr.take().unwrap();
     let tail = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
     let watch = |r: Box<dyn Read + Send>, app: AppHandle, tail: std::sync::Arc<std::sync::Mutex<Vec<String>>>| {
+        let started = started.clone();
         std::thread::spawn(move || {
             // Progress lines end in \r as often as \n.
             let mut buf = Vec::new();
@@ -290,6 +309,9 @@ fn run_with_progress(app: &AppHandle, mut cmd: Command, percent: fn(&str) -> Opt
                         continue;
                     }
                     if let Some(p) = percent(&line) {
+                        if p > 0.0 {
+                            started.store(true, std::sync::atomic::Ordering::Relaxed);
+                        }
                         progress(&app, "burn", (p * 10.0) as usize);
                     }
                     let mut t = tail.lock().unwrap();
@@ -305,12 +327,15 @@ fn run_with_progress(app: &AppHandle, mut cmd: Command, percent: fn(&str) -> Opt
     };
     let a = watch(Box::new(out), app.clone(), tail.clone());
     let b = watch(Box::new(err), app.clone(), tail.clone());
-    let status = child.wait().map_err(|e| e.to_string())?;
+    let status = child.wait().map_err(|e| BurnFail { msg: e.to_string(), started: true })?;
     let _ = (a.join(), b.join());
     if status.success() {
         Ok(())
     } else {
-        Err(format!("{name} stopped: {}", tail.lock().unwrap().join(" / ")))
+        Err(BurnFail {
+            msg: format!("{name} stopped: {}", tail.lock().unwrap().join(" / ")),
+            started: started.load(std::sync::atomic::Ordering::Relaxed),
+        })
     }
 }
 
@@ -417,11 +442,17 @@ fn burn(path: &str, speed: u32, verify: bool, app: &AppHandle) -> Result<Vec<Str
     let tmp = crate::convert::TempDir::new()?;
     // A .cue with one data track goes as the ISO inside it.
     let mut iso: Option<PathBuf> = (info.kind == "iso").then(|| PathBuf::from(&info.path));
-    if info.kind == "cue" && !info.needs_cdrdao {
+    // A .cue goes raw with cdrdao: every sector exactly as in the image,
+    // error-correction data included (some discs depend on theirs). Without
+    // cdrdao, a single MODE1 data track can still go as its ISO: the drive
+    // writes fresh error correction, which is the same for an ordinary disc.
+    let cdrdao = tool("cdrdao");
+    if info.kind == "cue" && !info.needs_cdrdao && cdrdao.is_none() {
         let c = parse_cue(Path::new(&info.path))?;
         let out = tmp.0.join("image.iso");
         bin_to_iso(&c.files[0], single_data_track(&c).unwrap(), &out, &|p| progress(app, "prepare", p))?;
         iso = Some(out);
+        report.push("cdrdao isn't installed, so the image's data track was burned as an ISO: the data is the same, but sectors deliberately damaged in the image (some copy protections) aren't reproduced.".into());
     }
     progress(app, "burn", 0);
     match iso {
@@ -459,20 +490,37 @@ fn burn(path: &str, speed: u32, verify: bool, app: &AppHandle) -> Result<Vec<Str
             let _ = Command::new("eject").arg(dev).status();
         }
         None => {
-            // A .cue with audio or several tracks: cdrdao, disc-at-once, raw.
-            let c = tool("cdrdao").ok_or(if cfg!(target_os = "macos") {
-                "This image has audio or several tracks, which needs cdrdao: install it with Homebrew (brew install cdrdao)."
+            // A .cue: cdrdao, disc-at-once, raw (PlayStation and other mode 2
+            // discs, audio, mixed mode, several tracks).
+            let c = cdrdao.ok_or(if cfg!(target_os = "macos") {
+                "Burning a .bin/.cue exactly (PlayStation and other mode 2 discs, audio, several tracks) needs cdrdao: install it with Homebrew (brew install cdrdao)."
             } else {
-                "This image has audio or several tracks, which needs cdrdao (e.g. sudo apt install cdrdao)."
+                "Burning a .bin/.cue exactly (PlayStation and other mode 2 discs, audio, several tracks) needs cdrdao (e.g. sudo apt install cdrdao)."
             })?;
             if media.dvd {
-                return Err("A .cue with audio or several tracks goes on a CD, not a DVD.".into());
+                return Err("A .bin/.cue image goes on a CD-R, not a DVD.".into());
             }
             let dev = if cfg!(target_os = "macos") { "IODVDServices" } else { linux_device().ok_or("No disc burner found.")? };
-            let mut cmd = Command::new(c);
-            cmd.args(["write", "--device", dev, "--speed", &x, "--eject", "-n"]).arg(&info.path);
-            run_with_progress(app, cmd, pct_of_mb)?;
-            report.push("cdrdao can't check the disc against the image; play or mount it to make sure.".into());
+            let write = |driver: Option<&str>| {
+                let mut cmd = Command::new(&c);
+                cmd.args(["write", "--device", dev, "--speed", &x, "--eject", "-n"]);
+                if let Some(d) = driver {
+                    cmd.args(["--driver", d]);
+                }
+                cmd.arg(&info.path);
+                run_with_progress(app, cmd, pct_of_mb)
+            };
+            match write(Some("generic-mmc-raw")) {
+                Ok(()) => report.push("Written raw: every sector as it is in the image.".into()),
+                // The drive can't write raw, and nothing was written yet: cooked (it makes the error correction).
+                Err(f) if !f.started => {
+                    write(None)?;
+                    report.push("This drive can't write raw, so it wrote the sectors' error correction itself: right for ordinary discs, but sectors deliberately damaged in the image aren't reproduced.".into());
+                }
+                Err(f) => return Err(f.msg),
+            }
+            report.push("Subchannel data (.sub/.sbi files, used by a few protected PlayStation games) isn't written.".into());
+            report.push("cdrdao can't check the disc against the image; play it to make sure.".into());
         }
     }
     progress(app, "burn", 1000);

@@ -55,7 +55,13 @@
       </dd>
     </dl>
     {#if img && !fits}<p class="warn">{t("The image is bigger than the disc.")}</p>{/if}
-    {#if img?.needsCdrdao}<p class="muted note">{t("This image has audio or several tracks, so it's burned with cdrdao, raw and in one pass (disc-at-once). cdrdao can't check the disc afterwards.")}</p>{/if}
+    {#if img?.kind === "cue"}
+      <p class="muted note">
+        {img.needsCdrdao
+          ? t("A .bin/.cue like this one (PlayStation and other mode 2 discs, audio, several tracks) is burned raw with cdrdao: every sector exactly as in the image, in one pass. cdrdao can't check the disc afterwards.")
+          : t("A .bin/.cue is burned raw with cdrdao when it's installed: every sector exactly as in the image. Without it, this one's data track is burned as an ISO, which is the same disc unless the image has deliberately damaged sectors.")}
+      </p>
+    {/if}
     <div class="controls">
       <button onclick={() => store.chooseBurnImage()} disabled={!!store.busy}>{t("Choose Image…")}</button>
       <button class="primary" onclick={() => store.burn()} disabled={!ready}>{t("Burn")}</button>
