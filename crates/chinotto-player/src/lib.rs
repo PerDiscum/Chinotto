@@ -10,6 +10,7 @@
 
 pub mod convert;
 pub mod decode;
+pub mod spectrum;
 
 use std::collections::VecDeque;
 use std::path::PathBuf;
@@ -47,6 +48,10 @@ pub enum Event {
     Ended,
     /// Something went wrong; playback has stopped.
     Error(String),
+    /// Levels (0 to 1) of what's playing: [`spectrum::BANDS`] for the left
+    /// channel, then as many for the right. Sent about 25 times a second
+    /// while playing.
+    Spectrum(Vec<f32>),
 }
 
 enum Cmd {
@@ -113,6 +118,8 @@ struct Shared {
     paused: AtomicBool,
     /// Output frames played since `base_ms`.
     played: AtomicU64,
+    /// What was last sent to the sound card, for the spectrum.
+    scope: Mutex<spectrum::Scope>,
 }
 
 /// An open output stream and its format.
@@ -146,6 +153,7 @@ impl Engine {
                 volume: AtomicU32::new(0.8f32.to_bits()),
                 paused: AtomicBool::new(true),
                 played: AtomicU64::new(0),
+                scope: Mutex::new(spectrum::Scope::new()),
             }),
             output: None,
             source: None,
@@ -177,6 +185,14 @@ impl Engine {
         (self.on_event)(Event::Status(self.status()));
     }
 
+    fn emit_spectrum(&self) {
+        let rate = self.output.as_ref().map(|o| o.rate).unwrap_or(44_100);
+        let (l, r) = self.shared.scope.lock().unwrap().snapshot();
+        let mut v = spectrum::levels(&l, rate).to_vec();
+        v.extend(spectrum::levels(&r, rate));
+        (self.on_event)(Event::Spectrum(v));
+    }
+
     fn fail(&mut self, msg: String) {
         self.stop();
         (self.on_event)(Event::Error(msg));
@@ -184,6 +200,7 @@ impl Engine {
 
     fn run(mut self, rx: Receiver<Cmd>) {
         let mut last_tick = Instant::now();
+        let mut last_spectrum = Instant::now();
         loop {
             // Wait briefly for a command when there's nothing to decode.
             let wait = if self.needs_audio() { Duration::from_millis(0) } else { Duration::from_millis(40) };
@@ -202,6 +219,10 @@ impl Engine {
                 self.ended_sent = true;
                 self.stop();
                 (self.on_event)(Event::Ended);
+            }
+            if self.state == State::Playing && last_spectrum.elapsed() >= Duration::from_millis(40) {
+                last_spectrum = Instant::now();
+                self.emit_spectrum();
             }
             if self.state == State::Playing && last_tick.elapsed() >= Duration::from_millis(250) {
                 last_tick = Instant::now();
@@ -284,6 +305,7 @@ impl Engine {
         self.run_output(false);
         self.shared.buf.lock().unwrap().clear();
         self.shared.played.store(0, Ordering::Relaxed);
+        self.shared.scope.lock().unwrap().clear();
         self.source = None;
         self.path = None;
         self.resampler = None;
@@ -401,15 +423,27 @@ where
                     data.fill(silence);
                     return;
                 };
+                // The spectrum is a nicety: skip it rather than wait for its lock.
+                let mut scope = shared.scope.try_lock().ok();
                 let mut frames = 0u64;
                 for frame in data.chunks_mut(channels) {
                     if buf.len() < channels {
                         frame.fill(silence);
                         continue;
                     }
-                    for s in frame.iter_mut() {
+                    let (mut l, mut r) = (0.0, 0.0);
+                    for (i, s) in frame.iter_mut().enumerate() {
+                        let v = buf.pop_front().unwrap_or(0.0);
+                        match i {
+                            0 => (l, r) = (v, v),
+                            1 => r = v,
+                            _ => {}
+                        }
                         // Perceived loudness: square the slider position.
-                        *s = T::from_sample(buf.pop_front().unwrap_or(0.0) * vol * vol);
+                        *s = T::from_sample(v * vol * vol);
+                    }
+                    if let Some(sc) = scope.as_mut() {
+                        sc.push(l, r);
                     }
                     frames += 1;
                 }

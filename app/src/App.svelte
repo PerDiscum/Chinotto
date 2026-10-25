@@ -288,7 +288,7 @@
     opacity: 0.35;
   }
   .side-tools button:hover:not(:disabled) {
-    background: rgb(255 255 255 / 0.08);
+    background-color: rgb(255 255 255 / 0.08);
     color: var(--side-ink);
   }
   .side-tools button[aria-pressed="true"] {

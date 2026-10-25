@@ -1436,3 +1436,26 @@ the middle. Still drawn with CSS until art arrives: Pause (Play stays pressed
 in while playing), the volume groove, search field, sidebar selection, the
 folder and new-playlist buttons. The spectrum bars are decorative, not a
 real analyser.
+
+## 0118: Retro look, second pass; a real spectrum
+
+- New art: Pause, Folder, Playlist (new playlist), reworked square buttons,
+  the empty screen, a dark background. The WebPs in
+  `app/src/assets/retro` are made from the developer's PNGs by shrinking to
+  2× display size (play and pause share one crop box so they line up).
+- Retro follows the system's light/dark setting; drawn buttons and the
+  screen stay the same, everything else swaps through the `--…` tokens in
+  `retro.css` (including Retro-only ones: `--gloss`, `--head-gloss`,
+  `--sel-gloss`, `--page-bg`, `--tab-on`, scrollbars).
+- Library in Retro: glossy view tabs (selected one a pale-blue pill), glossy
+  column headers, glossy selection, smaller Lucida Grande type (DejaVu Sans
+  on Linux), blue scrollbars. Pages get darker text with a soft glow.
+- Fix: the sidebar's bottom buttons grew on hover — App.svelte's hover
+  `background:` shorthand reset Retro's `background-size: contain`; it now
+  sets `background-color` only.
+- Spectrum: `chinotto-player/src/spectrum.rs`. The sound card callback copies
+  what it plays into a 1024-frame stereo scope (try_lock, never waits); the
+  player thread runs a Hann-windowed FFT per channel every 40 ms while playing
+  and sends 8 octave bands per channel, 60 Hz–16 kHz, tilted +3 dB a band, as
+  `Event::Spectrum` → `player-spectrum`. The window lets bars jump up at once
+  and fall 0.12 per update.

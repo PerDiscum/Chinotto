@@ -159,6 +159,8 @@ class Store {
   showBrowser = $state(true);
   showArtwork = $state(true);
   /** The look: "modern" (the Chinotto colours) or "retro" (glossy blue, drawn art). */
+  /** The display's bars: see api.onPlayerSpectrum. */
+  spectrum = $state<number[]>([]);
   theme = $state(loadPref("chinotto.theme", ["modern", "retro"] as const, "modern"));
   setTheme(theme: "modern" | "retro") {
     this.theme = theme;
@@ -301,6 +303,10 @@ class Store {
     await api.onPlayerStatus((p) => {
       this.player = p;
       if (p.state === "stopped" && !this.advancing) this.nowPlaying = null;
+    });
+    // The bars jump up at once and fall back gently.
+    await api.onPlayerSpectrum((levels) => {
+      this.spectrum = levels.map((v, i) => Math.max(v, (this.spectrum[i] ?? 0) - 0.12));
     });
     await api.onPlayerEnded(() => void this.next(true));
     await api.onPlayerError((msg) => {

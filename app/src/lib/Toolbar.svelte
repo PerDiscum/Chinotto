@@ -10,6 +10,8 @@
 
   const song = $derived(store.playingTrack);
   const playing = $derived(store.player.state === "playing" && !!store.nowPlaying);
+  // A spectrum bar's height, 0 to 1; resting low when nothing's playing.
+  const bar = (i: number) => String(playing ? Math.max(0.06, store.spectrum[i] ?? 0) : 0.06);
   const total = $derived(store.player.durationMs ?? song?.lengthMs ?? 0);
   // While the seek knob is being dragged, show where it is rather than the player's position.
   let dragging = $state<number | null>(null);
@@ -58,8 +60,8 @@
   </div>
 
   <div class="label" class:live={playing} role="status" aria-live="polite">
-    <span class="spectrum left" aria-hidden="true">{#each { length: 8 } as _, i (i)}<i></i>{/each}</span>
-    <span class="spectrum right" aria-hidden="true">{#each { length: 8 } as _, i (i)}<i></i>{/each}</span>
+    <span class="spectrum left" aria-hidden="true">{#each { length: 8 } as _, i (i)}<i style:--l={bar(i)}></i>{/each}</span>
+    <span class="spectrum right" aria-hidden="true">{#each { length: 8 } as _, i (i)}<i style:--l={bar(8 + i)}></i>{/each}</span>
     {#if store.busy}
       <strong>{store.busy}</strong>
       {#if store.progress && store.progress.total}

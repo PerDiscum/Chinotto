@@ -74,6 +74,8 @@ export const playerStop = () => invoke<void>("player_stop");
 export const playerSeek = (ms: number) => invoke<void>("player_seek", { ms: Math.max(0, Math.round(ms)) });
 export const playerVolume = (volume: number) => invoke<void>("player_volume", { volume });
 export const onPlayerStatus = (f: (s: PlayerStatus) => void) => listen<PlayerStatus>("player-status", (e) => f(e.payload));
+/** Levels (0–1) of what's playing: 8 bands of the left channel, then 8 of the right. */
+export const onPlayerSpectrum = (f: (levels: number[]) => void) => listen<number[]>("player-spectrum", (e) => f(e.payload));
 export const onPlayerEnded = (f: () => void) => listen("player-ended", () => f());
 export const onPlayerError = (f: (msg: string) => void) => listen<string>("player-error", (e) => f(e.payload));
 

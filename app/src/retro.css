@@ -1,13 +1,18 @@
 /* The Retro look: glossy blue, in the spirit of mid-2000s media players.
    Switched on by data-theme="retro" on <html> (View → Look on a Mac, the
-   status bar's button elsewhere). The drawn art is in assets/retro; pieces
-   not drawn yet are made with CSS gradients in the same colours. Light only. */
+   status bar's button elsewhere). The drawn art is in assets/retro. It has a
+   light and a dark version, following the system; the drawn buttons and the
+   screen are the same in both. */
 
 :root[data-theme="retro"] {
   color-scheme: light;
 
+  /* Lucida Grande and Verdana's cousins: the type of the era. */
+  --ui: "Lucida Grande", "Lucida Sans Unicode", "DejaVu Sans", "Verdana", "Tahoma", -apple-system, system-ui, sans-serif;
+  --rounded: var(--ui);
+
   --bg: #ffffff;
-  --zebra: #eef5fd;
+  --zebra: #edf4fd;
   --ink: #0d2240;
   --muted: #5a7090;
   --edge: #c9daee;
@@ -22,7 +27,7 @@
   --accent-bright: #5fb4ff;
   --sel: #2a74de;
   --sel-ink: #ffffff;
-  --sel-quiet: #d6e6f8;
+  --sel-quiet: #d3e4f7;
   --star: #0a5cb0;
 
   --side: #1d3a6a;
@@ -47,7 +52,67 @@
   --warn-bg: #fff3d6;
   --warn-ink: #6a4a00;
 
+  /* Retro only. */
   --gloss: linear-gradient(#f7fbff, #e2eefb 48%, #c9ddf4 52%, #e4effb);
+  --gloss-edge: #7fa6d6;
+  --head-gloss: linear-gradient(#ffffff, #edf3fb 50%, #dde8f6 51%, #eef4fc);
+  --head-sorted: linear-gradient(#eaf5ff, #c3dffb 50%, #a9cff7 51%, #d2e8fd);
+  --head-ink: #1d3a66;
+  --sel-gloss: linear-gradient(#6fb6f8, #2f80e6 50%, #1b67d0 51%, #3388ea);
+  --page-ink: #071733;
+  --page-muted: #2c4670;
+  --page-glow: 0 0 6px rgb(255 255 255 / 0.9);
+  --page-bg: #eaf3fd url("./assets/retro/background.webp") center / cover no-repeat;
+  --side-shade: transparent;
+  --tab-ink: #4a5260;
+  --tab-on-ink: #13366e;
+  --tab-on: linear-gradient(#f2f8ff, #cfe3f9 55%, #bcd6f5);
+  --tab-on-edge: #8fb6e6;
+  --scroll-track: linear-gradient(to right, #e3ecf7, #f5f9fe);
+  --scroll-thumb: linear-gradient(to right, #8cc3f7, #3d8ff0 50%, #2a7ae0 51%, #6aaef3);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="retro"] {
+    color-scheme: dark;
+
+    --bg: #0d1a33;
+    --zebra: #112142;
+    --ink: #e3eeff;
+    --muted: #8ea8cc;
+    --edge: #1f3560;
+    --header: #16294b;
+    --header-sorted: #1c3866;
+    --chrome: #12223f;
+    --chrome-edge: #050b18;
+    --field: #0b1630;
+    --field-edge: #2c4f86;
+    --sel-quiet: #1c3866;
+    --star: #6fb6f8;
+    --side: #0c1a33;
+    --side-deep: #081226;
+    --side-edge: #050b18;
+    --cap-free: #1a2a48;
+    --warn-bg: #3a2c0a;
+    --warn-ink: #ffd98a;
+    --accent: #4a9cf0;
+
+    --gloss: linear-gradient(#2b4472, #1a2e52 48%, #10213e 52%, #1a2d4f);
+    --gloss-edge: #050b18;
+    --head-gloss: linear-gradient(#22375e, #1a2d4f 50%, #132442 51%, #1a2c4c);
+    --head-sorted: linear-gradient(#2d5592, #22477d 50%, #1a3c6e 51%, #24497f);
+    --head-ink: #c7dcf7;
+    --page-ink: #eef5ff;
+    --page-muted: #a9c3e6;
+    --page-glow: 0 0 6px rgb(0 10 30 / 0.9);
+    --page-bg: #0a1530 url("./assets/retro/background-dark.webp") center / cover no-repeat;
+    --side-shade: rgb(0 8 24 / 0.45);
+    --tab-ink: #a9bcd6;
+    --tab-on-ink: #ffffff;
+    --tab-on: linear-gradient(#3d6eb3, #22508f 55%, #1c4580);
+    --tab-on-edge: #0a1f45;
+    --scroll-track: linear-gradient(to right, #0a1428, #12203c);
+  }
 }
 
 /* ---- Top bar: playback buttons, the screen, search ---- */
@@ -55,7 +120,7 @@
 :root[data-theme="retro"] .toolbar {
   padding: 6px 14px;
   background: var(--gloss);
-  border-bottom-color: #7fa6d6;
+  border-bottom-color: var(--gloss-edge);
 }
 :root[data-theme="retro"] .transport {
   gap: 2px;
@@ -81,16 +146,20 @@
   height: 48px;
   background-image: url("./assets/retro/play.webp");
 }
+:root[data-theme="retro"] .transport button.main.playing {
+  background-image: url("./assets/retro/pause.webp");
+}
 :root[data-theme="retro"] .transport button:first-child:active:not(:disabled) {
   background-image: url("./assets/retro/prev-down.webp");
 }
 :root[data-theme="retro"] .transport button:last-child:active:not(:disabled) {
   background-image: url("./assets/retro/next-down.webp");
 }
-/* Until there's a Pause button, the Play button stays pressed in while playing. */
-:root[data-theme="retro"] .transport button.main:active:not(:disabled),
-:root[data-theme="retro"] .transport button.main.playing {
+:root[data-theme="retro"] .transport button.main:active:not(:disabled) {
   background-image: url("./assets/retro/play-down.webp");
+}
+:root[data-theme="retro"] .transport button.main.playing:active:not(:disabled) {
+  background-image: url("./assets/retro/pause-down.webp");
 }
 :root[data-theme="retro"] .transport button:hover:not(:disabled) {
   filter: brightness(1.08);
@@ -101,7 +170,7 @@
 }
 
 :root[data-theme="retro"] .volume {
-  color: #2b5a96;
+  color: var(--head-ink);
 }
 :root[data-theme="retro"] .volume input {
   height: 20px;
@@ -114,7 +183,7 @@
   height: 6px;
   border-radius: 3px;
   background: linear-gradient(to right, #3fa0ff 0 var(--v, 50%), #0b2a5c var(--v, 50%));
-  box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.5), 0 1px 0 rgb(255 255 255 / 0.8);
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.5), 0 1px 0 rgb(255 255 255 / 0.3);
 }
 :root[data-theme="retro"] .volume input::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -135,7 +204,6 @@
   border-radius: 0;
   background: none;
   box-shadow: none;
-  font-family: var(--ui);
   text-shadow: 0 0 6px rgb(95 180 255 / 0.7);
 }
 :root[data-theme="retro"] .toolbar .bar {
@@ -144,6 +212,8 @@
 :root[data-theme="retro"] .seek input::-webkit-slider-runnable-track {
   background: rgb(207 234 255 / 0.25);
 }
+/* The bars follow the music: Chinotto measures what's playing (8 bands per
+   channel, left channel on the left), and each bar's --l is its level. */
 :root[data-theme="retro"] .spectrum {
   position: absolute;
   bottom: 13px;
@@ -164,27 +234,12 @@
   height: 100%;
   background: repeating-linear-gradient(to top, #bfe8ff 0 2px, transparent 2px 3px);
   transform-origin: bottom;
-  transform: scaleY(0.12);
+  transform: scaleY(var(--l, 0.06));
+  transition: transform 60ms linear;
   opacity: 0.45;
-  animation: retro-bar 0.9s ease-in-out infinite alternate paused;
 }
 :root[data-theme="retro"] .label.live .spectrum i {
   opacity: 1;
-  animation-play-state: running;
-}
-:root[data-theme="retro"] .spectrum i:nth-child(2) { animation-duration: 0.63s; animation-delay: -0.2s; }
-:root[data-theme="retro"] .spectrum i:nth-child(3) { animation-duration: 0.77s; animation-delay: -0.5s; }
-:root[data-theme="retro"] .spectrum i:nth-child(4) { animation-duration: 0.52s; animation-delay: -0.1s; }
-:root[data-theme="retro"] .spectrum i:nth-child(5) { animation-duration: 0.86s; animation-delay: -0.7s; }
-:root[data-theme="retro"] .spectrum i:nth-child(6) { animation-duration: 0.58s; animation-delay: -0.3s; }
-:root[data-theme="retro"] .spectrum i:nth-child(7) { animation-duration: 0.71s; animation-delay: -0.6s; }
-:root[data-theme="retro"] .spectrum i:nth-child(8) { animation-duration: 0.95s; animation-delay: -0.4s; }
-@keyframes retro-bar {
-  from { transform: scaleY(0.12); }
-  to { transform: scaleY(1); }
-}
-@media (prefers-reduced-motion: reduce) {
-  :root[data-theme="retro"] .spectrum i { animation: none; }
 }
 @media (max-width: 900px) {
   :root[data-theme="retro"] .spectrum { display: none; }
@@ -194,14 +249,14 @@
 :root[data-theme="retro"] .search input {
   padding: 5px 12px 5px 28px;
   border-color: #6f9fd8;
-  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%232b5a96' stroke-width='1.8' stroke-linecap='round'%3E%3Ccircle cx='6.5' cy='6.5' r='4.5'/%3E%3Cpath d='m10 10 4 4'/%3E%3C/svg%3E") 9px center / 13px no-repeat;
-  box-shadow: inset 0 1px 3px rgb(13 60 140 / 0.25), 0 1px 0 rgb(255 255 255 / 0.9);
+  background: var(--field) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%235b8fd0' stroke-width='1.8' stroke-linecap='round'%3E%3Ccircle cx='6.5' cy='6.5' r='4.5'/%3E%3Cpath d='m10 10 4 4'/%3E%3C/svg%3E") 9px center / 13px no-repeat;
+  box-shadow: inset 0 1px 3px rgb(13 60 140 / 0.3), 0 1px 0 rgb(255 255 255 / 0.3);
 }
 
 /* ---- Sidebar ---- */
 
 :root[data-theme="retro"] .side {
-  background: #1d3a6a url("./assets/retro/sidebar.webp") center / cover no-repeat;
+  background: linear-gradient(var(--side-shade), var(--side-shade)), #1d3a6a url("./assets/retro/sidebar.webp") center / cover no-repeat;
 }
 :root[data-theme="retro"] .side h2 {
   color: #a9cdf5;
@@ -211,8 +266,8 @@
   text-shadow: 0 1px 0 rgb(0 0 0 / 0.5);
 }
 :root[data-theme="retro"] .side .row.active {
-  background: linear-gradient(#8fd0ff, #3d8ff0 48%, #1e6fd8 52%, #2f86ee);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.6), inset 0 -1px 0 rgb(0 30 90 / 0.4);
+  background: var(--sel-gloss);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.5), inset 0 -1px 0 rgb(0 30 90 / 0.4);
   text-shadow: 0 1px 1px rgb(0 30 90 / 0.6);
 }
 :root[data-theme="retro"] .side-tools {
@@ -221,46 +276,128 @@
   background: linear-gradient(#2c5592, #163467);
   border-top-color: #0f2448;
 }
-:root[data-theme="retro"] .side-tools button {
+:root[data-theme="retro"] .side .side-tools button {
   width: 28px;
   height: 28px;
   border-radius: 6px;
-  background: center / contain no-repeat;
+  background: transparent center / contain no-repeat;
 }
-:root[data-theme="retro"] .side-tools button:hover:not(:disabled) {
+:root[data-theme="retro"] .side .side-tools button:hover:not(:disabled) {
   background-color: transparent;
   filter: brightness(1.1);
 }
-:root[data-theme="retro"] .side-tools button:disabled {
+:root[data-theme="retro"] .side .side-tools button:disabled {
   opacity: 0.45;
 }
-:root[data-theme="retro"] .side-tools button:is([data-icon="add"], [data-icon="shuffle"], [data-icon="repeat"], [data-icon="repeat-one"], [data-icon="columns"], [data-icon="artwork"]) svg {
+:root[data-theme="retro"] .side .side-tools button[data-icon] svg {
   display: none;
 }
+:root[data-theme="retro"] .side .side-tools [data-icon="folder"] { background-image: url("./assets/retro/folder.webp"); }
 :root[data-theme="retro"] .side .side-tools [data-icon="add"] { background-image: url("./assets/retro/add.webp"); }
+:root[data-theme="retro"] .side .side-tools [data-icon="newlist"] { background-image: url("./assets/retro/newlist.webp"); }
 :root[data-theme="retro"] .side .side-tools [data-icon="shuffle"] { background-image: url("./assets/retro/shuffle.webp"); }
 :root[data-theme="retro"] .side .side-tools [data-icon="repeat"] { background-image: url("./assets/retro/repeat.webp"); }
 :root[data-theme="retro"] .side .side-tools [data-icon="repeat-one"] { background-image: url("./assets/retro/repeat-one.webp"); }
 :root[data-theme="retro"] .side .side-tools [data-icon="columns"] { background-image: url("./assets/retro/columns.webp"); }
 :root[data-theme="retro"] .side .side-tools [data-icon="artwork"] { background-image: url("./assets/retro/artwork.webp"); }
 /* Pressed in: while clicked, or while switched on. */
+:root[data-theme="retro"] .side .side-tools [data-icon="folder"]:active { background-image: url("./assets/retro/folder-down.webp"); }
 :root[data-theme="retro"] .side .side-tools [data-icon="add"]:active:not(:disabled) { background-image: url("./assets/retro/add-down.webp"); }
+:root[data-theme="retro"] .side .side-tools [data-icon="newlist"]:active:not(:disabled) { background-image: url("./assets/retro/newlist-down.webp"); }
 :root[data-theme="retro"] .side .side-tools [data-icon="shuffle"]:is(:active, [aria-pressed="true"]) { background-image: url("./assets/retro/shuffle-down.webp"); }
 :root[data-theme="retro"] .side .side-tools [data-icon="repeat"]:is(:active, [aria-pressed="true"]) { background-image: url("./assets/retro/repeat-down.webp"); }
 :root[data-theme="retro"] .side .side-tools [data-icon="columns"]:is(:active, [aria-pressed="true"]) { background-image: url("./assets/retro/columns-down.webp"); }
 :root[data-theme="retro"] .side .side-tools [data-icon="artwork"]:is(:active, [aria-pressed="true"]) { background-image: url("./assets/retro/artwork-down.webp"); }
-/* Buttons not drawn yet: a glossy square in the same colours. */
-:root[data-theme="retro"] .side .side-tools :is([data-icon="folder"], [data-icon="newlist"]) {
-  border: 1px solid #0d4fa8;
-  background: linear-gradient(#eaf5ff, #a9d3f8 48%, #6fb2f0 52%, #cfe8ff);
-  color: #0a3c8c;
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.8);
+
+/* ---- Library: view tabs, column browser, song list ---- */
+
+:root[data-theme="retro"] .tabs {
+  gap: 10px;
+  padding: 5px 12px;
+  background: var(--head-gloss);
+  border-top: 1px solid var(--gloss-edge);
+  border-bottom-color: var(--gloss-edge);
+}
+:root[data-theme="retro"] .tabs button {
+  padding: 3px 14px;
+  border: 1px solid transparent;
+  color: var(--tab-ink);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+:root[data-theme="retro"] .tabs button:hover {
+  background: none;
+  color: var(--tab-on-ink);
+}
+:root[data-theme="retro"] .tabs button.on {
+  border-color: var(--tab-on-edge);
+  background: var(--tab-on);
+  color: var(--tab-on-ink);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.7), 0 1px 2px rgb(13 60 140 / 0.25);
 }
 
-/* ---- Pages: the light-wave background ---- */
+:root[data-theme="retro"] :is(.songs .head, .browser h3) {
+  background: var(--head-gloss);
+  border-bottom-color: var(--gloss-edge);
+}
+:root[data-theme="retro"] .browser h3,
+:root[data-theme="retro"] .songs .head .cell {
+  color: var(--head-ink);
+  font-size: 11px;
+  font-weight: 700;
+}
+:root[data-theme="retro"] .songs .head .cell {
+  border-right-color: var(--edge);
+}
+:root[data-theme="retro"] .songs .head .cell.sorted {
+  background: var(--head-sorted);
+  color: var(--head-ink);
+}
+:root[data-theme="retro"] .songs .body .row,
+:root[data-theme="retro"] .browser .list button {
+  font-size: 11px;
+}
+:root[data-theme="retro"] .songs:focus-within .body .row.sel,
+:root[data-theme="retro"] .browser .list:focus-within button.sel {
+  background: var(--sel-gloss);
+  color: #fff;
+  text-shadow: 0 1px 0 rgb(0 30 90 / 0.5);
+}
+
+/* Scrollbars: a glossy blue thumb in a soft groove. */
+:root[data-theme="retro"] ::-webkit-scrollbar {
+  width: 14px;
+  height: 14px;
+}
+:root[data-theme="retro"] ::-webkit-scrollbar-track {
+  background: var(--scroll-track);
+  box-shadow: inset 1px 0 0 var(--edge);
+}
+:root[data-theme="retro"] ::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 7px;
+  background: var(--scroll-thumb) padding-box;
+  box-shadow: inset 0 0 0 1px rgb(10 60 150 / 0.5);
+}
+:root[data-theme="retro"] ::-webkit-scrollbar-thumb:horizontal {
+  background: linear-gradient(#8cc3f7, #3d8ff0 50%, #2a7ae0 51%, #6aaef3) padding-box;
+}
+:root[data-theme="retro"] ::-webkit-scrollbar-corner {
+  background: var(--chrome);
+}
+:root[data-theme="retro"] .side ::-webkit-scrollbar-track {
+  background: rgb(0 10 30 / 0.3);
+  box-shadow: none;
+}
+
+/* ---- Pages: the light-wave background, and darker text to stand out on it ---- */
 
 :root[data-theme="retro"] :is(.page, .welcome) {
-  background: #eaf3fd url("./assets/retro/background.webp") center / cover no-repeat;
+  --ink: var(--page-ink);
+  --muted: var(--page-muted);
+  background: var(--page-bg);
+  color: var(--page-ink);
+  text-shadow: var(--page-glow);
 }
 
 /* ---- Buttons: blue for the main action, silver for the rest ---- */
@@ -277,7 +414,7 @@
   background: none;
   box-shadow: none;
   color: #0d2a5c;
-  font-weight: 600;
+  font-weight: 700;
   text-shadow: 0 1px 0 rgb(255 255 255 / 0.7);
 }
 :root[data-theme="retro"] :is(.welcome button, .page .controls button):active:not(:disabled) {
@@ -299,5 +436,5 @@
 
 :root[data-theme="retro"] .status {
   background: var(--gloss);
-  border-top-color: #8fb3dd;
+  border-top-color: var(--gloss-edge);
 }

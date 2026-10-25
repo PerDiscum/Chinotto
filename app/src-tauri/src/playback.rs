@@ -35,6 +35,9 @@ pub fn start(app: &AppHandle) -> Player {
         Event::Error(msg) => {
             let _ = app.emit("player-error", msg);
         }
+        Event::Spectrum(levels) => {
+            let _ = app.emit("player-spectrum", levels);
+        }
     })
 }
 
