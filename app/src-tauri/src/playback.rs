@@ -96,7 +96,14 @@ pub(crate) fn reveal(file: &std::path::Path) -> Result<(), String> {
             .map(|b| if b.is_ascii_alphanumeric() || b"/:-._~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") })
             .collect();
         let shown = std::process::Command::new("dbus-send")
-            .args(["--session", "--print-reply", "--dest=org.freedesktop.FileManager1", "--type=method_call", "/org/freedesktop/FileManager1", "org.freedesktop.FileManager1.ShowItems"])
+            .args([
+                "--session",
+                "--print-reply",
+                "--dest=org.freedesktop.FileManager1",
+                "--type=method_call",
+                "/org/freedesktop/FileManager1",
+                "org.freedesktop.FileManager1.ShowItems",
+            ])
             .arg(format!("array:string:{uri}"))
             .arg("string:")
             .output()

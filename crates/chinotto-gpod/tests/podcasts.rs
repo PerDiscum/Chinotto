@@ -15,7 +15,13 @@ fn episodes_go_under_podcasts() {
     std::fs::write(&file, vec![0u8; 4096]).unwrap();
 
     let mut db = Database::open(&root).unwrap();
-    let info = TrackInfo { title: Some("Ep. 1".into()), album: Some("The Show".into()), artist: Some("Host".into()), length_ms: 60_000, ..Default::default() };
+    let info = TrackInfo {
+        title: Some("Ep. 1".into()),
+        album: Some("The Show".into()),
+        artist: Some("Host".into()),
+        length_ms: 60_000,
+        ..Default::default()
+    };
     let pod = PodcastInfo {
         feed_url: "https://example.com/feed.xml".into(),
         episode_url: "https://cdn.example.com/ep1.mp3".into(),

@@ -613,7 +613,8 @@ pub async fn msc_add(path: String, dbids: Vec<String>, files: Vec<String>, app: 
         let total = sources.len();
         for (i, src) in sources.iter().enumerate() {
             let name = src.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-            let _ = app.emit("add-progress", crate::write::AddProgress { target: path.clone(), done: i, total, current: crate::tags::label(src) });
+            let _ = app
+                .emit("add-progress", crate::write::AddProgress { target: path.clone(), done: i, total, current: crate::tags::label(src) });
             let converted;
             let f = if let Some(target) = conv.plan(src, profile.plays) {
                 match crate::convert::convert(src, &tmp.0, &target, i) {

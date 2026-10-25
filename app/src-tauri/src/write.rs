@@ -27,7 +27,11 @@ fn parse_ids(ids: &[String]) -> Result<Vec<u64>, String> {
 
 /// Run `f` against the writer for the iPod at `root`, save, and return the new view
 /// (plus anything `f` wants to report, as `extra`).
-pub(crate) fn with_writer<T: Serialize>(app: &AppHandle, root: &Path, f: impl FnOnce(&mut Database) -> Result<T, String>) -> Result<Response, String> {
+pub(crate) fn with_writer<T: Serialize>(
+    app: &AppHandle,
+    root: &Path,
+    f: impl FnOnce(&mut Database) -> Result<T, String>,
+) -> Result<Response, String> {
     let state = app.state::<AppState>();
     let session = state.session().filter(|s| s.root == root).ok_or("That iPod isn't open")?;
     let identity =
@@ -58,7 +62,10 @@ pub(crate) fn with_writer<T: Serialize>(app: &AppHandle, root: &Path, f: impl Fn
     Ok(Response::new(format!("{{\"view\":{view},\"extra\":{extra}}}")))
 }
 
-pub(crate) async fn blocking(app: AppHandle, f: impl FnOnce(AppHandle) -> Result<Response, String> + Send + 'static) -> Result<Response, String> {
+pub(crate) async fn blocking(
+    app: AppHandle,
+    f: impl FnOnce(AppHandle) -> Result<Response, String> + Send + 'static,
+) -> Result<Response, String> {
     tauri::async_runtime::spawn_blocking(move || f(app)).await.map_err(|e| e.to_string())?
 }
 

@@ -42,11 +42,8 @@ impl Scope {
 pub fn levels(samples: &[f32], rate: u32) -> [f32; BANDS] {
     assert_eq!(samples.len(), N);
     // Hann window, then FFT.
-    let mut re: Vec<f32> = samples
-        .iter()
-        .enumerate()
-        .map(|(i, s)| s * (0.5 - 0.5 * (std::f32::consts::TAU * i as f32 / N as f32).cos()))
-        .collect();
+    let mut re: Vec<f32> =
+        samples.iter().enumerate().map(|(i, s)| s * (0.5 - 0.5 * (std::f32::consts::TAU * i as f32 / N as f32).cos())).collect();
     let mut im = vec![0.0f32; N];
     fft(&mut re, &mut im);
 

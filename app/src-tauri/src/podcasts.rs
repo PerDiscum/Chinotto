@@ -264,7 +264,13 @@ pub fn podcast_remove(id: String, delete_files: bool, app: AppHandle) -> Result<
 
 /// Mark episodes as seen (no longer new) or as played/unplayed.
 #[tauri::command]
-pub fn podcast_mark(id: String, keys: Vec<String>, new: Option<bool>, played: Option<bool>, app: AppHandle) -> Result<PodcastsView, String> {
+pub fn podcast_mark(
+    id: String,
+    keys: Vec<String>,
+    new: Option<bool>,
+    played: Option<bool>,
+    app: AppHandle,
+) -> Result<PodcastsView, String> {
     let state = app.state::<AppState>();
     let mut p = state.podcasts.lock().unwrap();
     let show = p.show_mut(&id)?;
@@ -459,7 +465,13 @@ pub async fn podcast_ipod_status(path: String, app: AppHandle) -> Result<Vec<OnI
                         e.new = false;
                         changed = true;
                     }
-                    out.push(OnIpod { show: show.id.clone(), key: e.key.clone(), dbid: t.dbid.to_string(), played: t.played, bookmark_ms: t.bookmark_ms });
+                    out.push(OnIpod {
+                        show: show.id.clone(),
+                        key: e.key.clone(),
+                        dbid: t.dbid.to_string(),
+                        played: t.played,
+                        bookmark_ms: t.bookmark_ms,
+                    });
                 }
             }
         }
@@ -489,18 +501,25 @@ pub async fn podcast_send(path: String, id: String, keys: Vec<String>, app: AppH
             let cover = p.show_dir(&show).and_then(|d| std::fs::read(d.join("cover.jpg")).ok());
             (show, folder, cover)
         };
-        let conv = state.session().filter(|s| s.root == root).and_then(|s| s.sysinfo.identity()).map(|i| state.conversion(&i)).unwrap_or_default();
+        let conv =
+            state.session().filter(|s| s.root == root).and_then(|s| s.sysinfo.identity()).map(|i| state.conversion(&i)).unwrap_or_default();
         let tmp = crate::convert::TempDir::new()?;
         let tmp_dir = tmp.0.clone();
         let emitter = app.clone();
         let result = crate::write::with_writer(&app, &root, move |db| {
             let existing = db.podcasts();
-            let todo: Vec<&Episode> = show.episodes.iter().filter(|e| keys.contains(&e.key) && e.file.is_some()).filter(|e| !existing.iter().any(|t| same_episode(t, &show, e))).collect();
+            let todo: Vec<&Episode> = show
+                .episodes
+                .iter()
+                .filter(|e| keys.contains(&e.key) && e.file.is_some())
+                .filter(|e| !existing.iter().any(|t| same_episode(t, &show, e)))
+                .collect();
             let total = todo.len();
             let mut res = SendResult { added: 0, skipped: Vec::new() };
             let mut covers = Vec::new();
             for (i, e) in todo.into_iter().enumerate() {
-                let _ = emitter.emit("add-progress", crate::write::AddProgress { target: path.clone(), done: i, total, current: e.title.clone() });
+                let _ = emitter
+                    .emit("add-progress", crate::write::AddProgress { target: path.clone(), done: i, total, current: e.title.clone() });
                 let src = folder.join(e.file.as_deref().unwrap_or_default());
                 if !src.is_file() {
                     res.skipped.push(format!("{}: the downloaded file is missing", e.title));
@@ -549,7 +568,12 @@ pub async fn podcast_send(path: String, id: String, keys: Vec<String>, app: AppH
                 if info.length_ms <= 0 {
                     info.length_ms = e.duration_ms.min(i32::MAX as u64) as i32;
                 }
-                let pod = chinotto_gpod::PodcastInfo { feed_url: show.feed.clone(), episode_url: e.url.clone(), description: e.description.clone(), released: e.published };
+                let pod = chinotto_gpod::PodcastInfo {
+                    feed_url: show.feed.clone(),
+                    episode_url: e.url.clone(),
+                    description: e.description.clone(),
+                    released: e.published,
+                };
                 match db.add_podcast(f, &info, &pod) {
                     Ok(dbid) => {
                         res.added += 1;
@@ -560,7 +584,8 @@ pub async fn podcast_send(path: String, id: String, keys: Vec<String>, app: AppH
                     Err(err) => res.skipped.push(format!("{}: {err}", e.title)),
                 }
             }
-            let _ = emitter.emit("add-progress", crate::write::AddProgress { target: path.clone(), done: total, total, current: String::new() });
+            let _ = emitter
+                .emit("add-progress", crate::write::AddProgress { target: path.clone(), done: total, total, current: String::new() });
             crate::write::add_cover_images(db, covers, &mut res.skipped)?;
             if res.added == 0 && !res.skipped.is_empty() {
                 return Err(res.skipped.join("\n"));
@@ -583,7 +608,8 @@ pub async fn podcast_remove_played(path: String, id: String, from_computer: bool
             return Err(NANO6.to_string());
         }
         let state = app.state::<AppState>();
-        let show = state.podcasts.lock().unwrap().shows.iter().find(|s| s.id == id).cloned().ok_or("That podcast isn't in the list any more.")?;
+        let show =
+            state.podcasts.lock().unwrap().shows.iter().find(|s| s.id == id).cloned().ok_or("That podcast isn't in the list any more.")?;
         let removed_keys = std::sync::Arc::new(Mutex::new(Vec::<String>::new()));
         let keys_out = removed_keys.clone();
         let show2 = show.clone();
@@ -688,7 +714,9 @@ fn fetch_cover(url: &str, dir: &Path) {
     let Ok(img) = crate::cover::decode(&bytes) else { return };
     let img = if img.width() > 1400 || img.height() > 1400 { img.thumbnail(1400, 1400) } else { img };
     let mut out = Vec::new();
-    if image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, 90).encode_image(&img.to_rgb8()).is_ok() && std::fs::create_dir_all(dir).is_ok() {
+    if image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, 90).encode_image(&img.to_rgb8()).is_ok()
+        && std::fs::create_dir_all(dir).is_ok()
+    {
         let _ = std::fs::write(dir.join("cover.jpg"), out);
     }
 }
@@ -922,7 +950,10 @@ fn parse_feed(xml: &[u8]) -> Result<Feed, String> {
                             if it.guid.is_empty() {
                                 it.guid = it.url.clone();
                             }
-                            let video = it.mime.starts_with("video/") || [".mp4v", ".m4v", ".mov"].iter().any(|x| it.url.to_ascii_lowercase().split('?').next().unwrap_or("").ends_with(x));
+                            let video = it.mime.starts_with("video/")
+                                || [".mp4v", ".m4v", ".mov"]
+                                    .iter()
+                                    .any(|x| it.url.to_ascii_lowercase().split('?').next().unwrap_or("").ends_with(x));
                             if !it.url.is_empty() && !video {
                                 if it.title.is_empty() {
                                     it.title = "Untitled episode".into();
@@ -969,7 +1000,11 @@ fn decode_entity(name: &str) -> String {
     if let Some(c) = named {
         return c.to_string();
     }
-    let num = name.strip_prefix("#x").or_else(|| name.strip_prefix("#X")).map(|h| u32::from_str_radix(h, 16)).or_else(|| name.strip_prefix('#').map(|d| d.parse::<u32>()));
+    let num = name
+        .strip_prefix("#x")
+        .or_else(|| name.strip_prefix("#X"))
+        .map(|h| u32::from_str_radix(h, 16))
+        .or_else(|| name.strip_prefix('#').map(|d| d.parse::<u32>()));
     match num.and_then(|r| r.ok()).and_then(char::from_u32) {
         Some(c) => c.to_string(),
         None => format!("&{name};"),
@@ -1052,7 +1087,10 @@ fn parse_date(s: &str) -> Option<i64> {
     let mut it = s.split_whitespace();
     let day: i64 = it.next()?.parse().ok()?;
     let mon = it.next()?.to_ascii_lowercase();
-    let month = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"].iter().position(|m| mon.starts_with(m))? as i64 + 1;
+    let month = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+        .iter()
+        .position(|m| mon.starts_with(m))? as i64
+        + 1;
     let mut year: i64 = it.next()?.parse().ok()?;
     if year < 100 {
         year += if year < 50 { 2000 } else { 1900 };
@@ -1184,7 +1222,10 @@ mod tests {
         show.episodes[1].file = Some("Test/ep1.m4a".into());
         let more = FEED.replace("<item>\n    <title>Episode 2", "<item><title>Episode 3</title><guid>ep-3</guid><pubDate>Wed, 09 Oct 2024 09:00:00 GMT</pubDate><enclosure url=\"https://cdn.example.com/ep3.mp3\" type=\"audio/mpeg\"/></item>\n  <item>\n    <title>Episode 2");
         apply(&mut show, parse_feed(more.as_bytes()).unwrap(), false);
-        assert_eq!(show.episodes.iter().map(|e| (e.title.as_str(), e.new)).collect::<Vec<_>>(), [("Episode 3", true), ("Episode 2: More", false), ("Episode 1", false)]);
+        assert_eq!(
+            show.episodes.iter().map(|e| (e.title.as_str(), e.new)).collect::<Vec<_>>(),
+            [("Episode 3", true), ("Episode 2: More", false), ("Episode 1", false)]
+        );
         assert_eq!(show.episodes[2].file.as_deref(), Some("Test/ep1.m4a"), "downloads are kept");
     }
 

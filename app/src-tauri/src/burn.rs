@@ -491,7 +491,10 @@ pub fn burn_inspect(path: String) -> Result<ImageInfo, String> {
 }
 
 fn progress(app: &AppHandle, phase: &str, permille: usize) {
-    let _ = app.emit("add-progress", crate::write::AddProgress { target: "optical".into(), done: permille.min(1000), total: 1000, current: phase.into() });
+    let _ = app.emit(
+        "add-progress",
+        crate::write::AddProgress { target: "optical".into(), done: permille.min(1000), total: 1000, current: phase.into() },
+    );
 }
 
 /// Run a burning program, turning its output into progress with `percent`
