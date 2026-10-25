@@ -1,4 +1,4 @@
-//! Recognising an iPod's folder and reading what it says about itself.
+//! Recognizing an iPod's folder and reading what it says about itself.
 //!
 //! `iPod_Control/Device/SysInfo` is a plain `Key: value` text file. The
 //! interesting keys are `ModelNumStr` (e.g. `xC297`; the first character is a
@@ -111,7 +111,7 @@ impl SysInfo {
         Some(s)
     }
 
-    /// A stable identity for this iPod: its FireWire GUID (normalised to
+    /// A stable identity for this iPod: its FireWire GUID (normalized to
     /// upper-case hex without 0x), else its serial number.
     pub fn identity(&self) -> Option<String> {
         if let Some(g) = &self.firewire_guid {

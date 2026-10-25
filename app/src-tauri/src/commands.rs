@@ -289,9 +289,9 @@ pub fn system_locales() -> Vec<String> {
     sys_locale::get_locales().collect()
 }
 
-/// Open the list of third-party software and licences that ships with Chinotto.
+/// Open the list of third-party software and licenses that ships with Chinotto.
 #[tauri::command]
-pub fn open_licences(app: AppHandle) -> Result<(), String> {
+pub fn open_licenses(app: AppHandle) -> Result<(), String> {
     use tauri::Manager;
     let file = app.path().resource_dir().map_err(|e| e.to_string())?.join("THIRD-PARTY-LICENSES.txt");
     if !file.is_file() {

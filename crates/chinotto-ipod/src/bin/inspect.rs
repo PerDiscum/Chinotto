@@ -1,4 +1,4 @@
-//! chinotto-inspect: summarise and sanity-check a classic iPod.
+//! chinotto-inspect: summarize and sanity-check a classic iPod.
 //! Usage: chinotto-inspect <iPod root folder>   (read-only)
 
 use std::collections::{HashMap, HashSet};

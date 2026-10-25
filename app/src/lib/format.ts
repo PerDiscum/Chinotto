@@ -51,7 +51,7 @@ export function formatName(t: Track): string {
   if (k.includes("aiff") || ext === "aif" || ext === "aiff") return "AIFF";
   if (k.includes("video") || ["m4v", "mp4", "mov"].includes(ext)) return "Video";
   if (k.includes("aac") || k.includes("mpeg-4") || k.includes("audiobook") || ["m4a", "m4b", "m4p", "aac"].includes(ext)) {
-    // Apple Lossless isn't always labelled; its bit rate gives it away.
+    // Apple Lossless isn't always labeled; its bit rate gives it away.
     return t.bitrate > 400 && ext !== "m4p" ? "ALAC" : "AAC";
   }
   return t.kind || "Unknown";

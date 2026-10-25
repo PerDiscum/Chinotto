@@ -1,7 +1,7 @@
 # chinotto-mtp
 
 MTP players through bundled builds of **libmtp 1.1.23** and **libusb 1.0.29**
-(both LGPL-2.1-or-later; their licences are in `libmtp/COPYING` and
+(both LGPL-2.1-or-later; their licenses are in `libmtp/COPYING` and
 `libusb/COPYING`). Only the files Chinotto needs are included.
 
 Built by `build.rs` with the `cc` crate, as static libraries, so nothing

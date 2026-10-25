@@ -270,7 +270,7 @@ pub struct PodcastInfo {
     /// The show's feed address.
     pub feed_url: String,
     /// The episode file's address (the iPod shows nothing of it; Chinotto
-    /// uses it to recognise the episode later).
+    /// uses it to recognize the episode later).
     pub episode_url: String,
     /// Show notes, shown on the iPod's episode page.
     pub description: String,

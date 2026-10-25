@@ -5,7 +5,7 @@ Everything decided and learned so far, so work can continue in a new session.
 ## Decisions
 
 - **Name:** Chinotto.
-- **What it is:** a music library manager, player and sync app modelled on the
+- **What it is:** a music library manager, player and sync app modeled on the
   workflows of **classic iTunes (9/10 era)**: source list, column browser
   (Genre → Artist → Album), song list, Get Info (Summary/Info/Sorting/Options/
   Lyrics/Artwork), smart playlists with the iTunes rule builder, device page
@@ -15,12 +15,12 @@ Everything decided and learned so far, so work can continue in a new session.
   browser) + **Rust** core.
 - **Platforms:** Mac and Linux first, Windows later.
 - **Library files:** iTunes model. Folders indexed in place; optional "copy
-  into library folder" and "keep library folder organised", both off by default.
+  into library folder" and "keep library folder organized", both off by default.
 - **Priority:** get the iPod perfect first. Then player and library, then smart
   playlists and sync settings, then other players (USB-drive/MSC with
   **M3U, M3U8, WPL**; MTP with native playlist objects or .pla), then Windows.
 - **Playback:** Symphonia (MPL-2.0). **Conversion:** bundled FFmpeg as a
-  separate helper process (LGPL build). Not VLC code (licence and size);
+  separate helper process (LGPL build). Not VLC code (license and size);
   libVLC remains a possible playback fallback.
 - **Tags:** `lofty`. **Library DB:** SQLite. **iPod DB writing:** native libgpod
   (handles the Classic checksums) + our own artwork writer (no gdk-pixbuf).
@@ -42,7 +42,7 @@ Everything decided and learned so far, so work can continue in a new session.
 - **Playback** with basic controls for ALAC/AAC, MP3, WAV, FLAC, OGG and WMA.
   Symphonia covers all but WMA (and AAC is LC only, no HE-AAC); those go
   through the bundled FFmpeg helper.
-- **Last.fm scrobbling** of iPod plays, using code from LastPod (licence to
+- **Last.fm scrobbling** of iPod plays, using code from LastPod (license to
   check before copying anything; Chinotto is MIT). The developer will send
   LastPod's source. The iPod records play
   counts and the last play time only, so earlier plays' times are estimated.
@@ -203,7 +203,7 @@ Everything decided and learned so far, so work can continue in a new session.
   in a temporary folder, warn past ~80 min, gap 2 s or none) or an MP3 data
   disc. macOS: `drutil burn -audio <folder>` (built in; CD-Text support
   unverified). Linux: wodim or cdrdao (tell the user which to install).
-- Translation notes: German always capitalises Du/Dein/Deinem/Deiner/Deines.
+- Translation notes: German always capitalizes Du/Dein/Deinem/Deiner/Deines.
   The developer translates; Claude only corrects grammar, no other changes.
 
 ## Scratch list (0032)
@@ -275,7 +275,7 @@ Order chosen: confirm editing on the nano → **playback** (done) → artwork (d
 - Sony profiles (NWZ, NW-A10/A20 — not the Android ones) have
   `plain_greek`: Greek letters lose their accents (tonos, dialytika,
   polytonic marks; final ς → σ; the Greek question mark becomes ";" by
-  Unicode normalisation) in tags and folder names when copying and
+  Unicode normalization) in tags and folder names when copying and
   after edits (`msc::plain_greek`, NFD + drop marks after Greek letters).
 
 ## Editing on players, progress names, conversion rules (patch 0050)
@@ -424,7 +424,7 @@ What works:
   folder with an `iPod_Control/iTunes/iTunesDB` (handy for copies on disk).
 - Source list (device, Music, playlists, smart playlists), Genre → Artist →
   Album column browser (artist = album artist, falls back to artist;
-  compilations grouped under "Compilations"), virtualised song list (23k rows
+  compilations grouped under "Compilations"), virtualized song list (23k rows
   are instant), sorting by column with iTunes-style tie-breaks, accent-
   insensitive search, multi-select (Shift/Cmd/Ctrl, arrows, Cmd/Ctrl-A).
 - Covers: `art://localhost/<generation>-<mhii id>-<px>` serves the smallest
@@ -493,13 +493,13 @@ macOS and Linux. Workflows use actions/checkout@v5 and actions/setup-node@v5
     (Linux/Windows icons).
   - `icon-macos-fullbleed.png`: an opaque full-bleed square (8 px trimmed,
     transparent corners filled with nearby background). macOS 26 puts icons
-    that aren't full squares on a grey plate and shrinks them; it rounds a
+    that aren't full squares on a gray plate and shrinks them; it rounds a
     full-bleed square itself. `icon.icns` is built from this one.
   - Regenerate: `npx tauri icon src-tauri/icons/icon-source.png -o src-tauri/icons`,
     then `npx tauri icon src-tauri/icons/icon-macos-fullbleed.png -o /tmp/x` and
     copy `/tmp/x/icon.icns` over; delete the `android`, `ios`, `Square*` and
     `StoreLogo` outputs.
-- Mac builds are ad-hoc signed (`signingIdentity: "-"`), not notarised.
+- Mac builds are ad-hoc signed (`signingIdentity: "-"`), not notarized.
 - CI runs `cargo fmt --check` and `clippy -D warnings`; keep both clean.
 - Rust is pinned to 1.97.0 (`rust-toolchain.toml` and both workflows) because
   newer releases add clippy lints that fail the build (1.99 did). Bump all
@@ -555,7 +555,7 @@ In the app (2026-10-20, tested on a scratch copy laid out like the nano):
 - Song dragging is Chinotto's own (mouse events + `store.songDrag`, drop
   targets marked `data-drop-playlist`), not HTML5 drag-and-drop: Tauri's
   native file-drop handler intercepts HTML5 drags on macOS. OS file drops
-  are recognised by carrying paths.
+  are recognized by carrying paths.
 - Confirmed on the nano by the developer: adding via the file dialog, editing
   old and new songs, playlists (new and existing), eject.
 - Artwork (2026-10-20): `app/src-tauri/src/cover.rs`. Image → 600 px rule
@@ -1085,7 +1085,7 @@ re-encoded to 320. Asked to also offer 192 and 256:
   device's conversion settings, not just OpenMG) gained `mp3_256`/`mp3_128`
   alongside the existing `mp3_320`/`mp3_192`.
 - Needs testing on the NW-S716F: add a song with 192 kbps and one with 256
-  kbps selected, confirm both transfer, are recognised, play fully, and seek
+  kbps selected, confirm both transfer, are recognized, play fully, and seek
   correctly. If either doesn't play right, that bitrate's codec byte guess is
   wrong and needs removing from `CONFIRMED_BITRATES` (and from the picker)
   until the real byte is found.
@@ -1286,7 +1286,7 @@ rewritten. Writing only the changed picture files is the next step.
   `refreshDiscs`, dropped when the disc goes) and the sidebar shows the typed
   album name.
 - The status display reads "Disc Rip Mode" in Handjet (Rosetta Type, SIL OFL
-  1.1; Latin subset as WOFF2, `assets/fonts/`, licence alongside, credited in
+  1.1; Latin subset as WOFF2, `assets/fonts/`, license alongside, credited in
   the README).
 - RipDialog.svelte is gone; File → Rip CD… and Linux's sidebar link open the
   page (`store.showDisc`).
@@ -1340,7 +1340,7 @@ writes fresh EDC/ECC, so deliberately damaged sectors aren't reproduced. Now:
   error asking to install it.
 - Not supported: subchannel data (.sub/.sbi, LibCrypt); the report says so.
 
-## 0108: cdrdao in the macOS app; licences in order
+## 0108: cdrdao in the macOS app; licenses in order
 
 - cdrdao 1.2.6 (GPL v2+, unmodified release vendored in
   `third_party/sources/`, checksum-checked) is built by
@@ -1353,19 +1353,19 @@ writes fresh EDC/ECC, so deliberately damaged sectors aren't reproduced. Now:
   Linux packages don't bundle it (it would clash with the distro's
   /usr/bin/cdrdao): .deb and .rpm *recommend* cdrdao, wodim, growisofs
   (dvd+rw-tools), cdparanoia.
-- Licences: `scripts/licenses.py` writes
+- Licenses: `scripts/licenses.py` writes
   `app/src-tauri/licenses/THIRD-PARTY-LICENSES.txt` (every crate from cargo
   metadata, the npm packages bundled in the window, the vendored C libraries,
-  LAME inside mp3lame-sys, glib for macOS, cdrdao, Handjet; each licence text
-  once; crates without a licence file get the standard text of their licence
+  LAME inside mp3lame-sys, glib for macOS, cdrdao, Handjet; each license text
+  once; crates without a license file get the standard text of their license
   and their authors). CI regenerates it before every build; it ships in the
   app (bundle resources, with Chinotto's LICENSE) and opens from Chinotto →
-  Acknowledgements and Licences (`open_licences`).
+  Acknowledgments and Licenses (`open_licenses`).
 - LGPL (libgpod, libmtp, libusb, glib static on macOS, LAME/mp3lame LGPL 3):
   the notice file says so, and relinking is possible because Chinotto's whole
   source, theirs included, is public with build scripts. GPL 3 text included
   for the LGPL 3. Releases attach cdrdao's and glib's (plus glib's meson
-  subproject) source archives and the licence list.
+  subproject) source archives and the license list.
 - Not built on macOS here (no Mac in the sandbox): the first CI run builds
   cdrdao there; the Linux build of the same script was tested.
 
@@ -1397,7 +1397,7 @@ disc-burning service, so cdrdao (and cdrecord) are shut out. So on macOS:
 - Header constants were checked against the macOS 10.15 SDK headers; the C
   file was syntax-checked here against a stub, but not compiled on a Mac.
 - cdrdao is no longer bundled anywhere (no build script, vendored tarball,
-  CI step or licence entry); Linux still uses the distro's cdrdao.
+  CI step or license entry); Linux still uses the distro's cdrdao.
 
 ## 0114: burn only at speeds the drive lists
 
@@ -1428,14 +1428,14 @@ Disc Recording to (ReceiveData), and a failure while checking is reported as
 
 View → Look → Modern / Retro (the status bar's button on Linux), saved as
 `chinotto.theme` and applied in `main.ts` before the app draws.
-`src/retro.css` holds it all: colour tokens under `:root[data-theme="retro"]`
+`src/retro.css` holds it all: color tokens under `:root[data-theme="retro"]`
 plus overrides for the toolbar, sidebar, pages and buttons. Art is in
 `src/assets/retro` (WebP, 2× display size, made from the developer's PNGs):
 the screen (`panel`) and pill buttons are border-images, stretched only in
 the middle. Still drawn with CSS until art arrives: Pause (Play stays pressed
 in while playing), the volume groove, search field, sidebar selection, the
 folder and new-playlist buttons. The spectrum bars are decorative, not a
-real analyser.
+real analyzer.
 
 ## 0118: Retro look, second pass; a real spectrum
 
@@ -1514,7 +1514,7 @@ real analyser.
   shows running jobs in turn (every 3.5 s) with "1 of 2 · +N waiting".
   Buttons are disabled with `store.isBusy(target)` only where a change
   mustn't overlap (allow-changes, conversion, eject, burn settings).
-- Podcasts: downloads can be cancelled (`podcast_cancel`; the .part file is
+- Podcasts: downloads can be canceled (`podcast_cancel`; the .part file is
   removed). Sidebar section folds (`chinotto.podcastsCollapsed`), with
   Add Podcast… first and outside the fold; folded, the header shows the
   new-episode count. chinotto-ipod reads the mhyp podcast flag (+0x2A):

@@ -8,7 +8,7 @@
   import type { DriveInfo, MscConfig } from "./types";
 
   // Add a player that shows up as a drive (MSC: most Walkmans and Sansas), or
-  // change its settings. They're kept on the player, so it's recognised
+  // change its settings. They're kept on the player, so it's recognized
   // whenever it's plugged in.
   let { path }: { path: string } = $props();
 
@@ -66,7 +66,7 @@
       </div>
     </div>
     <p class="muted">
-      {t("For players that show up as a drive (most Sony Walkmans and SanDisk Sansas). Chinotto lists the songs in the music folder and reads the playlists in the playlist folder. These settings are saved on the player, in a small hidden file (.chinotto-device.json), so it's recognised whenever it's plugged in.")}
+      {t("For players that show up as a drive (most Sony Walkmans and SanDisk Sansas). Chinotto lists the songs in the music folder and reads the playlists in the playlist folder. These settings are saved on the player, in a small hidden file (.chinotto-device.json), so it's recognized whenever it's plugged in.")}
     </p>
     {#if !info.isDisk}
       <p class="warn">{t("This is a folder, not the top of a drive. Only go on if it really is a player's drive (for example, a copy you're testing with).")}</p>

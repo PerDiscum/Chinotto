@@ -162,7 +162,7 @@ class Store {
   search = $state("");
   showBrowser = $state(true);
   showArtwork = $state(true);
-  /** The look: "modern" (the Chinotto colours) or "retro" (glossy blue, drawn art). */
+  /** The look: "modern" (the Chinotto colors) or "retro" (glossy blue, drawn art). */
   /** The display's bars: see api.onPlayerSpectrum. */
   spectrum = $state<number[]>([]);
   theme = $state(loadPref("chinotto.theme", ["modern", "retro"] as const, "modern"));
@@ -1575,7 +1575,7 @@ class Store {
     try {
       this.podcasts = await api.podcastDownload(id, key);
     } catch (e) {
-      if (!String(e).includes("Download cancelled")) this.error = String(e);
+      if (!String(e).includes("Download canceled")) this.error = String(e);
     } finally {
       const rest = { ...this.podProgress };
       delete rest[k];

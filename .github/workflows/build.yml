@@ -103,7 +103,7 @@ jobs:
         working-directory: app
         run: |
           npm ci
-          # The list of third-party software and licences that ships inside the app.
+          # The list of third-party software and licenses that ships inside the app.
           python3 ../scripts/licenses.py
           npx tauri build ${{ matrix.args }}
 

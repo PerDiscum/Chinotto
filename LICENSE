@@ -22,5 +22,5 @@ SOFTWARE.
 
 This license covers Chinotto's own code. Bundled third-party code under
 crates/chinotto-gpod/libgpod keeps its own licenses (LGPL for libgpod itself;
-see the Acknowledgements section of the README and the LICENSE files under
+see the Acknowledgments section of the README and the LICENSE files under
 that directory for the vendored PodBox and HashAB code).

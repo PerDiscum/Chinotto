@@ -31,11 +31,11 @@ pub struct Podcasts {
     path: Option<PathBuf>,
     /// Downloads asked to stop ("<show>:<key>").
     #[serde(skip)]
-    cancelled: HashSet<String>,
+    canceled: HashSet<String>,
 }
 
 /// What a stopped download reports; the window says nothing about it.
-pub const CANCELLED: &str = "Download cancelled.";
+pub const CANCELED: &str = "Download canceled.";
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -340,7 +340,7 @@ pub async fn podcast_download(id: String, key: String, app: AppHandle) -> Result
             let mut reader = resp.body_mut().as_reader();
             let mut out = std::fs::File::create(&part).map_err(|e| format!("Couldn't save the episode: {e}"))?;
             let job = format!("{id}:{key}");
-            state.podcasts.lock().unwrap().cancelled.remove(&job);
+            state.podcasts.lock().unwrap().canceled.remove(&job);
             let mut buf = vec![0u8; 256 * 1024];
             let (mut done, mut last) = (0u64, std::time::Instant::now());
             loop {
@@ -348,8 +348,8 @@ pub async fn podcast_download(id: String, key: String, app: AppHandle) -> Result
                 if n == 0 {
                     break;
                 }
-                if state.podcasts.lock().unwrap().cancelled.remove(&job) {
-                    return Err(CANCELLED.into());
+                if state.podcasts.lock().unwrap().canceled.remove(&job) {
+                    return Err(CANCELED.into());
                 }
                 out.write_all(&buf[..n]).map_err(|e| format!("Couldn't save the episode: {e}"))?;
                 done += n as u64;
@@ -384,7 +384,7 @@ pub async fn podcast_download(id: String, key: String, app: AppHandle) -> Result
 /// Stop a download; its partial file is deleted.
 #[tauri::command]
 pub fn podcast_cancel(id: String, key: String, app: AppHandle) {
-    app.state::<AppState>().podcasts.lock().unwrap().cancelled.insert(format!("{id}:{key}"));
+    app.state::<AppState>().podcasts.lock().unwrap().canceled.insert(format!("{id}:{key}"));
 }
 
 /// The file of a downloaded episode, from its id "pod:<show>:<key>".

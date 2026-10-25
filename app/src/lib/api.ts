@@ -124,7 +124,7 @@ export async function pickImage(): Promise<string | null> {
   return typeof r === "string" ? r : null;
 }
 
-/** Save a cover (ArtworkDB image id) as a PNG; asks where. Returns false if cancelled. */
+/** Save a cover (ArtworkDB image id) as a PNG; asks where. Returns false if canceled. */
 /** Save a cover: an iPod song's (by artwork id) or a library/Scratch song's (by dbid). */
 export async function saveCover(from: number | string, name: string): Promise<boolean> {
   const dest = await save({
@@ -237,4 +237,4 @@ export async function pickDiscImage(): Promise<string | null> {
   const r = await open({ multiple: false, directory: false, title: "Choose a disc image", filters: [{ name: "Disc images", extensions: ["iso", "cue", "bin", "img", "cdr", "toast"] }] });
   return typeof r === "string" ? r : null;
 }
-export const openLicences = () => invoke<void>("open_licences");
+export const openLicenses = () => invoke<void>("open_licenses");

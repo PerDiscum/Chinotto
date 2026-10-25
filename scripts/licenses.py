@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Writes app/src-tauri/licenses/THIRD-PARTY-LICENSES.txt: every piece of
-other people's software that goes into Chinotto, its licence, and the
-licence texts (each text once). The file ships inside the app.
+other people's software that goes into Chinotto, its license, and the
+license texts (each text once). The file ships inside the app.
 
     python3 scripts/licenses.py        (needs cargo and app/node_modules)
 
@@ -12,7 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "app/src-tauri/licenses/THIRD-PARTY-LICENSES.txt"
-LICENCE_FILE = re.compile(r"^(LICEN[CS]E|COPYING|NOTICE|UNLICENSE|COPYRIGHT)([-_.].*)?$", re.I)
+LICENSE_FILE = re.compile(r"^(LICEN[CS]E|COPYING|NOTICE|UNLICENSE|COPYRIGHT)([-_.].*)?$", re.I)
 
 texts = {}  # hash -> (text, [users])
 
@@ -24,14 +24,14 @@ def add_text(text, user):
     return h
 
 
-def licence_files(folder):
+def license_files(folder):
     folder = Path(folder)
-    found = sorted(p for p in folder.iterdir() if p.is_file() and LICENCE_FILE.match(p.name)) if folder.is_dir() else []
+    found = sorted(p for p in folder.iterdir() if p.is_file() and LICENSE_FILE.match(p.name)) if folder.is_dir() else []
     return [p.read_text(errors="replace") for p in found]
 
 
-entries = []  # (name, licence, where the source is, [text hashes])
-missing = []  # (index in entries, licence expression): crates without a licence file
+entries = []  # (name, license, where the source is, [text hashes])
+missing = []  # (index in entries, license expression): crates without a license file
 
 # Rust crates (everything cargo may build in, for any platform).
 meta = json.loads(subprocess.check_output(
@@ -41,16 +41,16 @@ for p in sorted(meta["packages"], key=lambda p: (p["name"], p["version"])):
     if p["id"] in members:
         continue
     user = f'{p["name"]} {p["version"]}'
-    hashes = [add_text(t, user) for t in licence_files(Path(p["manifest_path"]).parent)]
-    lic = p.get("license") or "see its licence file"
+    hashes = [add_text(t, user) for t in license_files(Path(p["manifest_path"]).parent)]
+    lic = p.get("license") or "see its license file"
     if not hashes:
-        # No licence file in the package: the standard text of its licence (below), and its authors.
+        # No license file in the package: the standard text of its license (below), and its authors.
         authors = ", ".join(a.split(" <")[0] for a in p.get("authors") or []) or f"the {p['name']} authors"
         lic += f" (Copyright: {authors})"
         missing.append((len(entries), p.get("license") or ""))
     entries.append((user, lic, f'https://crates.io/crates/{p["name"]}/{p["version"]}', hashes))
 
-# Standard texts for crates without a licence file, taken from crates that have them.
+# Standard texts for crates without a license file, taken from crates that have them.
 signatures = {
     "MIT": "Permission is hereby granted, free of charge",
     "Apache-2.0": "Apache License\n                           Version 2.0",
@@ -72,15 +72,15 @@ for i, expr in missing:
         entries[i] = (name, lic, where, [reference[pick]])
         texts[reference[pick]][1].append(name)
     else:
-        print(f"warning: no licence text for {entries[i][0]} ({expr})")
+        print(f"warning: no license text for {entries[i][0]} ({expr})")
 
-# LAME, the MP3 encoder, inside mp3lame-sys (its own licence files).
+# LAME, the MP3 encoder, inside mp3lame-sys (its own license files).
 lame = next((p for p in meta["packages"] if p["name"] == "mp3lame-sys"), None)
 if lame:
     d = next(Path(lame["manifest_path"]).parent.glob("lame-*"), None)
     if d:
         entries.append((f"LAME {d.name.removeprefix('lame-')} (in mp3lame-sys)", "LGPL-2.0-or-later",
-                        f'https://crates.io/crates/mp3lame-sys/{lame["version"]} ({d.name})', [add_text(t, "LAME") for t in licence_files(d)]))
+                        f'https://crates.io/crates/mp3lame-sys/{lame["version"]} ({d.name})', [add_text(t, "LAME") for t in license_files(d)]))
 # The LGPL 3 is a set of additions to the GPL 3, so both texts go with it.
 if any("LGPL-3.0" in e[1] for e in entries):
     gpl3 = (ROOT / "third_party/licenses/GPL-3.0.txt").read_text()
@@ -95,7 +95,7 @@ for dep in json.loads((ROOT / "app/package.json").read_text())["dependencies"].k
     info = json.loads(pj.read_text())
     user = f'{dep} {info["version"]} (npm)'
     entries.append((user, info.get("license", "?"), f"https://www.npmjs.com/package/{dep}/v/{info['version']}",
-                    [add_text(t, user) for t in licence_files(node / dep)]))
+                    [add_text(t, user) for t in license_files(node / dep)]))
 
 # C libraries built into Chinotto from this repository.
 vendored = [
@@ -107,7 +107,7 @@ vendored = [
     ("Handjet typeface (Rosetta Type)", "OFL-1.1", "app/src/assets/fonts"),
 ]
 for name, lic, folder in vendored:
-    entries.append((name, lic, f"this repository, {folder}", [add_text(t, name) for t in licence_files(ROOT / folder)]))
+    entries.append((name, lic, f"this repository, {folder}", [add_text(t, name) for t in license_files(ROOT / folder)]))
 
 # glib: built from GNOME's release into the macOS app (scripts/build-glib-macos.sh).
 glib = re.search(r'GLIB_VERSION="\$\{GLIB_VERSION:-([0-9.]+)\}"', (ROOT / "scripts/build-glib-macos.sh").read_text()).group(1)
@@ -116,12 +116,12 @@ entries.append((f"glib {glib} (macOS app), with proxy-libintl, pcre2, libffi and
                 f"https://download.gnome.org/sources/glib/ (glib-{glib}.tar.xz, also attached to each release)", [add_text(lgpl21, "glib")]))
 
 lines = [
-    "Chinotto: third-party software and licences",
+    "Chinotto: third-party software and licenses",
     "=" * 44,
     "",
-    "Chinotto itself is released under the MIT licence (see LICENSE in its",
+    "Chinotto itself is released under the MIT license (see LICENSE in its",
     "repository, https://github.com/PerDiscum/Chinotto). It is built with the",
-    "software below, each under its own licence.",
+    "software below, each under its own license.",
     "",
     "LGPL libraries (libgpod, libmtp, libusb, glib, LAME through mp3lame-sys) are",
     "built into Chinotto. You may replace them with modified versions: Chinotto's",
@@ -130,18 +130,18 @@ lines = [
     "",
     "glib's source, as built for the macOS app, is attached to each release.",
     "",
-    "Source for each item: where it says. Licence texts follow the list.",
+    "Source for each item: where it says. License texts follow the list.",
     "",
 ]
 for name, lic, where, hashes in entries:
     lines.append(f"- {name}: {lic}")
     lines.append(f"  Source: {where}")
     if hashes:
-        lines.append(f"  Licence text: {', '.join(f'[{h}]' for h in dict.fromkeys(hashes))}")
-lines += ["", "", "Licence texts", "=" * 13, ""]
+        lines.append(f"  License text: {', '.join(f'[{h}]' for h in dict.fromkeys(hashes))}")
+lines += ["", "", "License texts", "=" * 13, ""]
 for h, (text, users) in texts.items():
     lines += [f"[{h}]", "-" * 72, text, "", ""]
 
 OUT.parent.mkdir(parents=True, exist_ok=True)
 OUT.write_text("\n".join(lines) + "\n")
-print(f"{OUT.relative_to(ROOT)}: {len(entries)} components, {len(texts)} licence texts, {OUT.stat().st_size // 1024} KB")
+print(f"{OUT.relative_to(ROOT)}: {len(entries)} components, {len(texts)} license texts, {OUT.stat().st_size // 1024} KB")

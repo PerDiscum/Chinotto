@@ -1,7 +1,7 @@
 # Chinotto
 
 A music library manager and sync app for classic iPods and other digital
-audio players, modelled on the workflows of classic iTunes (9/10 era).
+audio players, modeled on the workflows of classic iTunes (9/10 era).
 
 ## Ethos
 
@@ -19,7 +19,7 @@ testing, and direction. Beyond that, nobody involved feels they can take
 credit for it, so it's released under the MIT license: use it, change it,
 pull it apart, build on it.
 
-Status: early. The desktop app recognises a player when it's plugged in —
+Status: early. The desktop app recognizes a player when it's plugged in —
 a classic, pre-iOS iPod, an MTP device (such as a Creative Zen), or a Sony
 Walkman using OpenMG (most NW-A/S/E models) — and lets you browse it: source
 list with its playlists, Genre → Artist → Album column browser, sortable song
@@ -44,16 +44,16 @@ It rips audio CDs to Apple Lossless, FLAC, AAC or MP3, and burns disc images
 - **Classic iPods** (up to the iPod classic, nano 6G and shuffle 4G — not the
   iOS-based touch): full read/write support, including playlists, ratings,
   and artwork. The nano 6G's compressed database is handled separately (see
-  Acknowledgements) and its write support is still experimental.
+  Acknowledgments) and its write support is still experimental.
 - **MTP devices** (Creative Zen, Sansa in MTP mode, and similar): browsing,
   playback, adding and deleting songs, editing tags and covers, and writing
   M3U/M3U8 playlists.
 - **MSC (mass-storage) players** — anything that just shows up as a drive,
   such as most Sansa models and Walkmans not using OpenMG: add them once with
   **Add Drive…**, pointing Chinotto at the music and playlist folders; after
-  that they're recognised automatically.
+  that they're recognized automatically.
 - **Sony Walkmans using OpenMG** (most NW-A, NW-S and NW-E series, the format
-  used instead of plain MSC on those models): recognised and opened
+  used instead of plain MSC on those models): recognized and opened
   automatically, with full read/write support — adding, deleting, and editing
   songs and covers, with albums kept in track order. The OpenMG database
   format was reverse-engineered for this project; see `docs/HANDOFF.md` for
@@ -158,11 +158,11 @@ experimental (see Tested devices above).
   thumbnails, SysInfo. No external dependencies.
 - `crates/chinotto-gpod` — changes the iPod's database through a bundled
   libgpod (LGPL; see its README), including the nano 6G's compressed
-  database (see Acknowledgements).
+  database (see Acknowledgments).
 - `crates/chinotto-mtp` — MTP device access (listing, reading, and writing
   songs, covers and playlists).
 - `crates/chinotto-omg` — the Sony OpenMG `.OMA` file format and OMGAUDIO
-  database, built from scratch for this project (see Acknowledgements for
+  database, built from scratch for this project (see Acknowledgments for
   what it doesn't cover). No external dependencies.
 - `crates/chinotto-player` — audio playback (Symphonia + cpal).
 - `app/` — the desktop app (Tauri 2).
@@ -229,7 +229,7 @@ run page has two downloads: `Chinotto-macOS` (a universal `.dmg` for Apple
 Silicon and Intel) and `Chinotto-Linux` (`.deb`, `.AppImage`, `.rpm`).
 Pushing a tag such as `v0.1.0` also attaches them to a draft release.
 
-The Mac app isn't notarised (that needs a paid Apple developer account), so
+The Mac app isn't notarized (that needs a paid Apple developer account), so
 the first time macOS will refuse to open it. Either right-click the app →
 Open, or System Settings → Privacy & Security → "Open Anyway". If macOS says
 the app is damaged, run this once; it only removes the download flag from
@@ -271,24 +271,24 @@ and `CHINOTTO_TEST_OMG` at a copy of a Sony Walkman's OMGAUDIO folder.
 Without these, the tests that need them are skipped. `fixtures-private/` is
 git-ignored for keeping such copies inside the checkout.
 
-## Licences
+## Licenses
 
 Chinotto is MIT-licensed. It's built with other people's software under
-their own licences — among them the LGPL libraries libgpod, libmtp, libusb,
-glib and LAME, built into it. **Chinotto → Acknowledgements and Licences** (or
-`THIRD-PARTY-LICENSES.txt` in the app) lists all of it with the full licence
+their own licenses — among them the LGPL libraries libgpod, libmtp, libusb,
+glib and LAME, built into it. **Chinotto → Acknowledgments and Licenses** (or
+`THIRD-PARTY-LICENSES.txt` in the app) lists all of it with the full license
 texts; `scripts/licenses.py` regenerates that list, and every build does.
 
-What those licences ask, and how Chinotto does it:
+What those licenses ask, and how Chinotto does it:
 
 - **Source**: everything built into Chinotto is in this repository, and each
   release has the glib source it was built with attached.
 - **Replacing the LGPL libraries**: since Chinotto's own source is public too,
   anyone can rebuild it with modified versions of them (see Building it
   yourself).
-- **Notices**: the licence texts go inside every app and package.
+- **Notices**: the license texts go inside every app and package.
 
-## Acknowledgements
+## Acknowledgments
 
 - The nano 6G's compressed `iTunesCDB` and its companion SQLite library are
   read and written using Milan Marocchi's PodBox

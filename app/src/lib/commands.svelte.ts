@@ -96,7 +96,7 @@ export async function installMenu() {
   if (!isMac) return;
   const { Menu, Submenu, PredefinedMenuItem, CheckMenuItem, MenuItem } = await import("@tauri-apps/api/menu");
   const sep = { item: "Separator" as const };
-  // Items that only make sense sometimes are greyed out the rest of the time.
+  // Items that only make sense sometimes are grayed out the rest of the time.
   const when: [{ setEnabled(on: boolean): Promise<void> }, () => boolean][] = [];
   const item = async (text: string, action: () => unknown, accelerator?: string, enabled?: () => boolean) => {
     const it = await MenuItem.new({ text, accelerator, action: () => void action() });
@@ -113,7 +113,7 @@ export async function installMenu() {
     text: "Chinotto",
     items: [
       await PredefinedMenuItem.new({ item: { About: null }, text: t("About Chinotto") }),
-      await item(t("Acknowledgements and Licences"), () => void api.openLicences().catch((e) => (store.error = String(e)))),
+      await item(t("Acknowledgments and Licenses"), () => void api.openLicenses().catch((e) => (store.error = String(e)))),
       sep,
       { item: "Services" },
       sep,
@@ -199,7 +199,7 @@ export async function installMenu() {
   const menu = await Menu.new({ items: [app, file, edit, view, controls, windowMenu] });
   await menu.setAsAppMenu();
   await windowMenu.setAsWindowsMenuForNSApp();
-  // Keep the Shuffle tick in step with the button, and grey out what can't be done.
+  // Keep the Shuffle tick in step with the button, and gray out what can't be done.
   $effect.root(() => {
     $effect(() => {
       void shuffle.setChecked(store.shuffle);

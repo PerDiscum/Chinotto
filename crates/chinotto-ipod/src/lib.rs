@@ -3,7 +3,7 @@
 //! - [`itunesdb`]: tracks and playlists (`iPod_Control/iTunes/iTunesDB`)
 //! - [`artworkdb`]: cover art index (`iPod_Control/Artwork/ArtworkDB`)
 //! - [`rgb565`]: the raw thumbnail pixel format stored in `.ithmb` files
-//! - [`device`]: recognising an iPod folder and reading `SysInfo`
+//! - [`device`]: recognizing an iPod folder and reading `SysInfo`
 //!
 //! Record layouts were checked against a real iPod Classic (7th gen) database
 //! written by Swinsian and by libgpod.

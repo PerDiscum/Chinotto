@@ -857,7 +857,7 @@ mod tests {
     fn cue_images() {
         let tmp = crate::convert::TempDir::new().unwrap();
         let bin = tmp.0.join("Game.bin");
-        // Two MODE1/2352 sectors with recognisable user data.
+        // Two MODE1/2352 sectors with recognizable user data.
         let mut data = Vec::new();
         for s in 0..2u8 {
             let mut sec = vec![0u8; 2352];

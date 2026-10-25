@@ -3,7 +3,7 @@
 //!
 //! A player is set up once in the "Add Drive" window; its settings are kept on
 //! the player itself, in `.chinotto-device.json` at the top of the drive, so
-//! it's recognised whenever (and wherever) it's plugged in. Its songs are
+//! it's recognized whenever (and wherever) it's plugged in. Its songs are
 //! listed like a library's (a `Library` with `device` set, kept with the
 //! others so later scans only read new or changed files); its playlists are
 //! read from the playlist files in its playlist folder.

@@ -79,7 +79,7 @@ fn main() {
             rip::cd_list,
             rip::cd_rip,
             rip::cd_eject,
-            commands::open_licences,
+            commands::open_licenses,
             rip::cd_music_info,
             burn::burn_status,
             burn::burn_inspect,
