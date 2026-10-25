@@ -35,6 +35,10 @@ It also plays a player's songs: MP3 and AAC everywhere; Apple Lossless, WAV
 and AIFF on iPods and MTP devices; FLAC and Ogg Vorbis too, for a library of
 your own on your computer.
 
+It rips audio CDs to Apple Lossless, FLAC, AAC or MP3, and burns disc images
+(`.iso`, or `.bin`/`.cue` such as PlayStation discs) onto blank CDs and DVDs
+— see Ripping CDs and Burning disc images below.
+
 ## Supported players
 
 - **Classic iPods** (up to the iPod classic, nano 6G and shuffle 4G — not the
@@ -68,7 +72,7 @@ isn't needed again once the Walkman is reformatted.
 ## Ripping CDs
 
 Put in an audio CD: on a Mac it shows up under **Optical** in the sidebar (or
-use **File → Rip CD…**); on Linux, click **Rip CD…** under Devices. Its page
+use **File → Rip CD…**); on Linux, click **Rip CD…** under Optical. Its page
 takes the artist, album, year, genre, cover and song names (there's no online
 lookup yet); choose Apple Lossless, FLAC, AAC or MP3, then **Rip…** and the
 folder to save into. Songs are saved as
@@ -83,20 +87,36 @@ CD with Gracenote; MusicBrainz lookup is planned. Covers are reduced to
 
 ## Burning disc images
 
-**Burn Image** (under Optical) burns an `.iso`, or a `.bin` with its `.cue`,
-onto a blank CD-R/RW or DVD±R/RW. It burns at the slowest speed the drive and
-disc allow unless you choose otherwise, in one pass, closes the disc, and
-then checks it against the image.
+**Burn Image** (under Optical, or **File → Burn Image…**) burns an `.iso`,
+or a `.bin` with its `.cue`, onto a blank CD-R/RW or DVD±R/RW. Its page shows
+the image, the burner and the disc in it (blank or not, and how much fits),
+and won't start if the image is too big.
 
-- macOS: nothing to install. ISO images go through `hdiutil`; `.bin`/`.cue`
-  images (PlayStation and other mode 2 discs, audio, several tracks) through
-  Apple's Disc Recording framework, as the Finder and Burn.app do,
-  session-at-once and raw: every sector exactly as in the image, error
-  correction included. macOS reads the disc back to check it.
-- Linux: `wodim` (CDs), `growisofs` (DVDs) and `cdrdao`, which writes
-  `.bin`/`.cue` images raw (every sector exactly as in the image); the .deb
-  and .rpm packages recommend them, or `sudo apt install wodim growisofs
-  cdrdao`.
+- **Speed**: the slowest speed the drive lists for that disc unless you
+  choose another (the menu shows only speeds the drive offers — asking a
+  drive for one it doesn't list can make it reset).
+- **One pass**: the whole image is written in one session, and the disc is
+  closed afterwards.
+- **Checking**: unless you untick it, the disc is read back and compared
+  with the image, and you're told if they differ.
+- **Cloud files**: the image is read through once before burning, so a file
+  kept in iCloud, Proton Drive or similar is fully downloaded before the
+  laser starts, rather than stalling halfway.
+- **Errors** say whether the problem happened while writing or while
+  checking, with the drive's own error codes.
+
+How each kind of image is burned:
+
+- macOS, nothing to install. ISO images go through `hdiutil`. `.bin`/`.cue`
+  images (PlayStation and other mode 2 discs, audio, several tracks) go
+  through Apple's Disc Recording framework — what the Finder uses —
+  session-at-once and raw: every 2352-byte sector exactly as in the image,
+  error correction included, with pregaps taken from
+  the `.cue`. Tested with an Apple USB SuperDrive.
+- Linux: `wodim` (CDs) and `growisofs` (DVDs) for ISO images, checked by
+  reading the disc back byte for byte, and `cdrdao` for `.bin`/`.cue`,
+  written raw. The .deb and .rpm packages recommend them, or
+  `sudo apt install wodim growisofs cdrdao`.
 
 ## Tested devices
 
@@ -113,6 +133,7 @@ So far, this is the developer's own hardware, run through the app itself
 | Sony Walkman NWZ-E44/E45 series | MTP (Linux), MSC (Mac) | Playlists over MTP are still unreliable |
 | Sony Walkman NW-A25 | MSC | |
 | Sony NW-S716F (Japanese model) | OpenMG | |
+| Apple USB SuperDrive | CD/DVD burner | Ripping, and burning ISO and PlayStation `.bin`/`.cue` images |
 
 **MTP is the least reliable connection of the four right now** — where a
 player can also run as MSC (most Sony Walkmans, and some Sansas), that's the
@@ -283,6 +304,13 @@ What those licences ask, and how Chinotto does it:
   Center/SonicStage lock-in and into plain OpenMG folder access (see
   "A Walkman still locked to Media Center or SonicStage" above): no code
   from it is used in Chinotto.
+- Burning `.bin`/`.cue` images on macOS follows the approach of Burn by
+  Maarten Foukhar (GPL): its source was read to learn which Disc Recording
+  settings (block size, block type, data form and session format) a raw
+  PlayStation-style disc needs. Those are numbers fixed by the CD standard
+  and Apple's framework, not code; Chinotto's burning code
+  (`app/src-tauri/native/drburn.c`, `burn.rs`) is its own, written in C and
+  Rust against Apple's C API, and no code from Burn is used.
 - The status display's mode titles use the Handjet typeface by Rosetta Type
   (The Handjet Project Authors), under the SIL Open Font License 1.1 — see
   `app/src/assets/fonts/OFL.txt`. Chinotto ships a Latin-only subset.
