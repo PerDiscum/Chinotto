@@ -179,7 +179,50 @@ export type Source =
   /** An audio CD: its page names the songs and rips them. */
   | { kind: "disc"; id: string }
   /** Burning a disc image (.iso, .bin + .cue). */
-  | { kind: "burn" };
+  | { kind: "burn" }
+  /** A podcast's page; id "" is the Podcasts page itself (setting up, adding). */
+  | { kind: "podcast"; id: string };
+
+export interface PodEpisode {
+  guid: string;
+  /** Short and stable; used in ids ("pod:<show>:<key>"). */
+  key: string;
+  title: string;
+  description: string;
+  /** Unix seconds; 0 if the feed doesn't say. */
+  published: number;
+  durationMs: number;
+  url: string;
+  mime: string;
+  bytes: number;
+  season: number;
+  number: number;
+  /** The downloaded file, relative to the podcast folder. */
+  file?: string | null;
+  /** Appeared since the show was added; not yet downloaded or dismissed. */
+  new: boolean;
+  played: boolean;
+}
+
+export interface PodShow {
+  id: string;
+  feed: string;
+  title: string;
+  author: string;
+  description: string;
+  link: string;
+  image: string;
+  checked: number;
+  episodes: PodEpisode[];
+  hasCover: boolean;
+  /** Per episode: is its file there? */
+  downloaded: boolean[];
+}
+
+export interface PodcastsView {
+  folder: string | null;
+  shows: PodShow[];
+}
 
 export interface LibrarySummary {
   id: string;

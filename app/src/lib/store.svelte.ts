@@ -4,6 +4,7 @@ import * as api from "./api";
 import { TrackIndex } from "./library";
 import { count } from "./format";
 import { t, tn } from "./i18n";
+import type { PodcastsView, PodEpisode, PodShow } from "./types";
 import type { AddProgress, BrowseField, Conversion, DeviceInfo, IpodView, LibrarySummary, LibraryView, ScanProgress, SortKey, Source, Track, TrackChanges, WriteResult } from "./types";
 
 export interface MenuItem {
@@ -27,7 +28,9 @@ export type Dialog =
   | { kind: "setup"; path: string; rebuild: boolean }
   /** Set up (or change the settings of) a player that shows up as a drive. */
   | { kind: "msc"; path: string }
-  | { kind: "delete-player-songs"; path: string; ids: number[] };
+  | { kind: "delete-player-songs"; path: string; ids: number[] }
+  | { kind: "podcast-add" }
+  | { kind: "podcast-remove"; id: string; name: string; downloaded: number };
 
 function loadVolume(): number {
   try {
@@ -216,6 +219,7 @@ class Store {
     const d = this.nowPlaying;
     if (!d) return null;
     if (d.startsWith("scratch:")) return this.scratch?.index.byId.get(Number(d.slice(8))) ?? null;
+    if (d.startsWith("pod:")) return this.episodeByDbid(d);
     if (d.startsWith("lib:")) {
       const [, lib, id] = d.split(":");
       return this.libViews[lib]?.index.byId.get(Number(id)) ?? null;
@@ -308,7 +312,18 @@ class Store {
     await api.onPlayerSpectrum((levels) => {
       this.spectrum = levels.map((v, i) => Math.max(v, (this.spectrum[i] ?? 0) - 0.12));
     });
-    await api.onPlayerEnded(() => void this.next(true));
+    await api.onPlayerEnded(() => {
+      const d = this.nowPlaying;
+      if (d?.startsWith("pod:")) {
+        const [, id, key] = d.split(":");
+        void this.markEpisodes(id, [key], { played: true, new: false });
+      }
+      void this.next(true);
+    });
+    await api.onPodcastProgress((p) => (this.podProgress = { ...this.podProgress, [`${p.id}:${p.key}`]: { done: p.done, total: p.total } }));
+    this.podcasts = await api.podcastsGet().catch(() => null);
+    // Look for new episodes at every launch, quietly: being offline isn't an error worth a banner.
+    if (this.podcasts?.shows.length) void this.refreshPodcasts(null, true);
     await api.onPlayerError((msg) => {
       this.error = msg;
       this.nowPlaying = null;
@@ -737,6 +752,10 @@ class Store {
   /** URL of a song's cover about `px` wide, or null when it has none. */
   coverUrl(t: Track | null | undefined, px: number): string | null {
     if (!t) return null;
+    if (t.dbid.startsWith("pod:")) {
+      const show = this.podcasts?.shows.find((s) => s.id === t.dbid.split(":")[1]);
+      return show?.hasCover ? api.podcastCoverUrl(show.id, px, show.checked) : null;
+    }
     if (t.dbid.startsWith("scratch:")) return t.hasCover ? api.libArtUrl("scratch", t.id, px, t.modified ?? 0) : null;
     if (t.dbid.startsWith("lib:")) {
       const [, lib] = t.dbid.split(":");
@@ -1247,6 +1266,7 @@ class Store {
   /** A song by dbid, from the iPod or any loaded library. */
   trackByDbid(d: string): Track | null {
     if (d.startsWith("scratch:")) return this.scratch?.index.byId.get(Number(d.slice(8))) ?? null;
+    if (d.startsWith("pod:")) return this.episodeByDbid(d);
     if (d.startsWith("lib:")) {
       const [, lib, id] = d.split(":");
       return this.libViews[lib]?.index.byId.get(Number(id)) ?? null;
@@ -1402,6 +1422,119 @@ class Store {
     this.musicView = v;
     this.openAlbum = null;
     savePref("chinotto.view", v);
+  }
+
+  // ---- Podcasts ----
+
+  podcasts = $state<PodcastsView | null>(null);
+  /** Downloads in progress, by "<show>:<key>". */
+  podProgress = $state<Record<string, { done: number; total: number }>>({});
+  podRefreshing = $state(false);
+  /** Why the last refresh failed, shown on the Podcasts pages. */
+  podError = $state<string | null>(null);
+
+  episodeByDbid(d: string): Track | null {
+    const [, id, key] = d.split(":");
+    const show = this.podcasts?.shows.find((s) => s.id === id);
+    const ep = show?.episodes.find((e) => e.key === key);
+    return show && ep ? episodeTrack(show, ep) : null;
+  }
+
+  /** Episodes the sidebar counts: new, and not downloaded yet. */
+  newEpisodes(show: PodShow): number {
+    return show.episodes.filter((e, i) => e.new && !show.downloaded[i]).length;
+  }
+
+  /** First use: where podcasts go, then the first feed. */
+  async setUpPodcasts() {
+    const folder = await api.pickFolder(t("Choose a folder for your podcasts"));
+    if (!folder) return;
+    try {
+      this.podcasts = await api.podcastsSetFolder(folder);
+      this.dialog = { kind: "podcast-add" };
+    } catch (e) {
+      this.error = String(e);
+    }
+  }
+
+  /** Follow a show. Returns an error to show in the dialog, or null. */
+  async addPodcast(url: string): Promise<string | null> {
+    const before = new Set(this.podcasts?.shows.map((s) => s.id));
+    try {
+      this.podcasts = await api.podcastAdd(url);
+    } catch (e) {
+      return String(e);
+    }
+    const added = this.podcasts.shows.find((s) => !before.has(s.id));
+    if (added) this.select({ kind: "podcast", id: added.id });
+    return null;
+  }
+
+  async refreshPodcasts(id: string | null = null, quiet = false) {
+    if (this.podRefreshing) return;
+    this.podRefreshing = true;
+    try {
+      this.podcasts = await api.podcastsRefresh(id);
+      this.podError = null;
+    } catch (e) {
+      // Shows that could be read were still updated.
+      this.podcasts = await api.podcastsGet().catch(() => this.podcasts);
+      this.podError = String(e);
+      if (!quiet) this.error = String(e);
+    } finally {
+      this.podRefreshing = false;
+    }
+  }
+
+  async downloadEpisode(id: string, key: string) {
+    const k = `${id}:${key}`;
+    if (this.podProgress[k]) return;
+    this.podProgress = { ...this.podProgress, [k]: { done: 0, total: 0 } };
+    try {
+      this.podcasts = await api.podcastDownload(id, key);
+    } catch (e) {
+      this.error = String(e);
+    } finally {
+      const rest = { ...this.podProgress };
+      delete rest[k];
+      this.podProgress = rest;
+    }
+  }
+
+  async deleteEpisodeFile(id: string, key: string) {
+    try {
+      this.podcasts = await api.podcastDeleteFile(id, key);
+    } catch (e) {
+      this.error = String(e);
+    }
+  }
+
+  /** keys [] means every episode of the show. */
+  async markEpisodes(id: string, keys: string[], marks: { new?: boolean; played?: boolean }) {
+    try {
+      this.podcasts = await api.podcastMark(id, keys, marks);
+    } catch (e) {
+      this.error = String(e);
+    }
+  }
+
+  async removePodcast(id: string, deleteFiles: boolean) {
+    this.dialog = null;
+    try {
+      this.podcasts = await api.podcastRemove(id, deleteFiles);
+      if (this.source.kind === "podcast" && this.source.id === id) this.select({ kind: "podcast", id: "" });
+    } catch (e) {
+      this.error = String(e);
+    }
+  }
+
+  /** Play a downloaded episode, then the show's other downloaded ones after it. */
+  async playEpisode(show: PodShow, key: string) {
+    const list = show.episodes.filter((_, i) => show.downloaded[i]).map((e) => episodeTrack(show, e));
+    const i = list.findIndex((t) => t.dbid === `pod:${show.id}:${key}`);
+    if (i < 0) return;
+    if (show.episodes.find((e) => e.key === key)?.new) void this.markEpisodes(show.id, [key], { new: false });
+    await this.playList(list, i);
   }
 
   select(src: Source) {
@@ -1567,6 +1700,7 @@ class Store {
     if (!d || !track) return;
     let src: Source;
     if (d.startsWith("scratch:")) src = { kind: "scratch" };
+    else if (d.startsWith("pod:")) return this.select({ kind: "podcast", id: d.split(":")[1] });
     else if (d.startsWith("lib:")) src = { kind: "library", lib: d.split(":")[1], id: "all" };
     else if (this.masterPlaylist) src = { kind: "playlist", id: this.masterPlaylist.id };
     else return;
@@ -1597,3 +1731,30 @@ class Store {
 }
 
 export const store = new Store();
+
+/** An episode as a song, for the player and the status display. */
+function episodeTrack(show: PodShow, e: PodEpisode): Track {
+  return {
+    id: 0,
+    dbid: `pod:${show.id}:${e.key}`,
+    title: e.title,
+    artist: show.author || show.title,
+    album: show.title,
+    genre: "Podcast",
+    kind: "Podcast",
+    year: e.published ? new Date(e.published * 1000).getFullYear() : 0,
+    trackNr: e.number,
+    trackCount: 0,
+    discNr: 0,
+    discCount: 0,
+    lengthMs: e.durationMs,
+    size: e.bytes,
+    bitrate: 0,
+    sampleRate: 0,
+    rating: 0,
+    playCount: 0,
+    compilation: false,
+    mediaType: 4,
+    art: 0,
+  };
+}

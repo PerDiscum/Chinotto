@@ -1459,3 +1459,26 @@ real analyser.
   and sends 8 octave bands per channel, 60 Hz–16 kHz, tilted +3 dB a band, as
   `Event::Spectrum` → `player-spectrum`. The window lets bars jump up at once
   and fall 0.12 per update.
+
+## 0119: Podcasts, phase 1 (feeds, episodes, downloads)
+
+- `src-tauri/src/podcasts.rs`. Shows live in `podcasts.json` (app data
+  folder) with their episodes; the folder for episodes is chosen on first
+  use. Feeds are fetched with ureq (rustls, no OpenSSL) and read with
+  quick-xml: RSS 2.0 plus the itunes: tags (author, image, duration, season,
+  episode, new-feed-url). Video enclosures are skipped. HTML descriptions
+  are flattened to text. Apple Podcasts links go through Apple's public
+  lookup (`itunes.apple.com/lookup?id=`) to the real feed.
+- "New": when a show is added only its latest episode is new; afterwards,
+  any episode a refresh finds for the first time. Cleared by downloading,
+  playing, Dismiss or Mark All as Seen. The sidebar badge counts new,
+  not-downloaded episodes. Every launch refreshes all shows quietly.
+- Episodes download to `<folder>/<Show>/<YYYY-MM-DD> - <Title>.<ext>` via a
+  `.part` file, never over an existing file; `podcast-progress` events.
+  The show's picture is saved as `cover.jpg` (≤1400 px), served as
+  `libart://pod-<show>-<px>-<version>`.
+- Downloaded episodes play in Chinotto as "pod:<show>:<key>" (key = 48 bits
+  of FNV-1a of the guid); playing to the end marks them played.
+- Next (phase 2): copying episodes to iPods as podcasts (media type 4, the
+  Podcasts playlist, release date, description, remember position, skip when
+  shuffling), and removing played ones from the iPod and/or the computer.

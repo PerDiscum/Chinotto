@@ -14,6 +14,7 @@ mod msc;
 mod mtp;
 mod openmg;
 mod playback;
+mod podcasts;
 mod rip;
 mod scratch;
 mod setup;
@@ -53,6 +54,14 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::list_devices,
+            podcasts::podcasts_get,
+            podcasts::podcasts_set_folder,
+            podcasts::podcast_add,
+            podcasts::podcasts_refresh,
+            podcasts::podcast_remove,
+            podcasts::podcast_mark,
+            podcasts::podcast_delete_file,
+            podcasts::podcast_download,
             commands::add_folder,
             commands::open_ipod,
             setup::setup_info,
@@ -130,6 +139,7 @@ fn main() {
             }
             if let Ok(dir) = app.path().app_data_dir() {
                 *app.state::<AppState>().libraries.lock().unwrap() = libcommands::Libraries::load(dir.join("libraries"));
+                *app.state::<AppState>().podcasts.lock().unwrap() = podcasts::Podcasts::load(dir.join("podcasts.json"));
             }
             libcommands::start_hourly(app.handle().clone());
             // Songs given when Chinotto was started (Linux, Windows).

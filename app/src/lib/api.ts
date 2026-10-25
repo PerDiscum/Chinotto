@@ -1,7 +1,7 @@
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import type { Conversion, AddProgress, AddResult, DeviceInfo, IpodView, LibrarySummary, LibraryView, ScanProgress, Track, TrackChanges, WriteResult, SetupInfo, SetupResult, DriveInfo, MscConfig, PlayerState, CopyResult, MtpInfo, OpenMgView } from "./types";
+import type { Conversion, AddProgress, AddResult, DeviceInfo, IpodView, LibrarySummary, LibraryView, ScanProgress, Track, TrackChanges, WriteResult, SetupInfo, SetupResult, DriveInfo, MscConfig, PlayerState, CopyResult, MtpInfo, OpenMgView, PodcastsView } from "./types";
 
 export const listDevices = () => invoke<DeviceInfo[]>("list_devices");
 export const addFolder = (path: string) => invoke<DeviceInfo>("add_folder", { path });
@@ -78,6 +78,21 @@ export const onPlayerStatus = (f: (s: PlayerStatus) => void) => listen<PlayerSta
 export const onPlayerSpectrum = (f: (levels: number[]) => void) => listen<number[]>("player-spectrum", (e) => f(e.payload));
 export const onPlayerEnded = (f: () => void) => listen("player-ended", () => f());
 export const onPlayerError = (f: (msg: string) => void) => listen<string>("player-error", (e) => f(e.payload));
+
+// ---- Podcasts ----
+export const podcastsGet = () => invoke<PodcastsView>("podcasts_get");
+export const podcastsSetFolder = (folder: string) => invoke<PodcastsView>("podcasts_set_folder", { folder });
+export const podcastAdd = (url: string) => invoke<PodcastsView>("podcast_add", { url });
+export const podcastsRefresh = (id: string | null = null) => invoke<PodcastsView>("podcasts_refresh", { id });
+export const podcastRemove = (id: string, deleteFiles: boolean) => invoke<PodcastsView>("podcast_remove", { id, deleteFiles });
+export const podcastMark = (id: string, keys: string[], marks: { new?: boolean; played?: boolean }) =>
+  invoke<PodcastsView>("podcast_mark", { id, keys, new: marks.new ?? null, played: marks.played ?? null });
+export const podcastDeleteFile = (id: string, key: string) => invoke<PodcastsView>("podcast_delete_file", { id, key });
+export const podcastDownload = (id: string, key: string) => invoke<PodcastsView>("podcast_download", { id, key });
+/** A podcast's saved cover (the version busts the cache after a refresh). */
+export const podcastCoverUrl = (id: string, px: number, version: number) => convertFileSrc(`pod-${id}-${px}-${version}`, "libart");
+export const onPodcastProgress = (f: (p: { id: string; key: string; done: number; total: number }) => void) =>
+  listen<{ id: string; key: string; done: number; total: number }>("podcast-progress", (e) => f(e.payload));
 
 // ---- Artwork ----
 export const setArtwork = (path: string, ids: string[], image: string) => invoke<WriteResult>("set_artwork", { path, ids, image });

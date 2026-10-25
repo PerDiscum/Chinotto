@@ -6,6 +6,7 @@
   import LibraryDialog from "./LibraryDialog.svelte";
   import SetupDialog from "./SetupDialog.svelte";
   import MscDialog from "./MscDialog.svelte";
+  import PodcastDialog from "./PodcastDialog.svelte";
   import { count } from "./format";
 
   const close = () => (store.dialog = null);
@@ -39,6 +40,25 @@
   <SetupDialog path={store.dialog.path} rebuild={store.dialog.rebuild} />
 {:else if store.dialog?.kind === "msc"}
   <MscDialog path={store.dialog.path} />
+{:else if store.dialog?.kind === "podcast-add"}
+  <PodcastDialog />
+{:else if store.dialog?.kind === "podcast-remove"}
+  {@const d = store.dialog}
+  <Modal title={t("Unfollow “{name}”?", { name: d.name })} onclose={close}>
+    <p>{t("Chinotto stops checking this podcast for new episodes.")}</p>
+    {#if d.downloaded}
+      <p>{tn(d.downloaded, "You have {n} downloaded episode. Keep it in your podcast folder, or delete it?", "You have {n} downloaded episodes. Keep them in your podcast folder, or delete them?")}</p>
+    {/if}
+    {#snippet buttons()}
+      <button onclick={close}>{t("Cancel")}</button>
+      {#if d.downloaded}
+        <button class="danger" onclick={() => store.removePodcast(d.id, true)}>{t("Unfollow and Delete")}</button>
+        <button class="primary" onclick={() => store.removePodcast(d.id, false)}>{t("Unfollow, Keep Files")}</button>
+      {:else}
+        <button class="primary" onclick={() => store.removePodcast(d.id, false)}>{t("Unfollow")}</button>
+      {/if}
+    {/snippet}
+  </Modal>
 {:else if store.dialog?.kind === "library"}
   <LibraryDialog id={store.dialog.id} />
 {:else if store.dialog?.kind === "delete-library"}

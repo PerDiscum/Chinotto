@@ -16,6 +16,7 @@
   import OpenMgPage from "./lib/OpenMgPage.svelte";
   import DiscPage from "./lib/DiscPage.svelte";
   import BurnPage from "./lib/BurnPage.svelte";
+  import PodcastPage from "./lib/PodcastPage.svelte";
   import MtpPage from "./lib/MtpPage.svelte";
   import ArtworkPane from "./lib/ArtworkPane.svelte";
   import Welcome from "./lib/Welcome.svelte";
@@ -192,6 +193,8 @@
       <DiscPage id={store.source.id} />
     {:else if store.source.kind === "burn"}
       <BurnPage />
+    {:else if store.source.kind === "podcast"}
+      <PodcastPage id={store.source.id} />
     {:else if store.source.kind === "openmg"}
       <OpenMgPage path={store.source.path} />
     {:else if store.source.kind === "player" && store.source.path.startsWith("mtp:")}

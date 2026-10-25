@@ -1,10 +1,15 @@
 <script lang="ts">
   // Small line icons drawn for Chinotto (16×16 grid).
-  let { name, size = 16 }: { name: "ipod" | "music" | "playlist" | "smart" | "eject" | "folder" | "columns" | "artwork" | "add" | "newlist" | "shuffle" | "repeat" | "repeat-one" | "library" | "disc" | "burn"; size?: number } = $props();
+  let { name, size = 16 }: { name: "ipod" | "music" | "playlist" | "smart" | "eject" | "folder" | "columns" | "artwork" | "add" | "newlist" | "shuffle" | "repeat" | "repeat-one" | "library" | "disc" | "burn" | "podcast"; size?: number } = $props();
 </script>
 
 <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-  {#if name === "burn"}
+  {#if name === "podcast"}
+    <circle cx="8" cy="6.8" r="1.6" />
+    <path d="M8 8.4v6.1" />
+    <path d="M5.2 9.6a4 4 0 1 1 5.6 0" />
+    <path d="M3 11.5a6.6 6.6 0 1 1 10 0" />
+  {:else if name === "burn"}
     <circle cx="8" cy="8" r="6.5" />
     <circle cx="8" cy="8" r="1.6" />
     <path d="M11.5 1.8c.9 1 .9 2 .2 2.9.9-.2 1.6-.9 1.5-2" />

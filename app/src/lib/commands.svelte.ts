@@ -129,6 +129,8 @@ export async function installMenu() {
     items: [
       await item(t("New Playlist"), run.newPlaylist, "CmdOrCtrl+N", () => store.playlistsWritable),
       await item(t("New Library…"), run.newLibrary, "CmdOrCtrl+Alt+N"),
+      await item(t("Add Podcast…"), () => (store.podcasts?.folder ? (store.dialog = { kind: "podcast-add" }) : store.select({ kind: "podcast", id: "" }))),
+      await item(t("Check for New Episodes"), () => store.refreshPodcasts(), undefined, () => !!store.podcasts?.shows.length && !store.podRefreshing),
       sep,
       await item(t("Open File…"), run.openFile, "CmdOrCtrl+O"),
       await item(t("Open Device…"), run.openDevice),

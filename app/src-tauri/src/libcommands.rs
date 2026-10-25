@@ -419,6 +419,10 @@ pub fn handle_art(app: &AppHandle, req: &Request<Vec<u8>>) -> HttpResponse<Vec<u
 fn render_art(app: &AppHandle, path: &str) -> Option<Vec<u8>> {
     let mut parts = path.trim_start_matches('/').split('-');
     let (lib, tid, px) = (parts.next()?, parts.next()?, parts.next()?.parse::<u32>().ok()?.clamp(16, 1200));
+    // "pod-<show>-<px>": a podcast's cover.
+    if lib == "pod" {
+        return cover_jpeg(&std::fs::read(crate::podcasts::cover_file(app, tid)?).ok()?, px);
+    }
     // "scratch" stands for the Scratch list.
     let file = if lib == "scratch" {
         crate::scratch::track_file(app, &format!("scratch:{tid}")).ok()?

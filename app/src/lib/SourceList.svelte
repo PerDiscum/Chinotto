@@ -170,6 +170,48 @@
       {/each}
     </ul>
   {/if}
+  <h2>{t("Podcasts")}</h2>
+  <ul class="podcasts">
+    {#if !store.podcasts?.folder}
+      <li>
+        <div class="row device" class:active={store.source.kind === "podcast"}>
+          <button class="name" onclick={() => store.select({ kind: "podcast", id: "" })}><Icon name="podcast" /><span>{t("Set Up Podcasts…")}</span></button>
+        </div>
+      </li>
+    {:else}
+      {#each store.podcasts.shows as show (show.id)}
+        {@const n = store.newEpisodes(show)}
+        <li>
+          <div class="row device" class:active={store.source.kind === "podcast" && store.source.id === show.id}>
+            <button
+              class="name"
+              onclick={() => store.select({ kind: "podcast", id: show.id })}
+              oncontextmenu={(e) => {
+                e.preventDefault();
+                store.menu = {
+                  x: e.clientX,
+                  y: e.clientY,
+                  items: [
+                    { label: t("Check for New Episodes"), action: () => store.refreshPodcasts(show.id) },
+                    { label: t("Unfollow…"), action: () => (store.dialog = { kind: "podcast-remove", id: show.id, name: show.title, downloaded: show.downloaded.filter(Boolean).length }) },
+                  ],
+                };
+              }}
+            >
+              <Icon name="podcast" />
+              <span>{show.title}</span>
+              {#if n}<b class="badge" title={tn(n, "{n} new episode", "{n} new episodes")}>{n}</b>{/if}
+            </button>
+          </div>
+        </li>
+      {/each}
+      <li>
+        <div class="row device" class:active={store.source.kind === "podcast" && store.source.id === ""}>
+          <button class="name" onclick={() => (store.dialog = { kind: "podcast-add" })}><Icon name="add" /><span>{t("Add Podcast…")}</span></button>
+        </div>
+      </li>
+    {/if}
+  </ul>
   <h2>{t("Optical")}</h2>
   <ul class="optical">
       {#each store.discs as d (d.id)}
@@ -380,6 +422,18 @@
   }
   .device {
     padding: 0 6px 0 0;
+  }
+  .badge {
+    flex: none;
+    margin-left: auto;
+    min-width: 17px;
+    padding: 1px 5px;
+    border-radius: 9px;
+    background: var(--accent-bright);
+    color: var(--side-deep);
+    font-size: 10px;
+    font-weight: 700;
+    text-align: center;
   }
   .device .name {
     display: flex;

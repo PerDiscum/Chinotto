@@ -102,6 +102,11 @@
         />
         <span class="t">-{duration(Math.max(0, total - shown))}</span>
       </div>
+    {:else if store.source.kind === "podcast"}
+      {@const id = store.source.id}
+      {@const show = store.podcasts?.shows.find((s) => s.id === id)}
+      <strong>{show?.title ?? t("Podcasts")}</strong>
+      <span class="sub">{show ? tn(show.episodes.length, "{n} episode", "{n} episodes") : tn(store.podcasts?.shows.length ?? 0, "{n} podcast", "{n} podcasts")}</span>
     {:else if store.source.kind === "library" && store.scanProgress[store.source.lib]?.total}
       {@const p = store.scanProgress[store.source.lib]}
       <strong>{t("Scanning {name}", { name: store.libView?.view.name ?? "" })}</strong>

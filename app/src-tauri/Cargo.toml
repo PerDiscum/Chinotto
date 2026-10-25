@@ -34,6 +34,9 @@ zip = { version = "9.0.5", default-features = false }
 tauri-plugin-single-instance = "2"
 mp3lame-encoder = "0.2.5"
 flacenc = "0.4"
+# Podcasts: fetching feeds and episodes (rustls, no OpenSSL), and reading them.
+ureq = "3"
+quick-xml = "0.42"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

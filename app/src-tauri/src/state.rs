@@ -33,6 +33,8 @@ pub struct AppState {
     pub scratch: Mutex<crate::scratch::Scratch>,
     /// MTP devices found, and the one open.
     pub mtp: crate::mtp::Shared,
+    /// Podcasts followed.
+    pub podcasts: Mutex<crate::podcasts::Podcasts>,
 }
 
 /// Saved between runs in the app's config folder (settings.json).
