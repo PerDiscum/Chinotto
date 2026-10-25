@@ -136,6 +136,9 @@ pub async fn delete_tracks(path: String, ids: Vec<String>, app: AppHandle) -> Re
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct AddProgress {
+    /// What the work is for: a device's path or "optical", so the window
+    /// can follow several jobs at once.
+    pub target: String,
     pub done: usize,
     pub total: usize,
     pub current: String,
@@ -183,13 +186,14 @@ pub async fn add_files(path: String, files: Vec<String>, playlist: Option<String
         // Converted copies live here until the iPod has its copy; then the folder goes.
         let tmp = crate::convert::TempDir::new()?;
         let tmp_dir = tmp.0.clone();
+        let job = path.clone();
         let result = with_writer(&app, Path::new(&path), move |db| {
             let mut res = AddResult { added: Vec::new(), skipped: Vec::new() };
             let mut added_files: Vec<(u64, PathBuf)> = Vec::new();
             let total = files.len();
             for (i, f) in files.iter().enumerate() {
                 let name = f.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-                let _ = emitter.emit("add-progress", AddProgress { done: i, total, current: tags::label(f) });
+                let _ = emitter.emit("add-progress", AddProgress { target: job.clone(), done: i, total, current: tags::label(f) });
                 // Songs the iPod can't play (or lossless ones, if so set) are converted first.
                 let converted;
                 let f = if let Some(target) = conv.plan(f, crate::convert::IPOD_PLAYS) {
@@ -221,7 +225,7 @@ pub async fn add_files(path: String, files: Vec<String>, playlist: Option<String
                     Err(e) => res.skipped.push(e),
                 }
             }
-            let _ = emitter.emit("add-progress", AddProgress { done: total, total, current: String::new() });
+            let _ = emitter.emit("add-progress", AddProgress { target: job.clone(), done: total, total, current: String::new() });
             add_embedded_covers(db, &added_files, &mut res.skipped)?;
             if let Some(pl) = playlist {
                 let mut ids = db.playlists().into_iter().find(|p| p.id == pl).map(|p| p.tracks).unwrap_or_default();

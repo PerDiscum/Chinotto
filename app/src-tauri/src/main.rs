@@ -62,6 +62,7 @@ fn main() {
             podcasts::podcast_mark,
             podcasts::podcast_delete_file,
             podcasts::podcast_download,
+            podcasts::podcast_cancel,
             podcasts::podcast_ipod_status,
             podcasts::podcast_send,
             podcasts::podcast_remove_played,

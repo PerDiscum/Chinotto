@@ -76,6 +76,8 @@ pub struct Playlist {
     pub id: u64,
     pub is_master: bool,
     pub is_smart: bool,
+    /// The Podcasts playlist (mhyp +0x2A).
+    pub is_podcasts: bool,
     /// Track ids (see [`Track::id`]) in playlist order.
     pub track_ids: Vec<u32>,
 }
@@ -232,7 +234,12 @@ fn parse_playlists(b: &Bytes, list: usize) -> Result<Vec<Playlist>, Error> {
         let tl = b.u32(p + 8)? as usize;
         let nmhod = b.u32(p + 0x0C)? as usize;
         let nitems = b.u32(p + 0x10)? as usize;
-        let mut pl = Playlist { is_master: b.u8(p + 0x14)? != 0, id: b.u64(p + 0x1C)?, ..Default::default() };
+        let mut pl = Playlist {
+            is_master: b.u8(p + 0x14)? != 0,
+            id: b.u64(p + 0x1C)?,
+            is_podcasts: hl >= 0x2C && b.u16(p + 0x2A)? == 1,
+            ..Default::default()
+        };
         let mut q = p + hl;
         for _ in 0..nmhod {
             b.expect(q, b"mhod")?;

@@ -43,6 +43,7 @@ struct PlaylistView<'a> {
     name: &'a str,
     master: bool,
     smart: bool,
+    podcasts: bool,
     track_ids: &'a [u32],
 }
 
@@ -190,7 +191,7 @@ pub(crate) fn view(s: &Session, state: &AppState) -> Result<String, String> {
             .db
             .playlists
             .iter()
-            .map(|p| PlaylistView { id: p.id.to_string(), name: &p.name, master: p.is_master, smart: p.is_smart, track_ids: &p.track_ids })
+            .map(|p| PlaylistView { id: p.id.to_string(), name: &p.name, master: p.is_master, smart: p.is_smart, podcasts: p.is_podcasts, track_ids: &p.track_ids })
             .collect(),
         tracks: s.db.tracks.iter().map(|t| track_view(s, t)).collect(),
     };

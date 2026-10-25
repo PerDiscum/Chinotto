@@ -46,16 +46,16 @@
           <dt>{t("Location")}</dt><dd class="path">{device.path}</dd>
         </dl>
         <div class="actions">
-          {#if !device.manual}<button onclick={() => store.eject(device.path)} disabled={!!store.ejecting || !!store.busy}>{t("Eject")}</button>{/if}
+          {#if !device.manual}<button onclick={() => store.eject(device.path)} disabled={!!store.ejecting || store.isBusy(device.path)}>{t("Eject")}</button>{/if}
           {#if st?.writable}
-            <button onclick={() => store.pickAndCopyToPlayer(path)} disabled={!!store.busy}>{t("Add Songs…")}</button>
-            <button onclick={() => store.reorderOpenMg(path)} disabled={!!store.busy} title={t("Albums play in track order; songs added by other programs get their numbers from your libraries.")}>{t("Put Albums in Track Order")}</button>
+            <button onclick={() => store.pickAndCopyToPlayer(path)}>{t("Add Songs…")}</button>
+            <button onclick={() => store.reorderOpenMg(path)} disabled={store.isBusy(path)} title={t("Albums play in track order; songs added by other programs get their numbers from your libraries.")}>{t("Put Albums in Track Order")}</button>
           {/if}
         </div>
         {#if st}
           <div class="changes">
             <label class="switch">
-              <input type="checkbox" role="switch" checked={st.writable} onchange={(e) => store.setPlayerAllow(path, e.currentTarget.checked)} disabled={!!store.busy} />
+              <input type="checkbox" role="switch" checked={st.writable} onchange={(e) => store.setPlayerAllow(path, e.currentTarget.checked)} disabled={store.isBusy(path)} />
               <span class="track" aria-hidden="true"><span class="knob"></span></span>
               {t("Allow changes to this device.")}
             </label>
@@ -69,7 +69,7 @@
             {#if st.writable}
               <label class="bitrate">
                 {t("Convert other formats to")}
-                <select value={bitrate} onchange={(e) => setBitrate(e.currentTarget.value)} disabled={!!store.busy}>
+                <select value={bitrate} onchange={(e) => setBitrate(e.currentTarget.value)} disabled={store.isBusy(path)}>
                   <option value="mp3_320">{t("MP3 320 kbps")}</option>
                   <option value="mp3_256">{t("MP3 256 kbps")}</option>
                   <option value="mp3_192">{t("MP3 192 kbps")}</option>

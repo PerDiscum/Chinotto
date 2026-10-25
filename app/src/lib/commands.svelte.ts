@@ -27,7 +27,7 @@ export const run = {
   openDevice: () => void store.openFolder(),
   burnImage: () => store.select({ kind: "burn" }),
   ripCd: () => {
-    if (!store.busy) void store.showDisc();
+    if (!store.isBusy("optical")) void store.showDisc();
   },
   setUpIpod: () => void store.pickDriveToSetUp(),
   addToIpod: () => store.ipod?.writable && void store.pickAndAddFiles(),

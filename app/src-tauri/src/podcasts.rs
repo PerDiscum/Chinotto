@@ -29,7 +29,13 @@ pub struct Podcasts {
     pub shows: Vec<Show>,
     #[serde(skip)]
     path: Option<PathBuf>,
+    /// Downloads asked to stop ("<show>:<key>").
+    #[serde(skip)]
+    cancelled: HashSet<String>,
 }
+
+/// What a stopped download reports; the window says nothing about it.
+pub const CANCELLED: &str = "Download cancelled.";
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -327,12 +333,17 @@ pub async fn podcast_download(id: String, key: String, app: AppHandle) -> Result
             let total = resp.body().content_length().unwrap_or(0);
             let mut reader = resp.body_mut().as_reader();
             let mut out = std::fs::File::create(&part).map_err(|e| format!("Couldn't save the episode: {e}"))?;
+            let job = format!("{id}:{key}");
+            state.podcasts.lock().unwrap().cancelled.remove(&job);
             let mut buf = vec![0u8; 256 * 1024];
             let (mut done, mut last) = (0u64, std::time::Instant::now());
             loop {
                 let n = reader.read(&mut buf).map_err(|e| format!("The download was cut off: {e}"))?;
                 if n == 0 {
                     break;
+                }
+                if state.podcasts.lock().unwrap().cancelled.remove(&job) {
+                    return Err(CANCELLED.into());
                 }
                 out.write_all(&buf[..n]).map_err(|e| format!("Couldn't save the episode: {e}"))?;
                 done += n as u64;
@@ -362,6 +373,12 @@ pub async fn podcast_download(id: String, key: String, app: AppHandle) -> Result
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// Stop a download; its partial file is deleted.
+#[tauri::command]
+pub fn podcast_cancel(id: String, key: String, app: AppHandle) {
+    app.state::<AppState>().podcasts.lock().unwrap().cancelled.insert(format!("{id}:{key}"));
 }
 
 /// The file of a downloaded episode, from its id "pod:<show>:<key>".
@@ -483,7 +500,7 @@ pub async fn podcast_send(path: String, id: String, keys: Vec<String>, app: AppH
             let mut res = SendResult { added: 0, skipped: Vec::new() };
             let mut covers = Vec::new();
             for (i, e) in todo.into_iter().enumerate() {
-                let _ = emitter.emit("add-progress", crate::write::AddProgress { done: i, total, current: e.title.clone() });
+                let _ = emitter.emit("add-progress", crate::write::AddProgress { target: path.clone(), done: i, total, current: e.title.clone() });
                 let src = folder.join(e.file.as_deref().unwrap_or_default());
                 if !src.is_file() {
                     res.skipped.push(format!("{}: the downloaded file is missing", e.title));
@@ -543,7 +560,7 @@ pub async fn podcast_send(path: String, id: String, keys: Vec<String>, app: AppH
                     Err(err) => res.skipped.push(format!("{}: {err}", e.title)),
                 }
             }
-            let _ = emitter.emit("add-progress", crate::write::AddProgress { done: total, total, current: String::new() });
+            let _ = emitter.emit("add-progress", crate::write::AddProgress { target: path.clone(), done: total, total, current: String::new() });
             crate::write::add_cover_images(db, covers, &mut res.skipped)?;
             if res.added == 0 && !res.skipped.is_empty() {
                 return Err(res.skipped.join("\n"));

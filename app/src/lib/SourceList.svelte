@@ -94,6 +94,7 @@
     node.focus();
     node.select();
   }
+  const podNew = $derived(store.podcasts?.shows.reduce((n, s) => n + store.newEpisodes(s), 0) ?? 0);
 </script>
 
 <nav class="sources" aria-label={t("Sources")}>
@@ -170,7 +171,12 @@
       {/each}
     </ul>
   {/if}
-  <h2>{t("Podcasts")}</h2>
+  <h2>
+    <button class="fold" aria-expanded={!store.podCollapsed} onclick={() => store.togglePodcasts()} title={store.podCollapsed ? t("Show the podcasts") : t("Hide the podcasts")}>
+      <span class="tri" aria-hidden="true">{store.podCollapsed ? "▸" : "▾"}</span>{t("Podcasts")}
+      {#if store.podCollapsed && podNew}<b class="badge" title={tn(podNew, "{n} new episode", "{n} new episodes")}>{podNew}</b>{/if}
+    </button>
+  </h2>
   <ul class="podcasts">
     {#if !store.podcasts?.folder}
       <li>
@@ -179,37 +185,39 @@
         </div>
       </li>
     {:else}
-      {#each store.podcasts.shows as show (show.id)}
-        {@const n = store.newEpisodes(show)}
-        <li>
-          <div class="row device" class:active={store.source.kind === "podcast" && store.source.id === show.id}>
-            <button
-              class="name"
-              onclick={() => store.select({ kind: "podcast", id: show.id })}
-              oncontextmenu={(e) => {
-                e.preventDefault();
-                store.menu = {
-                  x: e.clientX,
-                  y: e.clientY,
-                  items: [
-                    { label: t("Check for New Episodes"), action: () => store.refreshPodcasts(show.id) },
-                    { label: t("Unfollow…"), action: () => (store.dialog = { kind: "podcast-remove", id: show.id, name: show.title, downloaded: show.downloaded.filter(Boolean).length }) },
-                  ],
-                };
-              }}
-            >
-              <Icon name="podcast" />
-              <span>{show.title}</span>
-              {#if n}<b class="badge" title={tn(n, "{n} new episode", "{n} new episodes")}>{n}</b>{/if}
-            </button>
-          </div>
-        </li>
-      {/each}
       <li>
-        <div class="row device" class:active={store.source.kind === "podcast" && store.source.id === ""}>
+        <div class="row device">
           <button class="name" onclick={() => (store.dialog = { kind: "podcast-add" })}><Icon name="podcast-add" /><span>{t("Add Podcast…")}</span></button>
         </div>
       </li>
+      {#if !store.podCollapsed}
+        {#each store.podcasts.shows as show (show.id)}
+          {@const n = store.newEpisodes(show)}
+          <li>
+            <div class="row device" class:active={store.source.kind === "podcast" && store.source.id === show.id}>
+              <button
+                class="name"
+                onclick={() => store.select({ kind: "podcast", id: show.id })}
+                oncontextmenu={(e) => {
+                  e.preventDefault();
+                  store.menu = {
+                    x: e.clientX,
+                    y: e.clientY,
+                    items: [
+                      { label: t("Check for New Episodes"), action: () => store.refreshPodcasts(show.id) },
+                      { label: t("Unfollow…"), action: () => (store.dialog = { kind: "podcast-remove", id: show.id, name: show.title, downloaded: show.downloaded.filter(Boolean).length }) },
+                    ],
+                  };
+                }}
+              >
+                <Icon name="podcast" />
+                <span>{show.title}</span>
+                {#if n}<b class="badge" title={tn(n, "{n} new episode", "{n} new episodes")}>{n}</b>{/if}
+              </button>
+            </div>
+          </li>
+        {/each}
+      {/if}
     {/if}
   </ul>
   <h2>{t("Optical")}</h2>
@@ -221,7 +229,7 @@
               <Icon name="disc" />
               <span>{store.discDrafts[d.id]?.album || d.name}</span>
             </button>
-            <button class="eject" title={t("Eject {name}", { name: d.name })} aria-label={t("Eject {name}", { name: d.name })} disabled={!!store.busy} onclick={() => store.ejectDisc(d.id)}>
+            <button class="eject" title={t("Eject {name}", { name: d.name })} aria-label={t("Eject {name}", { name: d.name })} disabled={store.isBusy("optical")} onclick={() => store.ejectDisc(d.id)}>
               <Icon name="eject" size={13} />
             </button>
           </div>
@@ -287,7 +295,7 @@
             {#if store.opening === d.path}<span class="spinner" aria-label={t("Reading")}></span>{/if}
           </button>
           {#if !d.manual}
-            <button class="eject" title={t("Eject {name}", { name: d.volume })} aria-label={t("Eject {name}", { name: d.volume })} disabled={!!store.ejecting} onclick={() => store.eject(d.path)}>
+            <button class="eject" title={t("Eject {name}", { name: d.volume })} aria-label={t("Eject {name}", { name: d.volume })} disabled={!!store.ejecting || store.isBusy(d.path)} onclick={() => store.eject(d.path)}>
               <Icon name="eject" size={13} />
             </button>
           {/if}
@@ -422,6 +430,30 @@
   }
   .device {
     padding: 0 6px 0 0;
+  }
+  .fold {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    text-align: left;
+    cursor: default;
+  }
+  .fold .tri {
+    width: 9px;
+    font-size: 9px;
+  }
+  .fold .badge {
+    margin-left: 6px;
+    text-transform: none;
+    letter-spacing: 0;
   }
   .badge {
     flex: none;

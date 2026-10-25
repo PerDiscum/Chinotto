@@ -288,7 +288,7 @@ fn rip(req: RipRequest, app: &AppHandle) -> Result<RipResult, String> {
     };
     for (i, t) in req.tracks.iter().enumerate() {
         let title = if t.title.trim().is_empty() { format!("Track {}", t.number) } else { t.title.trim().to_string() };
-        let _ = app.emit("add-progress", crate::write::AddProgress { done: i, total: count, current: title.clone() });
+        let _ = app.emit("add-progress", crate::write::AddProgress { target: "optical".into(), done: i, total: count, current: title.clone() });
         // The track as audio the decoder reads.
         let src = if mac {
             let found =
@@ -349,7 +349,7 @@ fn rip(req: RipRequest, app: &AppHandle) -> Result<RipResult, String> {
         }
         res.ripped += 1;
     }
-    let _ = app.emit("add-progress", crate::write::AddProgress { done: count, total: count, current: String::new() });
+    let _ = app.emit("add-progress", crate::write::AddProgress { target: "optical".into(), done: count, total: count, current: String::new() });
     Ok(res)
 }
 

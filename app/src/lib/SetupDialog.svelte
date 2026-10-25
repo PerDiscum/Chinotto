@@ -113,7 +113,7 @@
   {/if}
   {#snippet buttons()}
     <button onclick={close}>{t("Cancel")}</button>
-    <button class="primary" disabled={blocked || !!store.busy} onclick={go}>{rebuild ? t("Rebuild") : t("Set Up")}</button>
+    <button class="primary" disabled={blocked || store.isBusy(path)} onclick={go}>{rebuild ? t("Rebuild") : t("Set Up")}</button>
   {/snippet}
 </Modal>
 

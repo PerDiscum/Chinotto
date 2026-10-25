@@ -31,7 +31,7 @@
   const onIpod = $derived(new Map(store.podOnIpod.filter((o) => o.show === id).map((o) => [o.key, o])));
   const sendable = $derived(show ? show.episodes.filter((e, i) => show.downloaded[i] && !onIpod.has(e.key)).map((e) => e.key) : []);
   const playedThere = $derived([...onIpod.values()].filter((o) => o.played).length);
-  const canSend = $derived(!!ipod?.writable && !store.podIpodError && !store.busy);
+  const canSend = $derived(!!ipod?.writable && !store.podIpodError);
 
   function episodeMenu(ev: MouseEvent, key: string, i: number) {
     if (!show) return;
@@ -146,6 +146,7 @@
                 <span class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={prog.total ? Math.round((prog.done / prog.total) * 100) : 0}>
                   <span style:width="{prog.total ? (prog.done / prog.total) * 100 : 3}%"></span>
                 </span>
+                <button class="quiet" title={t("Stop downloading")} onclick={() => store.cancelDownload(show.id, e.key)}>{t("Cancel")}</button>
               {:else if have}
                 {#if there}
                   <span class="tag" title={there.played ? t("Played on the iPod") : t("On the iPod")}>{there.played ? t("Played on iPod") : t("On iPod")}</span>
@@ -333,6 +334,7 @@
   }
   .act {
     display: flex;
+    align-items: center;
     justify-content: flex-end;
     gap: 6px;
     min-width: 150px;

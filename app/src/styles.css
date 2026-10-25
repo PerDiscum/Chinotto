@@ -1,10 +1,19 @@
 /* Handjet (Rosetta Type, SIL Open Font License 1.1: see assets/fonts/OFL.txt),
-   for the status display's mode titles. Basic Latin and Latin-1 only. */
+   for the status display. Subset to Latin, Greek and Cyrillic: anything else
+   (Chinese, Japanese, Korean, …) falls through to the next font in the list. */
+@font-face {
+  font-family: "Handjet";
+  src: url("./assets/fonts/handjet-regular.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+  unicode-range: U+0020-024F, U+0300-036F, U+0370-03FF, U+0400-04FF, U+1E00-1EFF, U+1F00-1FFF, U+2000-206F, U+20AC, U+2122, U+2190-2193, U+2212;
+}
 @font-face {
   font-family: "Handjet";
   src: url("./assets/fonts/handjet-semibold.woff2") format("woff2");
   font-weight: 600;
   font-display: swap;
+  unicode-range: U+0020-024F, U+0300-036F, U+0370-03FF, U+0400-04FF, U+1E00-1EFF, U+1F00-1FFF, U+2000-206F, U+20AC, U+2122, U+2190-2193, U+2212;
 }
 
 /* Chinotto colour tokens. Named after the bitter citrus soda: smoked-glass

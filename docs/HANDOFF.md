@@ -1503,3 +1503,23 @@ real analyser.
 - Show in Finder / Show in Folder: `reveal_song` (macOS `open -R`; Linux
   FileManager1.ShowItems over D-Bus, else xdg-open on the folder). In the
   song menu (one song, not MTP) and the episode menu.
+
+## 0121: jobs side by side; podcast and Retro tweaks
+
+- Jobs: `store.job(target, kind, title, work)` replaces the single global
+  `busy`. Targets: a device's path, "optical" (burning and ripping share
+  the drive), "lib:<id>", "export". Different targets run at once; the
+  same target queues (a lane of promises per target). `AddProgress` now
+  carries `target`, so progress goes to the right job. The status display
+  shows running jobs in turn (every 3.5 s) with "1 of 2 · +N waiting".
+  Buttons are disabled with `store.isBusy(target)` only where a change
+  mustn't overlap (allow-changes, conversion, eject, burn settings).
+- Podcasts: downloads can be cancelled (`podcast_cancel`; the .part file is
+  removed). Sidebar section folds (`chinotto.podcastsCollapsed`), with
+  Add Podcast… first and outside the fold; folded, the header shows the
+  new-episode count. chinotto-ipod reads the mhyp podcast flag (+0x2A):
+  in that playlist the song list says "Episode Title" and "Podcast".
+- Retro: the top bar is dark in light mode too; the screen uses Handjet
+  (Regular + SemiBold, subset to Latin, Greek, Cyrillic, with
+  unicode-range, so CJK falls back to the UI font). Retro's sidebar rules
+  are scoped to `aside.side` (they were painting Song Details' `.side`).

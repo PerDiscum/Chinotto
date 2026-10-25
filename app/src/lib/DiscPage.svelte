@@ -103,7 +103,7 @@
       </select>
       {#if isMac}<button onclick={fromMusic} disabled={asking} title={t("The names Music found for this CD (Music looks CDs up with Gracenote)")}>{asking ? t("Asking Music…") : t("Get Names from Music")}</button>{/if}
       <button disabled title={t("Coming soon")}>{t("Fetch from MusicBrainz")}</button>
-      <button class="primary" onclick={rip} disabled={!chosen.length || !!store.busy}>{t("Rip…")}</button>
+      <button class="primary" onclick={rip} disabled={!chosen.length || store.isBusy("optical")}>{t("Rip…")}</button>
     </div>
     {#if problem}<p class="problem" role="alert">{problem}</p>{/if}
 

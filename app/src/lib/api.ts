@@ -88,6 +88,7 @@ export const podcastRemove = (id: string, deleteFiles: boolean) => invoke<Podcas
 export const podcastMark = (id: string, keys: string[], marks: { new?: boolean; played?: boolean }) =>
   invoke<PodcastsView>("podcast_mark", { id, keys, new: marks.new ?? null, played: marks.played ?? null });
 export const podcastDeleteFile = (id: string, key: string) => invoke<PodcastsView>("podcast_delete_file", { id, key });
+export const podcastCancel = (id: string, key: string) => invoke<void>("podcast_cancel", { id, key });
 export const podcastDownload = (id: string, key: string) => invoke<PodcastsView>("podcast_download", { id, key });
 export interface OnIpod {
   show: string;

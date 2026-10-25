@@ -24,7 +24,7 @@
         { label: t("Save Cover As…"), disabled: !(track?.art || track?.hasCover) || failed, action: () => track && store.saveCover(track) },
         {
           label: tn(n, "Paste Cover to Selected Song", "Paste Cover to {n} Selected Songs"),
-          disabled: !n || !store.writable || !!store.busy,
+          disabled: !n || !store.writable,
           action: () => store.pasteCover(targets),
         },
       ],

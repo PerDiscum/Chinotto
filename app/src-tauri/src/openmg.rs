@@ -235,7 +235,7 @@ pub async fn add(path: String, dbids: Vec<String>, files: Vec<String>, app: AppH
         let total = todo.len();
         for (i, (src, info)) in todo.iter().enumerate() {
             let name = src.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-            let _ = app.emit("add-progress", crate::write::AddProgress { done: i, total, current: crate::tags::label(src) });
+            let _ = app.emit("add-progress", crate::write::AddProgress { target: path.clone(), done: i, total, current: crate::tags::label(src) });
             let text =
                 |v: &Option<String>, unknown: &str| v.as_deref().map(str::trim).filter(|v| !v.is_empty()).unwrap_or(unknown).to_string();
             let stem = src.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
@@ -311,11 +311,11 @@ pub async fn add(path: String, dbids: Vec<String>, files: Vec<String>, app: AppH
             db.songs.push(song);
             res.added += 1;
         }
-        let _ = app.emit("add-progress", crate::write::AddProgress { done: total, total, current: String::new() });
+        let _ = app.emit("add-progress", crate::write::AddProgress { target: path.clone(), done: total, total, current: String::new() });
         drop(tmp);
         if db.songs.len() > before {
             // Saving the database can take minutes on the Walkman's slow FAT: say so.
-            let _ = app.emit("add-progress", crate::write::AddProgress { done: 0, total: 0, current: "openmg-database".into() });
+            let _ = app.emit("add-progress", crate::write::AddProgress { target: path.clone(), done: 0, total: 0, current: "openmg-database".into() });
             // Songs already there that have no track number: from the libraries.
             let numbered = number_from_libraries(&app, &mut db);
             if let Err(e) = install(&root, &db) {

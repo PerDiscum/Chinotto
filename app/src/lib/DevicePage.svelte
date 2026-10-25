@@ -55,7 +55,7 @@
     </dl>
     <div class="actions">
       {#if !ipod.device.manual}
-        <button onclick={() => store.eject(ipod.path)} disabled={!!store.ejecting}>{t("Eject")}</button>
+        <button onclick={() => store.eject(ipod.path)} disabled={!!store.ejecting || store.isBusy(ipod.path)}>{t("Eject")}</button>
       {/if}
     </div>
   </section>
@@ -91,7 +91,7 @@
         <p class="note">{t("This iPod doesn't report a FireWire ID or serial number, so Chinotto keeps it read-only.")}</p>
       {:else}
         <label class="switch">
-          <input type="checkbox" role="switch" checked={ipod.writable} onchange={(e) => store.allowChanges(e.currentTarget.checked)} disabled={!!store.busy} />
+          <input type="checkbox" role="switch" checked={ipod.writable} onchange={(e) => store.allowChanges(e.currentTarget.checked)} disabled={store.isBusy(ipod.path)} />
           <span class="track" aria-hidden="true"><span class="knob"></span></span>
           {t("Allow changes to this device.")}
         </label>
@@ -106,7 +106,7 @@
             {t("Chinotto only reads this iPod. Turn this on to edit songs, add or delete them and change playlists. The setting is remembered for this iPod only.")}
           {/if}
         </p>
-        <ConversionSettings conversion={ipod.conversion} plays={ipod.plays} device="iPod" disabled={!!store.busy} onchange={(c) => store.setConversion(c)} />
+        <ConversionSettings conversion={ipod.conversion} plays={ipod.plays} device="iPod" disabled={store.isBusy(ipod.path)} onchange={(c) => store.setConversion(c)} />
       {/if}
     </div>
   </section>

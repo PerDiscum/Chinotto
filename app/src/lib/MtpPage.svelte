@@ -50,8 +50,8 @@
           <dt>{t("Connection")}</dt><dd>MTP</dd>
         </dl>
         <div class="actions">
-          <button onclick={() => store.closeMtp(path)} disabled={!!store.busy}>{t("Let Other Programs Use It")}</button>
-          {#if st?.writable}<button onclick={() => store.pickAndCopyToPlayer(path)} disabled={!!store.busy}>{t("Add Songs…")}</button>{/if}
+          <button onclick={() => store.closeMtp(path)} disabled={store.isBusy(path)}>{t("Let Other Programs Use It")}</button>
+          {#if st?.writable}<button onclick={() => store.pickAndCopyToPlayer(path)}>{t("Add Songs…")}</button>{/if}
         </div>
       </section>
       <div class="picture">
@@ -62,7 +62,7 @@
       {#if st}
         <div class="changes">
           <label class="switch">
-            <input type="checkbox" role="switch" checked={st.writable} onchange={(e) => store.setPlayerAllow(path, e.currentTarget.checked)} disabled={!!store.busy} />
+            <input type="checkbox" role="switch" checked={st.writable} onchange={(e) => store.setPlayerAllow(path, e.currentTarget.checked)} disabled={store.isBusy(path)} />
             <span class="track" aria-hidden="true"><span class="knob"></span></span>
             {t("Allow changes to this device.")}
           </label>
@@ -73,7 +73,7 @@
               {t("Chinotto only reads this device. Turn this on to copy songs to it and delete them. The setting is remembered for this device only.")}
             {/if}
           </p>
-          <ConversionSettings conversion={st.conversion} plays={st.plays} device={t("player")} disabled={!!store.busy} onchange={(c) => store.setPlayerConversion(path, c)} />
+          <ConversionSettings conversion={st.conversion} plays={st.plays} device={t("player")} disabled={store.isBusy(path)} onchange={(c) => store.setPlayerConversion(path, c)} />
         </div>
       {/if}
       <p class="note">

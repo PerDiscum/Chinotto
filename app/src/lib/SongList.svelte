@@ -7,6 +7,14 @@
 
   let { tracks }: { tracks: Track[] } = $props();
 
+  // The iPod's Podcasts playlist names its columns for episodes.
+  const podcastList = $derived.by(() => {
+    const src = store.source;
+    return src.kind === "playlist" && !!store.ipod?.playlists.find((p) => p.id === src.id)?.podcasts;
+  });
+  const label = (c: { key: SortKey; label: string }) =>
+    podcastList && c.key === "title" ? t("Episode Title") : podcastList && c.key === "album" ? t("Podcast") : c.label;
+
   const ROW = 20;
   const OVERSCAN = 8;
   type Col = { key: SortKey; label: string; width: string; min: number; num?: boolean; fixed?: boolean };
@@ -42,7 +50,7 @@
       x: e.clientX,
       y: e.clientY,
       items: ALL.filter((c) => !c.fixed).map((c) => ({
-        label: `${store.hiddenColumns.includes(c.key) ? "\u2003" : "✓ "}${c.label}`,
+        label: `${store.hiddenColumns.includes(c.key) ? "\u2003" : "✓ "}${label(c)}`,
         action: () => store.toggleColumn(c.key),
       })),
     };
@@ -234,7 +242,7 @@
         aria-sort={store.sortKey === c.key ? (store.sortDir === 1 ? "ascending" : "descending") : "none"}
         onclick={() => store.sortBy(c.key)}
       >
-        <span class="label">{c.label}</span>
+        <span class="label">{label(c)}</span>
         {#if store.sortKey === c.key}<span class="arrow">{store.sortDir === 1 ? "▲" : "▼"}</span>{/if}
       </button>
     {/each}

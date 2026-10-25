@@ -192,8 +192,46 @@ class Store {
   anchor = $state<number | null>(null);
 
   /** What's being written to the iPod right now (shown in the status display). */
-  busy = $state<string | null>(null);
-  progress = $state<AddProgress | null>(null);
+  /**
+   * Work in progress: copying to a device, burning, ripping, saving… Jobs for
+   * different targets run side by side; jobs for the same target (one iPod,
+   * the optical drive) wait their turn. The status display cycles through
+   * the running ones.
+   */
+  jobs = $state<Job[]>([]);
+  private jobSeq = 0;
+  private lanes = new Map<string, Promise<unknown>>();
+
+  /** Is anything running or waiting on `target` (a device's path, "optical", …)? */
+  isBusy(target: string | null | undefined): boolean {
+    return !!target && this.jobs.some((j) => j.target === target);
+  }
+
+  private patchJob(id: number, patch: Partial<Job>) {
+    this.jobs = this.jobs.map((j) => (j.id === id ? { ...j, ...patch } : j));
+  }
+
+  /** Run `work` as a job on `target`, after any job already there. */
+  async job<T>(target: string, kind: Job["kind"], title: string, work: (id: number) => Promise<T>): Promise<T> {
+    const id = ++this.jobSeq;
+    this.jobs = [...this.jobs, { id, target, kind, title, detail: null, progress: null, waiting: true }];
+    const before = this.lanes.get(target) ?? Promise.resolve();
+    const mine = before.then(() => {
+      this.patchJob(id, { waiting: false });
+      return work(id);
+    });
+    const done = mine.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.lanes.set(target, done);
+    try {
+      return await mine;
+    } finally {
+      this.jobs = this.jobs.filter((j) => j.id !== id);
+      if (this.lanes.get(target) === done) this.lanes.delete(target);
+    }
+  }
   dialog = $state<Dialog | null>(null);
   menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
   /** Playlist whose name is being edited in the source list. */
@@ -331,22 +369,21 @@ class Store {
     });
     void api.playerVolume(this.volume);
     await api.onAddProgress((p) => {
-      // A late event after the work finished mustn't bring the status back.
-      if (!this.busy) return;
-      if (this.burning) {
+      // Progress belongs to the running job for that target; late events are dropped.
+      const job = this.jobs.find((j) => !j.waiting && j.target === p.target);
+      if (!job) return;
+      if (job.kind === "burn") {
         const n = { p: Math.floor(p.done / 10) };
-        this.progress = p;
-        this.busy = p.current === "verify" ? t("Checking the disc… {p}%", n) : p.current === "prepare" ? t("Preparing the image… {p}%", n) : t("Burning… {p}%", n);
-        return;
+        const detail = p.current === "verify" ? t("Checking the disc… {p}%", n) : p.current === "prepare" ? t("Preparing the image… {p}%", n) : t("Burning… {p}%", n);
+        return this.patchJob(job.id, { detail, progress: p });
       }
       if (p.current === "openmg-database") {
-        this.progress = null;
-        this.busy = t("Saving the Walkman's song list… (this can take a few minutes; don't unplug it)");
-        return;
+        return this.patchJob(job.id, { detail: t("Saving the Walkman's song list… (this can take a few minutes; don't unplug it)"), progress: null });
       }
-      this.progress = p;
+      if (!p.total) return;
       const n = { done: Math.min(p.done + 1, p.total), total: p.total };
-      if (p.total) this.busy = (this.ripping ? t("Ripping {done} of {total}", n) : t("Adding {done} of {total}", n)) + (p.current ? `: ${p.current}` : "");
+      const detail = (job.kind === "rip" ? t("Ripping {done} of {total}", n) : t("Adding {done} of {total}", n)) + (p.current ? `: ${p.current}` : "");
+      this.patchJob(job.id, { detail, progress: p });
     });
     this.deviceIcons = await api.deviceIcons().catch(() => ({}));
     await api.onLibrariesChanged((l) => (this.libraries = l));
@@ -446,16 +483,13 @@ class Store {
 
   /** Set up the iPod at `path` (see SetupDialog); then open it. */
   async setUpIpod(a: { path: string; model: string; name: string; firewireId: string | null; addExisting: boolean; rebuild: boolean }) {
-    if (this.busy) return;
+    if (this.isBusy(a.path)) return;
     if (this.ipod?.path === a.path) this.forget();
     this.dialog = null;
-    this.busy = a.rebuild ? t("Rebuilding the database…") : t("Setting up the iPod…");
     this.error = null;
     try {
-      const r = await api.setupIpod(a);
+      const r = await this.job(a.path, "add", a.rebuild ? t("Rebuilding the database…") : t("Setting up the iPod…"), () => api.setupIpod(a));
       this.openFailed = null;
-      this.busy = null;
-      this.progress = null;
       this.devicesChanged(await api.listDevices());
       if (!this.devices.some((d) => d.path === a.path)) {
         // A drive picked by hand: keep it in the list.
@@ -468,9 +502,6 @@ class Store {
       if (lines.length) this.dialog = { kind: "report", title: tn(r.added, "Done: {n} song is on the iPod", "Done: {n} songs are on the iPod"), lines };
     } catch (e) {
       this.error = String(e);
-    } finally {
-      this.busy = null;
-      this.progress = null;
     }
   }
 
@@ -553,13 +584,13 @@ class Store {
 
   /** Copy songs (dbids) and/or files onto a player. */
   async copyToPlayer(path: string, dbids: string[], files: string[] = []) {
-    if (this.busy || (!dbids.length && !files.length)) return;
+    if (!dbids.length && !files.length) return;
     const d = this.devices.find((x) => x.path === path);
     const n = dbids.length + files.length;
-    this.busy = tn(n, "Copying {n} song to {name}…", "Copying {n} songs to {name}…", { name: d?.volume ?? "" });
     this.error = null;
     try {
-      const r = await api.mscAdd(path, dbids, files);
+      // Copies to the same player queue up behind each other.
+      const r = await this.job(path, "add", tn(n, "Copying {n} song to {name}", "Copying {n} songs to {name}", { name: d?.volume ?? "" }), () => api.mscAdd(path, dbids, files));
       if (d?.kind === "mtp") await this.refreshMtp(path);
       if (d?.kind === "openmg") this.openMgRevision++;
       const lines = [...r.skipped];
@@ -567,9 +598,6 @@ class Store {
       if (r.skipped.length) this.dialog = { kind: "report", title: tn(r.added, "{n} song copied", "{n} songs copied"), lines };
     } catch (e) {
       this.error = String(e);
-    } finally {
-      this.busy = null;
-      this.progress = null;
     }
   }
 
@@ -578,17 +606,13 @@ class Store {
 
   /** Put an OpenMG Walkman's albums in track order (numbers from the libraries). */
   async reorderOpenMg(path: string) {
-    if (this.busy) return;
-    this.busy = t("Putting albums in track order…");
     this.error = null;
     try {
-      const n = await api.openMgReorder(path);
+      const n = await this.job(path, "other", t("Putting albums in track order…"), () => api.openMgReorder(path));
       this.openMgRevision++;
       this.dialog = { kind: "report", title: t("Albums are in track order"), lines: [tn(n, "Track number found for {n} song in your libraries.", "Track numbers found for {n} songs in your libraries.")] };
     } catch (e) {
       this.error = String(e);
-    } finally {
-      this.busy = null;
     }
   }
 
@@ -688,19 +712,20 @@ class Store {
 
   /** Run one change against the open iPod. Returns `{ extra }` (the command's extra result), or null on failure. */
   private async write<T>(label: string, run: (path: string) => Promise<WriteResult<T>>): Promise<{ extra: T } | null> {
-    if (!this.ipod || this.busy) return null;
-    this.busy = label;
+    const ipod = this.ipod;
+    if (!ipod) return null;
+    const path = ipod.path;
     this.error = null;
     try {
-      const r = await run(this.ipod.path);
-      this.applyView(r.view);
-      return { extra: r.extra };
+      // Changes to one iPod queue up behind each other.
+      return await this.job(path, "add", label, async () => {
+        const r = await run(path);
+        if (this.ipod?.path === path) this.applyView(r.view);
+        return { extra: r.extra };
+      });
     } catch (e) {
       this.error = String(e);
       return null;
-    } finally {
-      this.busy = null;
-      this.progress = null;
     }
   }
 
@@ -726,17 +751,15 @@ class Store {
     const s = this.source;
     if (s.kind === "library") {
       if (!Object.keys(changes).length && !artwork) return true;
-      this.busy = ids.length > 1 ? tn(ids.length, "Saving…", "Saving {n} songs…") : t("Saving…");
       try {
         const cover = artwork === "remove" ? "" : artwork ? artwork.set : null;
-        const problems = await api.libEditTracks(s.lib, ids.map(libSongId), changes, cover);
+        const label = ids.length > 1 ? tn(ids.length, "Saving…", "Saving {n} songs…") : t("Saving…");
+        const problems = await this.job(`lib:${s.lib}`, "other", label, () => api.libEditTracks(s.lib, ids.map(libSongId), changes, cover));
         if (problems.length) this.dialog = { kind: "report", title: tn(problems.length, "{n} file couldn't be changed", "{n} files couldn't be changed"), lines: problems };
         return !problems.length;
       } catch (e) {
         this.error = String(e);
         return false;
-      } finally {
-        this.busy = null;
       }
     }
     if (Object.keys(changes).length && (await this.write(t("Saving…"), (p) => api.editTracks(p, ids, changes))) === null) return false;
@@ -893,19 +916,22 @@ class Store {
 
   async burn() {
     const img = this.burnImage;
-    if (!img || this.busy) return;
-    this.burning = true;
-    this.busy = t("Burning…");
+    if (!img || this.isBusy("optical")) return;
     this.error = null;
     try {
-      const lines = await api.burnImage(img.path, this.burnSpeed, this.burnVerify);
+      // The optical drive does one thing at a time: burning waits for a rip, and the other way round.
+      const lines = await this.job("optical", "burn", t("Burning {name}", { name: img.path.split(/[\\/]/).pop() ?? "" }), async () => {
+        this.burning = true;
+        try {
+          return await api.burnImage(img.path, this.burnSpeed, this.burnVerify);
+        } finally {
+          this.burning = false;
+        }
+      });
       this.dialog = { kind: "report", title: t("The disc is ready"), lines };
     } catch (e) {
       this.error = String(e);
     } finally {
-      this.burning = false;
-      this.busy = null;
-      this.progress = null;
       void this.refreshBurn();
     }
   }
@@ -943,15 +969,19 @@ class Store {
 
   /** Ask for a folder, then rip into it. Libraries whose folders hold it scan it. */
   async rip(req: Omit<import("./types").RipRequest, "folder">) {
-    if (this.busy) return;
     const folder = await api.pickFolder(t("Rip the CD into"));
     if (!folder) return;
     this.dialog = null;
-    this.ripping = true;
-    this.busy = t("Ripping…");
     this.error = null;
     try {
-      const r = await api.cdRip({ ...req, folder });
+      const r = await this.job("optical", "rip", t("Ripping the CD"), async () => {
+        this.ripping = true;
+        try {
+          return await api.cdRip({ ...req, folder });
+        } finally {
+          this.ripping = false;
+        }
+      });
       const inside = (dir: string) => r.folder === dir || r.folder.startsWith(dir.endsWith("/") ? dir : dir + "/");
       for (const l of this.libraries) if (!l.device && l.folders.some((f) => inside(f.path))) void this.scanLibrary(l.id);
       this.dialog = {
@@ -961,10 +991,6 @@ class Store {
       };
     } catch (e) {
       this.error = String(e);
-    } finally {
-      this.ripping = false;
-      this.busy = null;
-      this.progress = null;
     }
   }
 
@@ -1255,12 +1281,10 @@ class Store {
         dest = await api.pickSaveFile(t("{n} songs", { n: songs.length }) + ".zip", t("Save Songs as a Zip"), "zip");
       }
       if (!dest) return;
-      this.busy = tn(songs.length, "Saving {n} song…", "Saving {n} songs…");
-      await api.exportSongs(songs, dest);
+      const to = dest;
+      await this.job("export", "other", tn(songs.length, "Saving {n} song…", "Saving {n} songs…"), () => api.exportSongs(songs, to));
     } catch (e) {
       this.error = String(e);
-    } finally {
-      this.busy = null;
     }
   }
 
@@ -1441,6 +1465,13 @@ class Store {
     return show && ep ? episodeTrack(show, ep) : null;
   }
 
+  /** The sidebar's list of shows is folded away. */
+  podCollapsed = $state(loadPref("chinotto.podcastsCollapsed", ["yes", "no"] as const, "no") === "yes");
+  togglePodcasts() {
+    this.podCollapsed = !this.podCollapsed;
+    savePref("chinotto.podcastsCollapsed", this.podCollapsed ? "yes" : "no");
+  }
+
   /** Followed episodes on the open iPod (see refreshIpodPodcasts). */
   podOnIpod = $state<api.OnIpod[]>([]);
   /** Why the iPod's podcasts can't be read or changed (e.g. a nano 6G). */
@@ -1544,12 +1575,16 @@ class Store {
     try {
       this.podcasts = await api.podcastDownload(id, key);
     } catch (e) {
-      this.error = String(e);
+      if (!String(e).includes("Download cancelled")) this.error = String(e);
     } finally {
       const rest = { ...this.podProgress };
       delete rest[k];
       this.podProgress = rest;
     }
+  }
+
+  cancelDownload(id: string, key: string) {
+    void api.podcastCancel(id, key);
   }
 
   async deleteEpisodeFile(id: string, key: string) {
@@ -1808,4 +1843,18 @@ function episodeTrack(show: PodShow, e: PodEpisode): Track {
     mediaType: 4,
     art: 0,
   };
+}
+
+/** Work in progress (see Store.job). */
+export interface Job {
+  id: number;
+  /** What it works on: a device's path, "optical", "lib:<id>", "export"… */
+  target: string;
+  kind: "add" | "rip" | "burn" | "other";
+  title: string;
+  /** The latest step ("Adding 2 of 5: …", "Burning… 40%"). */
+  detail: string | null;
+  progress: AddProgress | null;
+  /** Queued behind another job on the same target. */
+  waiting: boolean;
 }

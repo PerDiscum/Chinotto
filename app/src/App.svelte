@@ -138,7 +138,7 @@
         <button
           title={store.writable ? t("Add songs to the iPod… (also: drop files or folders on the window)") : t("Allow changes on the iPod's page to add songs")}
           aria-label={t("Add songs to the iPod")}
-          disabled={!store.writable || !!store.busy}
+          disabled={!store.writable}
           onclick={(e) => {
             const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
             store.menu = {
@@ -155,11 +155,11 @@
         <button
           title={store.writable ? t("New playlist") : t("Allow changes on the iPod's page to make playlists")}
           aria-label={t("New playlist")}
-          disabled={!store.writable || !!store.busy}
+          disabled={!store.writable}
           data-icon="newlist" onclick={() => store.newPlaylist(false)}><Icon name="newlist" /></button
         >
       {:else if store.source.kind === "library" && !store.isDeviceLibrary(store.source.lib)}
-        <button title={t("New playlist in this library")} aria-label={t("New playlist")} disabled={!!store.busy} data-icon="newlist" onclick={() => store.newPlaylist(false)}
+        <button title={t("New playlist in this library")} aria-label={t("New playlist")} data-icon="newlist" onclick={() => store.newPlaylist(false)}
           ><Icon name="newlist" /></button
         >
       {/if}

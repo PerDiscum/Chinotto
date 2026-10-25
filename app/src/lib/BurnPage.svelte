@@ -16,7 +16,7 @@
   const img = $derived(store.burnImage);
   const media = $derived(st?.media ?? null);
   const fits = $derived(!img || !media || !media.freeSectors || img.sectors <= media.freeSectors);
-  const ready = $derived(!!img && !!media?.blank && fits && !store.busy && !(img.needsCdrdao && media.dvd));
+  const ready = $derived(!!img && !!media?.blank && fits && !store.isBusy("optical") && !(img.needsCdrdao && media.dvd));
   const mediaText = $derived(
     !st ? t("Looking for a burner…")
     : !st.drive ? t("No disc burner found.")
@@ -44,14 +44,14 @@
       <dd>{#if st?.drive}{st.drive}<br />{/if}<span class:muted={!media?.blank}>{mediaText}</span></dd>
       <dt>{t("Speed")}</dt>
       <dd>
-        <select bind:value={store.burnSpeed} disabled={!!store.busy}>
+        <select bind:value={store.burnSpeed} disabled={store.isBusy("optical")}>
           <option value={0}>{media?.speeds.length ? t("Slowest ({x}×, most reliable)", { x: media.speeds[0] }) : t("Slowest (most reliable)")}</option>
           {#each (media?.speeds.length ? media.speeds.slice(1) : [2, 4, 8, 16, 24]) as x (x)}<option value={x}>{x}×</option>{/each}
         </select>
       </dd>
       <dt></dt>
       <dd>
-        <label class="check"><input type="checkbox" bind:checked={store.burnVerify} disabled={!!store.busy} /> {t("Check the disc against the image afterwards")}</label>
+        <label class="check"><input type="checkbox" bind:checked={store.burnVerify} disabled={store.isBusy("optical")} /> {t("Check the disc against the image afterwards")}</label>
       </dd>
     </dl>
     {#if img && !fits}<p class="warn">{t("The image is bigger than the disc.")}</p>{/if}
@@ -65,7 +65,7 @@
       </p>
     {/if}
     <div class="controls">
-      <button onclick={() => store.chooseBurnImage()} disabled={!!store.busy}>{t("Choose Image…")}</button>
+      <button onclick={() => store.chooseBurnImage()} disabled={store.isBusy("optical")}>{t("Choose Image…")}</button>
       <button class="primary" onclick={() => store.burn()} disabled={!ready}>{t("Burn")}</button>
     </div>
     <p class="muted note">{t("Burning slowly, in one pass, gives the most reliable discs, especially for older players and consoles. The disc is closed afterwards, so nothing more can be added to it.")}</p>

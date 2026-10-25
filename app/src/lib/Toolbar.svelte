@@ -8,6 +8,15 @@
   let { visible, visibleMs }: { visible: Track[]; visibleMs: number } = $props();
   const visibleCount = $derived(visible.length);
 
+  // Jobs running side by side take turns on the display, a few seconds each.
+  let tick = $state(0);
+  $effect(() => {
+    const timer = setInterval(() => tick++, 3500);
+    return () => clearInterval(timer);
+  });
+  const running = $derived(store.jobs.filter((j) => !j.waiting));
+  const waiting = $derived(store.jobs.length - running.length);
+  const job = $derived(running.length ? running[tick % running.length] : null);
   const song = $derived(store.playingTrack);
   const playing = $derived(store.player.state === "playing" && !!store.nowPlaying);
   // A spectrum bar's height, 0 to 1; resting low when nothing's playing.
@@ -62,14 +71,16 @@
   <div class="label" class:live={playing} role="status" aria-live="polite">
     <span class="spectrum left" aria-hidden="true">{#each { length: 8 } as _, i (i)}<i style:--l={bar(i)}></i>{/each}</span>
     <span class="spectrum right" aria-hidden="true">{#each { length: 8 } as _, i (i)}<i style:--l={bar(8 + i)}></i>{/each}</span>
-    {#if store.busy}
-      <strong>{store.busy}</strong>
-      {#if store.progress && store.progress.total}
-        <span class="bar" role="progressbar" aria-valuemin="0" aria-valuemax={store.progress.total} aria-valuenow={store.progress.done}>
-          <span style:width="{(store.progress.done / store.progress.total) * 100}%"></span>
+    {#if job}
+      <strong>{job.title}</strong>
+      <span class="sub">
+        {job.detail ?? (job.kind === "add" ? t("Don't unplug the device") : "")}
+        {#if running.length > 1 || waiting}<span class="count">· {running.length > 1 ? t("{i} of {n}", { i: (tick % running.length) + 1, n: running.length }) : ""}{waiting ? ` ${tn(waiting, "+{n} waiting", "+{n} waiting")}` : ""}</span>{/if}
+      </span>
+      {#if job.progress && job.progress.total}
+        <span class="bar" role="progressbar" aria-valuemin="0" aria-valuemax={job.progress.total} aria-valuenow={job.progress.done}>
+          <span style:width="{(job.progress.done / job.progress.total) * 100}%"></span>
         </span>
-      {:else}
-        <span class="sub">{t("Don't unplug the device")}</span>
       {/if}
     {:else if openingName}
       <strong>{t("Reading {name}…", { name: openingName ?? "" })}</strong>
@@ -205,6 +216,9 @@
     font-size: 11px;
     color: var(--label-dim);
     font-variant-numeric: tabular-nums;
+  }
+  .count {
+    opacity: 0.75;
   }
   .bar {
     display: block;

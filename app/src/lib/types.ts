@@ -98,6 +98,8 @@ export interface Playlist {
   name: string;
   master: boolean;
   smart: boolean;
+  /** The iPod's Podcasts playlist. */
+  podcasts?: boolean;
   trackIds: number[];
 }
 
@@ -269,6 +271,8 @@ export interface AddResult {
 }
 
 export interface AddProgress {
+  /** Which job: a device's path, or "optical" (burning, ripping). */
+  target: string;
   done: number;
   total: number;
   current: string;

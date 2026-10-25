@@ -426,7 +426,7 @@ pub async fn add(key: String, dbids: Vec<String>, files: Vec<String>, app: AppHa
         let mut sent_songs: Vec<SentSong> = Vec::new();
         for (i, src) in sources.iter().enumerate() {
             let name = src.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-            let _ = app.emit("add-progress", crate::write::AddProgress { done: i, total, current: crate::tags::label(src) });
+            let _ = app.emit("add-progress", crate::write::AddProgress { target: key.clone(), done: i, total, current: crate::tags::label(src) });
             let converted;
             let f = if let Some(target) = conv.plan(src, &plays) {
                 match crate::convert::convert(src, &tmp.0, &target, i) {
@@ -530,7 +530,7 @@ pub async fn add(key: String, dbids: Vec<String>, files: Vec<String>, app: AppHa
                 Err(e) => res.skipped.push(format!("{name}: {e}")),
             }
         }
-        let _ = app.emit("add-progress", crate::write::AddProgress { done: total, total, current: String::new() });
+        let _ = app.emit("add-progress", crate::write::AddProgress { target: key.clone(), done: total, total, current: String::new() });
         drop(tmp);
         if let Some(o) = state.mtp.lock().unwrap().open.as_mut().filter(|o| o.key == key) {
             if !sent_songs.is_empty() {

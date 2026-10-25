@@ -233,6 +233,7 @@ impl AppState {
                     name: p.name,
                     is_master: p.master,
                     is_smart: p.smart,
+                    is_podcasts: false,
                     track_ids: p.tracks.iter().filter_map(|id| indexes.get(id).copied()).collect(),
                 })
                 .collect();

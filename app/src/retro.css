@@ -55,6 +55,10 @@
   /* Retro only. */
   --gloss: linear-gradient(#f7fbff, #e2eefb 48%, #c9ddf4 52%, #e4effb);
   --gloss-edge: #7fa6d6;
+  /* The top bar is dark in both light and dark mode, like a player's face. */
+  --bar-gloss: linear-gradient(#2b4472, #1a2e52 48%, #10213e 52%, #1a2d4f);
+  --bar-edge: #050b18;
+  --bar-ink: #b8d4f5;
   --head-gloss: linear-gradient(#ffffff, #edf3fb 50%, #dde8f6 51%, #eef4fc);
   --head-sorted: linear-gradient(#eaf5ff, #c3dffb 50%, #a9cff7 51%, #d2e8fd);
   --head-ink: #1d3a66;
@@ -119,8 +123,8 @@
 
 :root[data-theme="retro"] .toolbar {
   padding: 6px 14px;
-  background: var(--gloss);
-  border-bottom-color: var(--gloss-edge);
+  background: var(--bar-gloss);
+  border-bottom-color: var(--bar-edge);
 }
 :root[data-theme="retro"] .transport {
   gap: 2px;
@@ -170,7 +174,7 @@
 }
 
 :root[data-theme="retro"] .volume {
-  color: var(--head-ink);
+  color: var(--bar-ink);
 }
 :root[data-theme="retro"] .volume input {
   height: 20px;
@@ -205,6 +209,20 @@
   background: none;
   box-shadow: none;
   text-shadow: 0 0 6px rgb(95 180 255 / 0.7);
+  /* LCD lettering: Handjet for Latin, Greek and Cyrillic; other scripts use the UI font. */
+  font-family: "Handjet", var(--ui);
+  letter-spacing: 0.03em;
+}
+:root[data-theme="retro"] .toolbar .label strong {
+  font-size: 19px;
+  line-height: 1.05;
+}
+:root[data-theme="retro"] .toolbar .label .sub {
+  font-size: 15px;
+  line-height: 1.1;
+}
+:root[data-theme="retro"] .toolbar .seek .t {
+  font-size: 14px;
 }
 :root[data-theme="retro"] .toolbar .bar {
   background: rgb(207 234 255 / 0.2);
@@ -248,24 +266,28 @@
 
 :root[data-theme="retro"] .search input {
   padding: 5px 12px 5px 28px;
-  border-color: #6f9fd8;
-  background: var(--field) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%235b8fd0' stroke-width='1.8' stroke-linecap='round'%3E%3Ccircle cx='6.5' cy='6.5' r='4.5'/%3E%3Cpath d='m10 10 4 4'/%3E%3C/svg%3E") 9px center / 13px no-repeat;
-  box-shadow: inset 0 1px 3px rgb(13 60 140 / 0.3), 0 1px 0 rgb(255 255 255 / 0.3);
+  border-color: #2c5592;
+  background: #0b1630 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%235b8fd0' stroke-width='1.8' stroke-linecap='round'%3E%3Ccircle cx='6.5' cy='6.5' r='4.5'/%3E%3Cpath d='m10 10 4 4'/%3E%3C/svg%3E") 9px center / 13px no-repeat;
+  color: #e3eeff;
+  box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.5), 0 1px 0 rgb(255 255 255 / 0.12);
+}
+:root[data-theme="retro"] .search input::placeholder {
+  color: #7f9cc4;
 }
 
 /* ---- Sidebar ---- */
 
-:root[data-theme="retro"] .side {
+:root[data-theme="retro"] aside.side {
   background: linear-gradient(var(--side-shade), var(--side-shade)), #1d3a6a url("./assets/retro/sidebar.webp") center / cover no-repeat;
 }
-:root[data-theme="retro"] .side h2 {
+:root[data-theme="retro"] aside.side h2 {
   color: #a9cdf5;
   font-size: 10px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   text-shadow: 0 1px 0 rgb(0 0 0 / 0.5);
 }
-:root[data-theme="retro"] .side .row.active {
+:root[data-theme="retro"] aside.side .row.active {
   background: var(--sel-gloss);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.5), inset 0 -1px 0 rgb(0 30 90 / 0.4);
   text-shadow: 0 1px 1px rgb(0 30 90 / 0.6);
@@ -276,38 +298,38 @@
   background: linear-gradient(#2c5592, #163467);
   border-top-color: #0f2448;
 }
-:root[data-theme="retro"] .side .side-tools button {
+:root[data-theme="retro"] aside.side .side-tools button {
   width: 28px;
   height: 28px;
   border-radius: 6px;
   background: transparent center / contain no-repeat;
 }
-:root[data-theme="retro"] .side .side-tools button:hover:not(:disabled) {
+:root[data-theme="retro"] aside.side .side-tools button:hover:not(:disabled) {
   background-color: transparent;
   filter: brightness(1.1);
 }
-:root[data-theme="retro"] .side .side-tools button:disabled {
+:root[data-theme="retro"] aside.side .side-tools button:disabled {
   opacity: 0.45;
 }
-:root[data-theme="retro"] .side .side-tools button[data-icon] svg {
+:root[data-theme="retro"] aside.side .side-tools button[data-icon] svg {
   display: none;
 }
-:root[data-theme="retro"] .side .side-tools [data-icon="folder"] { background-image: url("./assets/retro/folder.webp"); }
-:root[data-theme="retro"] .side .side-tools [data-icon="add"] { background-image: url("./assets/retro/add.webp"); }
-:root[data-theme="retro"] .side .side-tools [data-icon="newlist"] { background-image: url("./assets/retro/newlist.webp"); }
-:root[data-theme="retro"] .side .side-tools [data-icon="shuffle"] { background-image: url("./assets/retro/shuffle.webp"); }
-:root[data-theme="retro"] .side .side-tools [data-icon="repeat"] { background-image: url("./assets/retro/repeat.webp"); }
-:root[data-theme="retro"] .side .side-tools [data-icon="repeat-one"] { background-image: url("./assets/retro/repeat-one.webp"); }
-:root[data-theme="retro"] .side .side-tools [data-icon="columns"] { background-image: url("./assets/retro/columns.webp"); }
-:root[data-theme="retro"] .side .side-tools [data-icon="artwork"] { background-image: url("./assets/retro/artwork.webp"); }
+:root[data-theme="retro"] aside.side .side-tools [data-icon="folder"] { background-image: url("./assets/retro/folder.webp"); }
+:root[data-theme="retro"] aside.side .side-tools [data-icon="add"] { background-image: url("./assets/retro/add.webp"); }
+:root[data-theme="retro"] aside.side .side-tools [data-icon="newlist"] { background-image: url("./assets/retro/newlist.webp"); }
+:root[data-theme="retro"] aside.side .side-tools [data-icon="shuffle"] { background-image: url("./assets/retro/shuffle.webp"); }
+:root[data-theme="retro"] aside.side .side-tools [data-icon="repeat"] { background-image: url("./assets/retro/repeat.webp"); }
+:root[data-theme="retro"] aside.side .side-tools [data-icon="repeat-one"] { background-image: url("./assets/retro/repeat-one.webp"); }
+:root[data-theme="retro"] aside.side .side-tools [data-icon="columns"] { background-image: url("./assets/retro/columns.webp"); }
+:root[data-theme="retro"] aside.side .side-tools [data-icon="artwork"] { background-image: url("./assets/retro/artwork.webp"); }
 /* Pressed in: while clicked, or while switched on. */
-:root[data-theme="retro"] .side .side-tools [data-icon="folder"]:active { background-image: url("./assets/retro/folder-down.webp"); }
-:root[data-theme="retro"] .side .side-tools [data-icon="add"]:active:not(:disabled) { background-image: url("./assets/retro/add-down.webp"); }
-:root[data-theme="retro"] .side .side-tools [data-icon="newlist"]:active:not(:disabled) { background-image: url("./assets/retro/newlist-down.webp"); }
-:root[data-theme="retro"] .side .side-tools [data-icon="shuffle"]:is(:active, [aria-pressed="true"]) { background-image: url("./assets/retro/shuffle-down.webp"); }
-:root[data-theme="retro"] .side .side-tools [data-icon="repeat"]:is(:active, [aria-pressed="true"]) { background-image: url("./assets/retro/repeat-down.webp"); }
-:root[data-theme="retro"] .side .side-tools [data-icon="columns"]:is(:active, [aria-pressed="true"]) { background-image: url("./assets/retro/columns-down.webp"); }
-:root[data-theme="retro"] .side .side-tools [data-icon="artwork"]:is(:active, [aria-pressed="true"]) { background-image: url("./assets/retro/artwork-down.webp"); }
+:root[data-theme="retro"] aside.side .side-tools [data-icon="folder"]:active { background-image: url("./assets/retro/folder-down.webp"); }
+:root[data-theme="retro"] aside.side .side-tools [data-icon="add"]:active:not(:disabled) { background-image: url("./assets/retro/add-down.webp"); }
+:root[data-theme="retro"] aside.side .side-tools [data-icon="newlist"]:active:not(:disabled) { background-image: url("./assets/retro/newlist-down.webp"); }
+:root[data-theme="retro"] aside.side .side-tools [data-icon="shuffle"]:is(:active, [aria-pressed="true"]) { background-image: url("./assets/retro/shuffle-down.webp"); }
+:root[data-theme="retro"] aside.side .side-tools [data-icon="repeat"]:is(:active, [aria-pressed="true"]) { background-image: url("./assets/retro/repeat-down.webp"); }
+:root[data-theme="retro"] aside.side .side-tools [data-icon="columns"]:is(:active, [aria-pressed="true"]) { background-image: url("./assets/retro/columns-down.webp"); }
+:root[data-theme="retro"] aside.side .side-tools [data-icon="artwork"]:is(:active, [aria-pressed="true"]) { background-image: url("./assets/retro/artwork-down.webp"); }
 
 /* ---- Library: view tabs, column browser, song list ---- */
 
@@ -385,7 +407,7 @@
 :root[data-theme="retro"] ::-webkit-scrollbar-corner {
   background: var(--chrome);
 }
-:root[data-theme="retro"] .side ::-webkit-scrollbar-track {
+:root[data-theme="retro"] aside.side ::-webkit-scrollbar-track {
   background: rgb(0 10 30 / 0.3);
   box-shadow: none;
 }
