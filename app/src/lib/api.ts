@@ -89,6 +89,20 @@ export const podcastMark = (id: string, keys: string[], marks: { new?: boolean; 
   invoke<PodcastsView>("podcast_mark", { id, keys, new: marks.new ?? null, played: marks.played ?? null });
 export const podcastDeleteFile = (id: string, key: string) => invoke<PodcastsView>("podcast_delete_file", { id, key });
 export const podcastDownload = (id: string, key: string) => invoke<PodcastsView>("podcast_download", { id, key });
+export interface OnIpod {
+  show: string;
+  key: string;
+  dbid: string;
+  played: boolean;
+  bookmarkMs: number;
+}
+export const podcastIpodStatus = (path: string) => invoke<OnIpod[]>("podcast_ipod_status", { path });
+export const podcastSend = (path: string, id: string, keys: string[]) =>
+  invoke<WriteResult<{ added: number; skipped: string[] }>>("podcast_send", { path, id, keys });
+export const podcastRemovePlayed = (path: string, id: string, fromComputer: boolean) =>
+  invoke<WriteResult<number>>("podcast_remove_played", { path, id, fromComputer });
+/** Show a song's or episode's file in the Finder / file manager. */
+export const revealSong = (dbid: string) => invoke<void>("reveal_song", { dbid });
 /** A podcast's saved cover (the version busts the cache after a refresh). */
 export const podcastCoverUrl = (id: string, px: number, version: number) => convertFileSrc(`pod-${id}-${px}-${version}`, "libart");
 export const onPodcastProgress = (f: (p: { id: string; key: string; done: number; total: number }) => void) =>

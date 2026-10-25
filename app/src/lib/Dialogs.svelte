@@ -59,6 +59,16 @@
       {/if}
     {/snippet}
   </Modal>
+{:else if store.dialog?.kind === "podcast-remove-played"}
+  {@const d = store.dialog}
+  <Modal title={tn(d.count, "Remove {n} played episode of “{name}”?", "Remove {n} played episodes of “{name}”?", { name: d.name })} onclose={close}>
+    <p>{t("Take them off the iPod only, or delete the downloaded copies on this computer as well?")}</p>
+    {#snippet buttons()}
+      <button onclick={close}>{t("Cancel")}</button>
+      <button class="danger" onclick={() => store.removePlayedEpisodes(d.id, true)}>{t("From iPod and Computer")}</button>
+      <button class="primary" onclick={() => store.removePlayedEpisodes(d.id, false)}>{t("From iPod Only")}</button>
+    {/snippet}
+  </Modal>
 {:else if store.dialog?.kind === "library"}
   <LibraryDialog id={store.dialog.id} />
 {:else if store.dialog?.kind === "delete-library"}

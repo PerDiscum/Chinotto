@@ -30,7 +30,8 @@ export type Dialog =
   | { kind: "msc"; path: string }
   | { kind: "delete-player-songs"; path: string; ids: number[] }
   | { kind: "podcast-add" }
-  | { kind: "podcast-remove"; id: string; name: string; downloaded: number };
+  | { kind: "podcast-remove"; id: string; name: string; downloaded: number }
+  | { kind: "podcast-remove-played"; id: string; name: string; count: number };
 
 function loadVolume(): number {
   try {
@@ -1438,6 +1439,56 @@ class Store {
     const show = this.podcasts?.shows.find((s) => s.id === id);
     const ep = show?.episodes.find((e) => e.key === key);
     return show && ep ? episodeTrack(show, ep) : null;
+  }
+
+  /** Followed episodes on the open iPod (see refreshIpodPodcasts). */
+  podOnIpod = $state<api.OnIpod[]>([]);
+  /** Why the iPod's podcasts can't be read or changed (e.g. a nano 6G). */
+  podIpodError = $state<string | null>(null);
+
+  /** Look at which episodes are on the open iPod; played ones get marked played here too. */
+  async refreshIpodPodcasts() {
+    const ipod = this.ipod;
+    if (!ipod) {
+      this.podOnIpod = [];
+      return;
+    }
+    try {
+      this.podOnIpod = await api.podcastIpodStatus(ipod.path);
+      this.podIpodError = null;
+      this.podcasts = await api.podcastsGet();
+    } catch (e) {
+      this.podOnIpod = [];
+      this.podIpodError = String(e);
+    }
+  }
+
+  async sendEpisodes(id: string, keys: string[]) {
+    if (!keys.length) return;
+    const res = await this.write(tn(keys.length, "Copying an episode to the iPod…", "Copying {n} episodes to the iPod…"), (p) => api.podcastSend(p, id, keys));
+    if (res?.extra.skipped.length) {
+      this.dialog = { kind: "report", title: tn(res.extra.added, "Copied {n} episode; {skipped} not copied", "Copied {n} episodes; {skipped} not copied", { skipped: res.extra.skipped.length }), lines: res.extra.skipped };
+    }
+    // The iPod's view changed (new generation): the Podcasts page looks again.
+  }
+
+  async removeEpisodesFromIpod(dbids: string[]) {
+    await this.write(t("Removing from the iPod…"), (p) => api.deleteTracks(p, dbids));
+    // The iPod's view changed (new generation): the Podcasts page looks again.
+  }
+
+  async removePlayedEpisodes(id: string, fromComputer: boolean) {
+    this.dialog = null;
+    await this.write(t("Removing played episodes…"), (p) => api.podcastRemovePlayed(p, id, fromComputer));
+    // The iPod's view changed (new generation): the Podcasts page looks again.
+  }
+
+  async showInFinder(dbid: string) {
+    try {
+      await api.revealSong(dbid);
+    } catch (e) {
+      this.error = String(e);
+    }
   }
 
   /** Episodes the sidebar counts: new, and not downloaded yet. */

@@ -11,6 +11,7 @@
 use std::collections::HashSet;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::time::Duration;
 
 use quick_xml::events::Event as XmlEvent;
@@ -385,6 +386,224 @@ pub fn cover_file(app: &AppHandle, sid: &str) -> Option<PathBuf> {
     let p = state.podcasts.lock().unwrap();
     let show = p.shows.iter().find(|s| s.id == sid)?;
     Some(p.show_dir(show)?.join("cover.jpg")).filter(|f| f.is_file())
+}
+
+// ---- On the iPod ----
+
+/// An episode of a followed show that's on the open iPod.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OnIpod {
+    show: String,
+    key: String,
+    dbid: String,
+    played: bool,
+    bookmark_ms: u32,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SendResult {
+    added: usize,
+    skipped: Vec<String>,
+}
+
+fn is_nano6(root: &Path) -> bool {
+    root.join("iPod_Control/iTunes/iTunesCDB").is_file()
+}
+
+const NANO6: &str = "Podcasts can't go on the iPod nano 6G yet: its database is the experimental one.";
+
+/// Is this iPod track that episode? By its file address, or by show and title.
+fn same_episode(t: &chinotto_gpod::PodcastTrack, show: &Show, e: &Episode) -> bool {
+    (!t.episode_url.is_empty() && t.episode_url == e.url) || (t.album == show.title && t.title == e.title)
+}
+
+/// Which followed episodes are on the iPod, and which were played there.
+/// Episodes played on the iPod are marked played here too.
+#[tauri::command]
+pub async fn podcast_ipod_status(path: String, app: AppHandle) -> Result<Vec<OnIpod>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let root = PathBuf::from(&path);
+        if is_nano6(&root) {
+            return Err(NANO6.to_string());
+        }
+        let tracks = chinotto_gpod::Database::open(&root).map_err(|e| e.to_string())?.podcasts();
+        let state = app.state::<AppState>();
+        let mut p = state.podcasts.lock().unwrap();
+        let mut out = Vec::new();
+        let mut changed = false;
+        for show in p.shows.iter_mut() {
+            let snapshot = Show { episodes: Vec::new(), ..show.clone() };
+            for e in show.episodes.iter_mut() {
+                if let Some(t) = tracks.iter().find(|t| same_episode(t, &snapshot, e)) {
+                    if t.played && !e.played {
+                        e.played = true;
+                        e.new = false;
+                        changed = true;
+                    }
+                    out.push(OnIpod { show: show.id.clone(), key: e.key.clone(), dbid: t.dbid.to_string(), played: t.played, bookmark_ms: t.bookmark_ms });
+                }
+            }
+        }
+        if changed {
+            p.save()?;
+        }
+        Ok(out)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Copy downloaded episodes onto the open iPod as podcasts. Ones already
+/// there are skipped; formats the iPod can't play are converted as for songs.
+#[tauri::command]
+pub async fn podcast_send(path: String, id: String, keys: Vec<String>, app: AppHandle) -> Result<tauri::ipc::Response, String> {
+    crate::write::blocking(app, move |app| {
+        let root = PathBuf::from(&path);
+        if is_nano6(&root) {
+            return Err(NANO6.to_string());
+        }
+        let state = app.state::<AppState>();
+        let (show, folder, cover) = {
+            let p = state.podcasts.lock().unwrap();
+            let show = p.shows.iter().find(|s| s.id == id).cloned().ok_or("That podcast isn't in the list any more.")?;
+            let folder = p.folder.clone().ok_or("No podcast folder")?;
+            let cover = p.show_dir(&show).and_then(|d| std::fs::read(d.join("cover.jpg")).ok());
+            (show, folder, cover)
+        };
+        let conv = state.session().filter(|s| s.root == root).and_then(|s| s.sysinfo.identity()).map(|i| state.conversion(&i)).unwrap_or_default();
+        let tmp = crate::convert::TempDir::new()?;
+        let tmp_dir = tmp.0.clone();
+        let emitter = app.clone();
+        let result = crate::write::with_writer(&app, &root, move |db| {
+            let existing = db.podcasts();
+            let todo: Vec<&Episode> = show.episodes.iter().filter(|e| keys.contains(&e.key) && e.file.is_some()).filter(|e| !existing.iter().any(|t| same_episode(t, &show, e))).collect();
+            let total = todo.len();
+            let mut res = SendResult { added: 0, skipped: Vec::new() };
+            let mut covers = Vec::new();
+            for (i, e) in todo.into_iter().enumerate() {
+                let _ = emitter.emit("add-progress", crate::write::AddProgress { done: i, total, current: e.title.clone() });
+                let src = folder.join(e.file.as_deref().unwrap_or_default());
+                if !src.is_file() {
+                    res.skipped.push(format!("{}: the downloaded file is missing", e.title));
+                    continue;
+                }
+                let converted;
+                let f = match conv.plan(&src, crate::convert::IPOD_PLAYS) {
+                    Some(target) => match crate::convert::convert(&src, &tmp_dir, &target, i) {
+                        Ok(c) => {
+                            converted = c;
+                            &converted
+                        }
+                        Err(err) => {
+                            res.skipped.push(format!("{}: couldn't convert it ({err})", e.title));
+                            continue;
+                        }
+                    },
+                    None => &src,
+                };
+                if crate::tags::ipod_kind(f).is_none() {
+                    res.skipped.push(format!("{}: this kind of file doesn't play on an iPod", e.title));
+                    continue;
+                }
+                let mut info = match crate::tags::read(f) {
+                    Ok(i) => i,
+                    Err(err) => {
+                        res.skipped.push(format!("{}: {err}", e.title));
+                        continue;
+                    }
+                };
+                // The feed's names, not whatever the file's tags say.
+                let host = if show.author.is_empty() { show.title.clone() } else { show.author.clone() };
+                info.title = Some(e.title.clone());
+                info.album = Some(show.title.clone());
+                info.artist = Some(host.clone());
+                info.album_artist = Some(host);
+                info.genre = Some("Podcast".into());
+                info.compilation = false;
+                info.track_nr = e.number as i32;
+                info.track_count = 0;
+                info.disc_nr = 0;
+                info.disc_count = 0;
+                if e.published > 0 {
+                    info.year = civil_from_days(e.published.div_euclid(86_400)).0 as i32;
+                }
+                if info.length_ms <= 0 {
+                    info.length_ms = e.duration_ms.min(i32::MAX as u64) as i32;
+                }
+                let pod = chinotto_gpod::PodcastInfo { feed_url: show.feed.clone(), episode_url: e.url.clone(), description: e.description.clone(), released: e.published };
+                match db.add_podcast(f, &info, &pod) {
+                    Ok(dbid) => {
+                        res.added += 1;
+                        if let Some(img) = crate::tags::embedded_cover(f).or_else(|| cover.clone()) {
+                            covers.push((dbid, img));
+                        }
+                    }
+                    Err(err) => res.skipped.push(format!("{}: {err}", e.title)),
+                }
+            }
+            let _ = emitter.emit("add-progress", crate::write::AddProgress { done: total, total, current: String::new() });
+            crate::write::add_cover_images(db, covers, &mut res.skipped)?;
+            if res.added == 0 && !res.skipped.is_empty() {
+                return Err(res.skipped.join("\n"));
+            }
+            Ok(res)
+        });
+        drop(tmp);
+        result
+    })
+    .await
+}
+
+/// Take a show's played episodes off the iPod, and with `from_computer`
+/// delete their downloaded files too.
+#[tauri::command]
+pub async fn podcast_remove_played(path: String, id: String, from_computer: bool, app: AppHandle) -> Result<tauri::ipc::Response, String> {
+    crate::write::blocking(app, move |app| {
+        let root = PathBuf::from(&path);
+        if is_nano6(&root) {
+            return Err(NANO6.to_string());
+        }
+        let state = app.state::<AppState>();
+        let show = state.podcasts.lock().unwrap().shows.iter().find(|s| s.id == id).cloned().ok_or("That podcast isn't in the list any more.")?;
+        let removed_keys = std::sync::Arc::new(Mutex::new(Vec::<String>::new()));
+        let keys_out = removed_keys.clone();
+        let show2 = show.clone();
+        let response = crate::write::with_writer(&app, &root, move |db| {
+            let mut ids = Vec::new();
+            for t in db.podcasts().into_iter().filter(|t| t.played) {
+                let ep = show2.episodes.iter().find(|e| same_episode(&t, &show2, e));
+                let ours = ep.is_some() || (!t.feed_url.is_empty() && t.feed_url == show2.feed);
+                if ours {
+                    ids.push(t.dbid);
+                    if let Some(e) = ep {
+                        keys_out.lock().unwrap().push(e.key.clone());
+                    }
+                }
+            }
+            db.remove_tracks(&ids).map_err(|e| e.to_string())?;
+            Ok(ids.len())
+        })?;
+        // The iPod is saved; now the computer's copies, if asked.
+        let keys = removed_keys.lock().unwrap().clone();
+        let mut p = state.podcasts.lock().unwrap();
+        let root_folder = p.folder.clone();
+        if let Ok(s) = p.show_mut(&id) {
+            for e in s.episodes.iter_mut().filter(|e| keys.contains(&e.key)) {
+                e.played = true;
+                e.new = false;
+                if from_computer {
+                    if let (Some(f), Some(r)) = (e.file.take(), root_folder.as_ref()) {
+                        let _ = std::fs::remove_file(r.join(f));
+                    }
+                }
+            }
+        }
+        p.save()?;
+        Ok(response)
+    })
+    .await
 }
 
 // ---- Fetching ----

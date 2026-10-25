@@ -264,6 +264,35 @@ impl TrackInfo {
     }
 }
 
+/// What makes a track a podcast episode on the iPod.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct PodcastInfo {
+    /// The show's feed address.
+    pub feed_url: String,
+    /// The episode file's address (the iPod shows nothing of it; Chinotto
+    /// uses it to recognise the episode later).
+    pub episode_url: String,
+    /// Show notes, shown on the iPod's episode page.
+    pub description: String,
+    /// Release date, Unix seconds (0 = unknown).
+    pub released: i64,
+}
+
+/// A podcast episode found on the iPod.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PodcastTrack {
+    pub dbid: u64,
+    pub title: String,
+    /// The show (album).
+    pub album: String,
+    pub feed_url: String,
+    pub episode_url: String,
+    /// Played on the iPod (per its play counts, merged when the database was read).
+    pub played: bool,
+    /// Where the iPod will carry on from, if it was stopped partway.
+    pub bookmark_ms: u32,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct PlaylistInfo {
     pub id: u64,
@@ -399,6 +428,60 @@ impl Database {
             }
             Ok((*t).dbid)
         }
+    }
+
+    /// Copy an episode onto the iPod as a podcast: it shows under Podcasts
+    /// (grouped by its album, the show) with the blue "unplayed" dot, keeps its
+    /// place when stopped, and is left out of shuffles.
+    pub fn add_podcast(&mut self, file: &Path, info: &TrackInfo, pod: &PodcastInfo) -> Result<u64> {
+        let dbid = self.add_track(file, info)?;
+        let t = self.find(dbid).ok_or_else(|| Error("the new episode went missing".into()))?;
+        unsafe {
+            (*t).mediatype = 4; // ITDB_MEDIATYPE_PODCAST
+            set_str(&mut (*t).podcastrss, Some(&pod.feed_url));
+            set_str(&mut (*t).podcasturl, Some(&pod.episode_url));
+            let notes = (!pod.description.is_empty()).then_some(pod.description.as_str());
+            set_str(&mut (*t).description, notes);
+            // The subtitle is the short line under the title: the first sentence or so.
+            let short: Option<String> = notes.map(|d| d.lines().next().unwrap_or("").chars().take(250).collect());
+            set_str(&mut (*t).subtitle, short.as_deref());
+            if pod.released > 0 {
+                (*t).time_released = pod.released as _;
+            }
+            (*t).mark_unplayed = 0x02;
+            (*t).remember_playback_position = 1;
+            (*t).skip_when_shuffling = 1;
+            (*t).flag4 = 0x01;
+            let mut pl = itdb_playlist_podcasts(self.itdb);
+            if pl.is_null() {
+                let name = CString::new("Podcasts").unwrap();
+                pl = itdb_playlist_new(name.as_ptr(), 0);
+                itdb_playlist_set_podcasts(pl);
+                itdb_playlist_add(self.itdb, pl, -1);
+            }
+            itdb_playlist_add_track(pl, t, -1);
+        }
+        Ok(dbid)
+    }
+
+    /// The podcast episodes on the iPod.
+    pub fn podcasts(&self) -> Vec<PodcastTrack> {
+        let s = |p: *const gchar| if p.is_null() { String::new() } else { unsafe { CStr::from_ptr(p) }.to_string_lossy().into_owned() };
+        self.tracks_raw()
+            .into_iter()
+            .filter(|t| unsafe { (**t).mediatype } & 4 != 0)
+            .map(|t| unsafe {
+                PodcastTrack {
+                    dbid: (*t).dbid,
+                    title: s((*t).title),
+                    album: s((*t).album),
+                    feed_url: s((*t).podcastrss),
+                    episode_url: s((*t).podcasturl),
+                    played: (*t).playcount > 0 || (*t).mark_unplayed == 0x01,
+                    bookmark_ms: (*t).bookmark_time,
+                }
+            })
+            .collect()
     }
 
     /// Add a music file that's already on the iPod (under `iPod_Control/Music`)

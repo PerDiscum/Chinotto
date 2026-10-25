@@ -27,7 +27,7 @@ fn parse_ids(ids: &[String]) -> Result<Vec<u64>, String> {
 
 /// Run `f` against the writer for the iPod at `root`, save, and return the new view
 /// (plus anything `f` wants to report, as `extra`).
-fn with_writer<T: Serialize>(app: &AppHandle, root: &Path, f: impl FnOnce(&mut Database) -> Result<T, String>) -> Result<Response, String> {
+pub(crate) fn with_writer<T: Serialize>(app: &AppHandle, root: &Path, f: impl FnOnce(&mut Database) -> Result<T, String>) -> Result<Response, String> {
     let state = app.state::<AppState>();
     let session = state.session().filter(|s| s.root == root).ok_or("That iPod isn't open")?;
     let identity =
@@ -58,7 +58,7 @@ fn with_writer<T: Serialize>(app: &AppHandle, root: &Path, f: impl FnOnce(&mut D
     Ok(Response::new(format!("{{\"view\":{view},\"extra\":{extra}}}")))
 }
 
-async fn blocking(app: AppHandle, f: impl FnOnce(AppHandle) -> Result<Response, String> + Send + 'static) -> Result<Response, String> {
+pub(crate) async fn blocking(app: AppHandle, f: impl FnOnce(AppHandle) -> Result<Response, String> + Send + 'static) -> Result<Response, String> {
     tauri::async_runtime::spawn_blocking(move || f(app)).await.map_err(|e| e.to_string())?
 }
 
@@ -242,20 +242,24 @@ pub async fn add_files(path: String, files: Vec<String>, playlist: Option<String
 /// Give the newly added songs the covers embedded in their files; identical
 /// images are stored once. Problems are noted in `skipped`.
 pub(crate) fn add_embedded_covers(db: &mut Database, added: &[(u64, PathBuf)], skipped: &mut Vec<String>) -> Result<(), String> {
+    let covers: Vec<(u64, Vec<u8>)> = added.iter().filter_map(|(dbid, file)| Some((*dbid, tags::embedded_cover(file)?))).collect();
+    add_cover_images(db, covers, skipped)
+}
+
+/// Give songs these covers (image file bytes); identical images are stored once.
+pub(crate) fn add_cover_images(db: &mut Database, covers: Vec<(u64, Vec<u8>)>, skipped: &mut Vec<String>) -> Result<(), String> {
     use std::hash::{Hash, Hasher};
     let mut by_image: Vec<(Vec<u8>, Vec<u64>)> = Vec::new();
     let mut seen: HashMap<u64, Vec<usize>> = HashMap::new();
-    for (dbid, file) in added {
-        if let Some(bytes) = tags::embedded_cover(file) {
-            let mut h = std::collections::hash_map::DefaultHasher::new();
-            bytes.hash(&mut h);
-            let slots = seen.entry(h.finish()).or_default();
-            match slots.iter().find(|&&i| by_image[i].0 == bytes) {
-                Some(&i) => by_image[i].1.push(*dbid),
-                None => {
-                    slots.push(by_image.len());
-                    by_image.push((bytes, vec![*dbid]));
-                }
+    for (dbid, bytes) in covers {
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        bytes.hash(&mut h);
+        let slots = seen.entry(h.finish()).or_default();
+        match slots.iter().find(|&&i| by_image[i].0 == bytes) {
+            Some(&i) => by_image[i].1.push(dbid),
+            None => {
+                slots.push(by_image.len());
+                by_image.push((bytes, vec![dbid]));
             }
         }
     }

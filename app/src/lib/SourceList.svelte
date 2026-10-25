@@ -207,7 +207,7 @@
       {/each}
       <li>
         <div class="row device" class:active={store.source.kind === "podcast" && store.source.id === ""}>
-          <button class="name" onclick={() => (store.dialog = { kind: "podcast-add" })}><Icon name="add" /><span>{t("Add Podcast…")}</span></button>
+          <button class="name" onclick={() => (store.dialog = { kind: "podcast-add" })}><Icon name="podcast-add" /><span>{t("Add Podcast…")}</span></button>
         </div>
       </li>
     {/if}

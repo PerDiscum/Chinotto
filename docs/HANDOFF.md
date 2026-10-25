@@ -1482,3 +1482,24 @@ real analyser.
 - Next (phase 2): copying episodes to iPods as podcasts (media type 4, the
   Podcasts playlist, release date, description, remember position, skip when
   shuffling), and removing played ones from the iPod and/or the computer.
+
+## 0120: Podcasts, phase 2 (classic iPods); Show in Finder
+
+- chinotto-gpod: `Database::add_podcast(file, info, PodcastInfo)` adds a
+  track with media type 4, podcastrss/podcasturl, description + subtitle,
+  time_released, mark_unplayed 0x02 (blue dot), remember position, skip
+  when shuffling, flag4 0x01, and puts it in the Podcasts playlist (made
+  with `itdb_playlist_set_podcasts` if missing). `Database::podcasts()`
+  lists episodes with played = playcount > 0 or mark_unplayed 0x01
+  (libgpod merges the iPod's Play Counts file when it reads the database).
+  Test: `tests/podcasts.rs` on a fresh libgpod-made nano 2G.
+- App: `podcast_ipod_status` (which followed episodes are on the iPod;
+  played there → played here), `podcast_send` (feed names override file
+  tags; genre Podcast; embedded cover, else the show's cover.jpg),
+  `podcast_remove_played` (iPod only, or iPod and computer). Episodes are
+  matched by enclosure URL, else show title + episode title.
+- nano 6G refused for now: its compressed-database writer has no media
+  type or podcast fields.
+- Show in Finder / Show in Folder: `reveal_song` (macOS `open -R`; Linux
+  FileManager1.ShowItems over D-Bus, else xdg-open on the folder). In the
+  song menu (one song, not MTP) and the episode menu.

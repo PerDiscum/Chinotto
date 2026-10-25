@@ -36,6 +36,12 @@ function playerCopies(dbids: string[], shownLib: string | null) {
     .map((d) => ({ label: t("Copy to {name}", { name: d.volume }), action: () => store.copyToPlayer(d.path, dbids) }));
 }
 
+/** "Show in Finder" for one song (MTP songs have no file to show). */
+function reveal(n: number, track: Track) {
+  if (n !== 1 || store.playerOf(track.dbid.split(":")[1] ?? "")?.kind === "mtp") return [];
+  return [{ label: isMac ? t("Show in Finder") : t("Show in Folder"), action: () => store.showInFinder(store.selectedTracks[0]?.dbid ?? track.dbid) }];
+}
+
 /** Right-click on a song of `tracks`. */
 export function songMenu(e: MouseEvent, track: Track, tracks: Track[]) {
   e.preventDefault();
@@ -60,6 +66,7 @@ export function songMenu(e: MouseEvent, track: Track, tracks: Track[]) {
         { label: t("Play"), action: () => playSelected(tracks) },
         { label: t("Song Details"), action: () => (store.dialog = { kind: "info" }) },
         { label: n > 1 ? t("Save As Zip…") : t("Save As…"), action: () => store.exportSongs(store.selectedTracks) },
+        ...reveal(n, track),
         ...ipodCopy(dbids),
         ...playerCopies(dbids, null),
         { label: "", separator: true },
@@ -79,6 +86,7 @@ export function songMenu(e: MouseEvent, track: Track, tracks: Track[]) {
       { label: t("Play"), action: () => playSelected(tracks) },
       { label: t("Song Details"), action: () => (store.dialog = { kind: "info" }) },
       { label: n > 1 ? t("Save As Zip…") : t("Save As…"), action: () => store.exportSongs(store.selectedTracks) },
+      ...reveal(n, track),
       { label: "", separator: true },
       ...(canEditPlaylists
         ? [

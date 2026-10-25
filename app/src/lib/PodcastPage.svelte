@@ -1,6 +1,6 @@
 <script lang="ts">
   import { t, tn } from "./i18n";
-  import { store } from "./store.svelte";
+  import { store, isMac } from "./store.svelte";
   import { bytes, duration } from "./format";
   import { podcastCoverUrl } from "./api";
   import Icon from "./Icon.svelte";
@@ -21,6 +21,42 @@
     return m < 1 ? t("just now") : m < 60 ? tn(m, "{n} minute ago", "{n} minutes ago") : m < 1440 ? tn(Math.round(m / 60), "{n} hour ago", "{n} hours ago") : date(secs);
   };
   const newCount = $derived(show ? store.newEpisodes(show) : 0);
+  // The open iPod: which of this show's episodes it has, and which were played there.
+  const ipod = $derived(store.ipod);
+  $effect(() => {
+    void ipod?.generation;
+    void ipod?.path;
+    void store.refreshIpodPodcasts();
+  });
+  const onIpod = $derived(new Map(store.podOnIpod.filter((o) => o.show === id).map((o) => [o.key, o])));
+  const sendable = $derived(show ? show.episodes.filter((e, i) => show.downloaded[i] && !onIpod.has(e.key)).map((e) => e.key) : []);
+  const playedThere = $derived([...onIpod.values()].filter((o) => o.played).length);
+  const canSend = $derived(!!ipod?.writable && !store.podIpodError && !store.busy);
+
+  function episodeMenu(ev: MouseEvent, key: string, i: number) {
+    if (!show) return;
+    ev.preventDefault();
+    const e = show.episodes[i];
+    const have = show.downloaded[i];
+    const there = onIpod.get(key);
+    store.menu = {
+      x: ev.clientX,
+      y: ev.clientY,
+      items: [
+        ...(have
+          ? [
+              { label: t("Play"), action: () => store.playEpisode(show, key) },
+              { label: isMac ? t("Show in Finder") : t("Show in Folder"), action: () => store.showInFinder(`pod:${show.id}:${key}`) },
+            ]
+          : [{ label: t("Download"), action: () => store.downloadEpisode(show.id, key) }]),
+        ...(ipod && have && !there ? [{ label: t("Copy to {name}", { name: ipod.name }), disabled: !canSend, action: () => store.sendEpisodes(show.id, [key]) }] : []),
+        ...(ipod && there ? [{ label: t("Remove from {name}", { name: ipod.name }), disabled: !canSend, action: () => store.removeEpisodesFromIpod([there.dbid]) }] : []),
+        { label: "", separator: true },
+        e.played ? { label: t("Mark as Unplayed"), action: () => store.markEpisodes(show.id, [key], { played: false }) } : { label: t("Mark as Played"), action: () => store.markEpisodes(show.id, [key], { played: true, new: false }) },
+        ...(have ? [{ label: t("Delete Download"), danger: true, action: () => store.deleteEpisodeFile(show.id, key) }] : []),
+      ],
+    };
+  }
   const playingKey = $derived(store.nowPlaying?.startsWith(`pod:${id}:`) ? store.nowPlaying.split(":")[2] : null);
 </script>
 
@@ -66,6 +102,27 @@
           {#if newCount}<button onclick={() => store.markEpisodes(show.id, [], { new: false })}>{t("Mark All as Seen")}</button>{/if}
           <button onclick={() => (store.dialog = { kind: "podcast-remove", id: show.id, name: show.title, downloaded: show.downloaded.filter(Boolean).length })}>{t("Unfollow…")}</button>
         </div>
+        {#if ipod}
+          <div class="ipod">
+            {#if store.podIpodError}
+              <p class="muted small">{store.podIpodError}</p>
+            {:else}
+              <p class="small">
+                <strong>{ipod.name}:</strong>
+                {tn(onIpod.size, "{n} episode", "{n} episodes")}{#if playedThere}, {tn(playedThere, "{n} played", "{n} played")}{/if}
+                {#if !ipod.writable}<span class="muted"> · {t("Turn on “Allow changes” on the iPod's page to copy episodes.")}</span>{/if}
+              </p>
+              <div class="controls">
+                <button class="primary" disabled={!canSend || !sendable.length} onclick={() => store.sendEpisodes(show.id, sendable)}>
+                  {sendable.length ? tn(sendable.length, "Copy {n} Downloaded Episode to iPod", "Copy {n} Downloaded Episodes to iPod") : t("All Downloads Are on the iPod")}
+                </button>
+                {#if playedThere}
+                  <button disabled={!canSend} onclick={() => (store.dialog = { kind: "podcast-remove-played", id: show.id, name: show.title, count: playedThere })}>{t("Remove Played…")}</button>
+                {/if}
+              </div>
+            {/if}
+          </div>
+        {/if}
       </div>
     </header>
 
@@ -73,12 +130,14 @@
       {#each show.episodes as e, i (e.key)}
         {@const have = show.downloaded[i]}
         {@const prog = store.podProgress[`${show.id}:${e.key}`]}
-        <li class:open={open === e.key} class:playing={playingKey === e.key}>
+        {@const there = onIpod.get(e.key)}
+        <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+        <li class:open={open === e.key} class:playing={playingKey === e.key} oncontextmenu={(ev) => episodeMenu(ev, e.key, i)}>
           <div class="ep">
             <span class="dot" class:new={e.new && !have} class:unplayed={have && !e.played} title={e.new && !have ? t("New") : have && !e.played ? t("Not played yet") : ""}></span>
             <button class="title" onclick={() => (open = open === e.key ? null : e.key)} title={t("Show or hide the description")}>
               <strong>{e.title}</strong>
-              {#if e.season || e.number}<span class="muted">{e.season ? t("S{s} E{e}", { s: e.season, e: e.number }) : t("Episode {e}", { e: e.number })}</span>{/if}
+              {#if e.season || (e.number && !e.title.includes(String(e.number)))}<span class="muted">{e.season ? t("S{s} E{e}", { s: e.season, e: e.number }) : t("Episode {e}", { e: e.number })}</span>{/if}
             </button>
             <span class="muted when">{date(e.published)}</span>
             <span class="muted len">{e.durationMs ? duration(e.durationMs) : ""}</span>
@@ -88,6 +147,11 @@
                   <span style:width="{prog.total ? (prog.done / prog.total) * 100 : 3}%"></span>
                 </span>
               {:else if have}
+                {#if there}
+                  <span class="tag" title={there.played ? t("Played on the iPod") : t("On the iPod")}>{there.played ? t("Played on iPod") : t("On iPod")}</span>
+                {:else if ipod && !store.podIpodError}
+                  <button disabled={!canSend} onclick={() => store.sendEpisodes(show.id, [e.key])}>{t("Copy to iPod")}</button>
+                {/if}
                 <button onclick={() => store.playEpisode(show, e.key)}>{t("Play")}</button>
                 <button class="quiet" title={t("Delete the downloaded file")} onclick={() => store.deleteEpisodeFile(show.id, e.key)}>{t("Delete")}</button>
               {:else}
@@ -286,6 +350,24 @@
     border-color: transparent;
     background: none;
     color: var(--muted);
+  }
+  .tag {
+    align-self: center;
+    padding: 1px 8px;
+    border-radius: 9px;
+    background: var(--sel-quiet);
+    color: var(--ink);
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .ipod {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--edge);
+  }
+  .ipod p {
+    margin: 0;
   }
   .bar {
     display: block;
