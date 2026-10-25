@@ -40,7 +40,7 @@
       <button aria-label={t("Previous")} title={t("Previous")} disabled={!store.nowPlaying} onclick={() => store.previous()}>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h2v14H6zM20 5v14L9 12z" /></svg>
       </button>
-      <button class="main" aria-label={playing ? t("Pause") : t("Play")} title={playing ? t("Pause (Space) · Stop (⌘.)") : t("Play (Space)")} disabled={!store.index} onclick={() => store.togglePlay(shownSongs())}>
+      <button class="main" class:playing aria-label={playing ? t("Pause") : t("Play")} title={playing ? t("Pause (Space) · Stop (⌘.)") : t("Play (Space)")} disabled={!store.index} onclick={() => store.togglePlay(shownSongs())}>
         {#if playing}
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z" /></svg>
         {:else}
@@ -53,11 +53,13 @@
     </div>
     <label class="volume" title={t("Volume")}>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" /></svg>
-      <input type="range" min="0" max="1" step="0.01" aria-label={t("Volume")} value={store.volume} oninput={(e) => store.setVolume(Number(e.currentTarget.value))} />
+      <input type="range" min="0" max="1" step="0.01" aria-label={t("Volume")} value={store.volume} style:--v="{store.volume * 100}%" oninput={(e) => store.setVolume(Number(e.currentTarget.value))} />
     </label>
   </div>
 
-  <div class="label" role="status" aria-live="polite">
+  <div class="label" class:live={playing} role="status" aria-live="polite">
+    <span class="spectrum left" aria-hidden="true">{#each { length: 8 } as _, i (i)}<i></i>{/each}</span>
+    <span class="spectrum right" aria-hidden="true">{#each { length: 8 } as _, i (i)}<i></i>{/each}</span>
     {#if store.busy}
       <strong>{store.busy}</strong>
       {#if store.progress && store.progress.total}
@@ -142,6 +144,10 @@
 </header>
 
 <style>
+  /* Drawn only by the Retro look. */
+  .spectrum {
+    display: none;
+  }
   .mode {
     font-family: "Handjet", var(--ui);
     font-weight: 600;

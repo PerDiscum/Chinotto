@@ -1,7 +1,7 @@
 <script lang="ts">
   import { t, tn } from "./lib/i18n";
   import { onMount } from "svelte";
-  import { store } from "./lib/store.svelte";
+  import { store, isMac } from "./lib/store.svelte";
   import { albums, browse, groups } from "./lib/library";
   import ViewTabs from "./lib/ViewTabs.svelte";
   import AlbumGrid from "./lib/AlbumGrid.svelte";
@@ -130,7 +130,8 @@
               { label: t("Set Up iPod…"), action: () => store.pickDriveToSetUp() },
             ],
           };
-        }}><Icon name="folder" /></button
+        }}
+        data-icon="folder"><Icon name="folder" /></button
       >
       {#if store.ipod && store.source.kind !== "library"}
         <button
@@ -147,16 +148,17 @@
                 { label: t("Add Folder…"), action: () => store.pickAndAddFolder() },
               ],
             };
-          }}><Icon name="add" /></button
+          }}
+          data-icon="add"><Icon name="add" /></button
         >
         <button
           title={store.writable ? t("New playlist") : t("Allow changes on the iPod's page to make playlists")}
           aria-label={t("New playlist")}
           disabled={!store.writable || !!store.busy}
-          onclick={() => store.newPlaylist(false)}><Icon name="newlist" /></button
+          data-icon="newlist" onclick={() => store.newPlaylist(false)}><Icon name="newlist" /></button
         >
       {:else if store.source.kind === "library" && !store.isDeviceLibrary(store.source.lib)}
-        <button title={t("New playlist in this library")} aria-label={t("New playlist")} disabled={!!store.busy} onclick={() => store.newPlaylist(false)}
+        <button title={t("New playlist in this library")} aria-label={t("New playlist")} disabled={!!store.busy} data-icon="newlist" onclick={() => store.newPlaylist(false)}
           ><Icon name="newlist" /></button
         >
       {/if}
@@ -164,17 +166,17 @@
           title={store.shuffle ? t("Shuffle is on") : t("Shuffle is off")}
           aria-label={t("Shuffle")}
           aria-pressed={store.shuffle}
-          onclick={() => store.setShuffle(!store.shuffle)}><Icon name="shuffle" /></button
+          data-icon="shuffle" onclick={() => store.setShuffle(!store.shuffle)}><Icon name="shuffle" /></button
         >
         <button
           title={store.repeat === "off" ? t("Repeat is off") : store.repeat === "all" ? t("Repeat all") : t("Repeat one")}
           aria-label={store.repeat === "off" ? t("Repeat is off") : store.repeat === "all" ? t("Repeat all") : t("Repeat one")}
           aria-pressed={store.repeat !== "off"}
-          onclick={() => store.cycleRepeat()}><Icon name={store.repeat === "one" ? "repeat-one" : "repeat"} /></button
+          data-icon={store.repeat === "one" ? "repeat-one" : "repeat"} onclick={() => store.cycleRepeat()}><Icon name={store.repeat === "one" ? "repeat-one" : "repeat"} /></button
         >
       <span class="spacer"></span>
-      <button title={store.showBrowser ? t("Hide column browser") : t("Show column browser")} aria-pressed={store.showBrowser} onclick={() => (store.showBrowser = !store.showBrowser)}><Icon name="columns" /></button>
-      <button title={store.showArtwork ? t("Hide artwork") : t("Show artwork")} aria-pressed={store.showArtwork} onclick={() => (store.showArtwork = !store.showArtwork)}><Icon name="artwork" /></button>
+      <button title={store.showBrowser ? t("Hide column browser") : t("Show column browser")} aria-pressed={store.showBrowser} data-icon="columns" onclick={() => (store.showBrowser = !store.showBrowser)}><Icon name="columns" /></button>
+      <button title={store.showArtwork ? t("Hide artwork") : t("Show artwork")} aria-pressed={store.showArtwork} data-icon="artwork" onclick={() => (store.showArtwork = !store.showArtwork)}><Icon name="artwork" /></button>
     </div>
   </aside>
 
@@ -239,6 +241,9 @@
   <footer class="status">
     {#if (store.ipod && store.source.kind === "playlist") || store.source.kind === "library" || store.source.kind === "scratch"}
       {tn(visible.length, "{n} song", "{n} songs")}, {longDuration(totals.ms)}, {bytes(totals.size)}{#if store.selected.size > 1}; {t("{n} selected", { n: store.selected.size })}{/if}
+    {/if}
+    {#if !isMac}
+      <button class="look" onclick={() => store.setTheme(store.theme === "retro" ? "modern" : "retro")}>{store.theme === "retro" ? t("Modern Look") : t("Retro Look")}</button>
     {/if}
   </footer>
 </div>
@@ -331,6 +336,7 @@
     min-height: 0;
   }
   .status {
+    position: relative;
     grid-area: status;
     display: flex;
     align-items: center;
@@ -340,6 +346,17 @@
     background: var(--chrome);
     border-top: 1px solid var(--chrome-edge);
     font-variant-numeric: tabular-nums;
+  }
+  .look {
+    position: absolute;
+    right: 8px;
+    border: 0;
+    background: none;
+    color: var(--muted);
+    font: inherit;
+  }
+  .look:hover {
+    color: var(--ink);
   }
   .error {
     display: flex;

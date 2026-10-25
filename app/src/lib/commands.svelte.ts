@@ -107,6 +107,8 @@ export async function installMenu() {
   const playing = () => !!store.nowPlaying;
   const views = () => store.hasViews;
   const shuffle = await CheckMenuItem.new({ text: t("Shuffle"), checked: store.shuffle, action: () => run.shuffle() });
+  const modern = await CheckMenuItem.new({ text: t("Modern"), checked: store.theme === "modern", action: () => store.setTheme("modern") });
+  const retro = await CheckMenuItem.new({ text: t("Retro"), checked: store.theme === "retro", action: () => store.setTheme("retro") });
   const app = await Submenu.new({
     text: "Chinotto",
     items: [
@@ -169,6 +171,8 @@ export async function installMenu() {
       await item(t("Show or Hide Column Browser"), run.toggleBrowser, "CmdOrCtrl+B"),
       await item(t("Show or Hide Artwork"), run.toggleArtwork, "CmdOrCtrl+G"),
       sep,
+      await Submenu.new({ text: t("Look"), items: [modern, retro] }),
+      sep,
       await item(t("Show Playing Song"), run.showPlaying, "CmdOrCtrl+L", playing),
       sep,
       { item: "Fullscreen" },
@@ -197,6 +201,8 @@ export async function installMenu() {
   $effect.root(() => {
     $effect(() => {
       void shuffle.setChecked(store.shuffle);
+      void modern.setChecked(store.theme === "modern");
+      void retro.setChecked(store.theme === "retro");
     });
     for (const [it, ok] of when) {
       $effect(() => {

@@ -158,6 +158,13 @@ class Store {
   search = $state("");
   showBrowser = $state(true);
   showArtwork = $state(true);
+  /** The look: "modern" (the Chinotto colours) or "retro" (glossy blue, drawn art). */
+  theme = $state(loadPref("chinotto.theme", ["modern", "retro"] as const, "modern"));
+  setTheme(theme: "modern" | "retro") {
+    this.theme = theme;
+    savePref("chinotto.theme", theme);
+    document.documentElement.dataset.theme = theme;
+  }
   /** Column browser: which columns show, and what's picked in each. */
   browserFields = $state<BrowseField[]>(loadList("chinotto.browserFields", ["genre", "artist", "album"]) as BrowseField[]);
   browserSel = $state<Partial<Record<BrowseField, string | null>>>({});

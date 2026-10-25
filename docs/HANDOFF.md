@@ -1423,3 +1423,16 @@ Burn.app's values, so sectors go to the disc exactly as in the image, error
 correction included. Burn.app doesn't verify .cue burns; Chinotto still asks
 Disc Recording to (ReceiveData), and a failure while checking is reported as
 "the disc was written, but checking it … failed".
+
+## 0117: Retro look (first art pack)
+
+View → Look → Modern / Retro (the status bar's button on Linux), saved as
+`chinotto.theme` and applied in `main.ts` before the app draws.
+`src/retro.css` holds it all: colour tokens under `:root[data-theme="retro"]`
+plus overrides for the toolbar, sidebar, pages and buttons. Art is in
+`src/assets/retro` (WebP, 2× display size, made from the developer's PNGs):
+the screen (`panel`) and pill buttons are border-images, stretched only in
+the middle. Still drawn with CSS until art arrives: Pause (Play stays pressed
+in while playing), the volume groove, search field, sidebar selection, the
+folder and new-playlist buttons. The spectrum bars are decorative, not a
+real analyser.

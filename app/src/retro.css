@@ -1,0 +1,303 @@
+/* The Retro look: glossy blue, in the spirit of mid-2000s media players.
+   Switched on by data-theme="retro" on <html> (View → Look on a Mac, the
+   status bar's button elsewhere). The drawn art is in assets/retro; pieces
+   not drawn yet are made with CSS gradients in the same colours. Light only. */
+
+:root[data-theme="retro"] {
+  color-scheme: light;
+
+  --bg: #ffffff;
+  --zebra: #eef5fd;
+  --ink: #0d2240;
+  --muted: #5a7090;
+  --edge: #c9daee;
+  --header: #e8f1fc;
+  --header-sorted: #d3e4f7;
+  --chrome: #dbe9f8;
+  --chrome-edge: #8fb3dd;
+  --field: #ffffff;
+  --field-edge: #8fb3dd;
+
+  --accent: #0a5cb0;
+  --accent-bright: #5fb4ff;
+  --sel: #2a74de;
+  --sel-ink: #ffffff;
+  --sel-quiet: #d6e6f8;
+  --star: #0a5cb0;
+
+  --side: #1d3a6a;
+  --side-deep: #142c54;
+  --side-ink: #e8f2ff;
+  --side-muted: #9fc0e8;
+  --side-icon: #b8d4f5;
+  --side-edge: #0f2448;
+  --side-sel: #2a74de;
+  --side-sel-ink: #ffffff;
+
+  --label-bg: #062a6e;
+  --label-ink: #cfeaff;
+  --label-dim: #7fb6f0;
+  --label-rim: #3d7fd8;
+
+  --cap-audio: #2a8cf0;
+  --cap-video: #4fb35e;
+  --cap-other: #a9bcd3;
+  --cap-free: #eef4fb;
+
+  --warn-bg: #fff3d6;
+  --warn-ink: #6a4a00;
+
+  --gloss: linear-gradient(#f7fbff, #e2eefb 48%, #c9ddf4 52%, #e4effb);
+}
+
+/* ---- Top bar: playback buttons, the screen, search ---- */
+
+:root[data-theme="retro"] .toolbar {
+  padding: 6px 14px;
+  background: var(--gloss);
+  border-bottom-color: #7fa6d6;
+}
+:root[data-theme="retro"] .transport {
+  gap: 2px;
+}
+:root[data-theme="retro"] .transport button {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: center / contain no-repeat;
+}
+:root[data-theme="retro"] .transport button svg {
+  display: none;
+}
+:root[data-theme="retro"] .transport button:first-child {
+  background-image: url("./assets/retro/prev.webp");
+}
+:root[data-theme="retro"] .transport button:last-child {
+  background-image: url("./assets/retro/next.webp");
+}
+:root[data-theme="retro"] .transport button.main {
+  width: 48px;
+  height: 48px;
+  background-image: url("./assets/retro/play.webp");
+}
+:root[data-theme="retro"] .transport button:first-child:active:not(:disabled) {
+  background-image: url("./assets/retro/prev-down.webp");
+}
+:root[data-theme="retro"] .transport button:last-child:active:not(:disabled) {
+  background-image: url("./assets/retro/next-down.webp");
+}
+/* Until there's a Pause button, the Play button stays pressed in while playing. */
+:root[data-theme="retro"] .transport button.main:active:not(:disabled),
+:root[data-theme="retro"] .transport button.main.playing {
+  background-image: url("./assets/retro/play-down.webp");
+}
+:root[data-theme="retro"] .transport button:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+:root[data-theme="retro"] .transport button:disabled {
+  opacity: 0.55;
+  filter: saturate(0.5);
+}
+
+:root[data-theme="retro"] .volume {
+  color: #2b5a96;
+}
+:root[data-theme="retro"] .volume input {
+  height: 20px;
+  margin: 0;
+  background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+}
+:root[data-theme="retro"] .volume input::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(to right, #3fa0ff 0 var(--v, 50%), #0b2a5c var(--v, 50%));
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.5), 0 1px 0 rgb(255 255 255 / 0.8);
+}
+:root[data-theme="retro"] .volume input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: -7px;
+  border: 0;
+  background: url("./assets/retro/knob.webp") center / contain no-repeat;
+}
+
+/* The screen: the drawn panel, stretched in the middle only. */
+:root[data-theme="retro"] .toolbar .label {
+  position: relative;
+  min-height: 66px;
+  padding: 8px 72px;
+  border: 0 solid transparent;
+  border-image: url("./assets/retro/panel.webp") 22 48 fill / 11px 24px stretch;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  font-family: var(--ui);
+  text-shadow: 0 0 6px rgb(95 180 255 / 0.7);
+}
+:root[data-theme="retro"] .toolbar .bar {
+  background: rgb(207 234 255 / 0.2);
+}
+:root[data-theme="retro"] .seek input::-webkit-slider-runnable-track {
+  background: rgb(207 234 255 / 0.25);
+}
+:root[data-theme="retro"] .spectrum {
+  position: absolute;
+  bottom: 13px;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 34px;
+}
+:root[data-theme="retro"] .spectrum.left {
+  left: 28px;
+}
+:root[data-theme="retro"] .spectrum.right {
+  right: 28px;
+  flex-direction: row-reverse;
+}
+:root[data-theme="retro"] .spectrum i {
+  width: 3px;
+  height: 100%;
+  background: repeating-linear-gradient(to top, #bfe8ff 0 2px, transparent 2px 3px);
+  transform-origin: bottom;
+  transform: scaleY(0.12);
+  opacity: 0.45;
+  animation: retro-bar 0.9s ease-in-out infinite alternate paused;
+}
+:root[data-theme="retro"] .label.live .spectrum i {
+  opacity: 1;
+  animation-play-state: running;
+}
+:root[data-theme="retro"] .spectrum i:nth-child(2) { animation-duration: 0.63s; animation-delay: -0.2s; }
+:root[data-theme="retro"] .spectrum i:nth-child(3) { animation-duration: 0.77s; animation-delay: -0.5s; }
+:root[data-theme="retro"] .spectrum i:nth-child(4) { animation-duration: 0.52s; animation-delay: -0.1s; }
+:root[data-theme="retro"] .spectrum i:nth-child(5) { animation-duration: 0.86s; animation-delay: -0.7s; }
+:root[data-theme="retro"] .spectrum i:nth-child(6) { animation-duration: 0.58s; animation-delay: -0.3s; }
+:root[data-theme="retro"] .spectrum i:nth-child(7) { animation-duration: 0.71s; animation-delay: -0.6s; }
+:root[data-theme="retro"] .spectrum i:nth-child(8) { animation-duration: 0.95s; animation-delay: -0.4s; }
+@keyframes retro-bar {
+  from { transform: scaleY(0.12); }
+  to { transform: scaleY(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme="retro"] .spectrum i { animation: none; }
+}
+@media (max-width: 900px) {
+  :root[data-theme="retro"] .spectrum { display: none; }
+  :root[data-theme="retro"] .toolbar .label { padding: 8px 30px; }
+}
+
+:root[data-theme="retro"] .search input {
+  padding: 5px 12px 5px 28px;
+  border-color: #6f9fd8;
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%232b5a96' stroke-width='1.8' stroke-linecap='round'%3E%3Ccircle cx='6.5' cy='6.5' r='4.5'/%3E%3Cpath d='m10 10 4 4'/%3E%3C/svg%3E") 9px center / 13px no-repeat;
+  box-shadow: inset 0 1px 3px rgb(13 60 140 / 0.25), 0 1px 0 rgb(255 255 255 / 0.9);
+}
+
+/* ---- Sidebar ---- */
+
+:root[data-theme="retro"] .side {
+  background: #1d3a6a url("./assets/retro/sidebar.webp") center / cover no-repeat;
+}
+:root[data-theme="retro"] .side h2 {
+  color: #a9cdf5;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-shadow: 0 1px 0 rgb(0 0 0 / 0.5);
+}
+:root[data-theme="retro"] .side .row.active {
+  background: linear-gradient(#8fd0ff, #3d8ff0 48%, #1e6fd8 52%, #2f86ee);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.6), inset 0 -1px 0 rgb(0 30 90 / 0.4);
+  text-shadow: 0 1px 1px rgb(0 30 90 / 0.6);
+}
+:root[data-theme="retro"] .side-tools {
+  gap: 3px;
+  padding: 5px 6px;
+  background: linear-gradient(#2c5592, #163467);
+  border-top-color: #0f2448;
+}
+:root[data-theme="retro"] .side-tools button {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: center / contain no-repeat;
+}
+:root[data-theme="retro"] .side-tools button:hover:not(:disabled) {
+  background-color: transparent;
+  filter: brightness(1.1);
+}
+:root[data-theme="retro"] .side-tools button:disabled {
+  opacity: 0.45;
+}
+:root[data-theme="retro"] .side-tools button:is([data-icon="add"], [data-icon="shuffle"], [data-icon="repeat"], [data-icon="repeat-one"], [data-icon="columns"], [data-icon="artwork"]) svg {
+  display: none;
+}
+:root[data-theme="retro"] .side .side-tools [data-icon="add"] { background-image: url("./assets/retro/add.webp"); }
+:root[data-theme="retro"] .side .side-tools [data-icon="shuffle"] { background-image: url("./assets/retro/shuffle.webp"); }
+:root[data-theme="retro"] .side .side-tools [data-icon="repeat"] { background-image: url("./assets/retro/repeat.webp"); }
+:root[data-theme="retro"] .side .side-tools [data-icon="repeat-one"] { background-image: url("./assets/retro/repeat-one.webp"); }
+:root[data-theme="retro"] .side .side-tools [data-icon="columns"] { background-image: url("./assets/retro/columns.webp"); }
+:root[data-theme="retro"] .side .side-tools [data-icon="artwork"] { background-image: url("./assets/retro/artwork.webp"); }
+/* Pressed in: while clicked, or while switched on. */
+:root[data-theme="retro"] .side .side-tools [data-icon="add"]:active:not(:disabled) { background-image: url("./assets/retro/add-down.webp"); }
+:root[data-theme="retro"] .side .side-tools [data-icon="shuffle"]:is(:active, [aria-pressed="true"]) { background-image: url("./assets/retro/shuffle-down.webp"); }
+:root[data-theme="retro"] .side .side-tools [data-icon="repeat"]:is(:active, [aria-pressed="true"]) { background-image: url("./assets/retro/repeat-down.webp"); }
+:root[data-theme="retro"] .side .side-tools [data-icon="columns"]:is(:active, [aria-pressed="true"]) { background-image: url("./assets/retro/columns-down.webp"); }
+:root[data-theme="retro"] .side .side-tools [data-icon="artwork"]:is(:active, [aria-pressed="true"]) { background-image: url("./assets/retro/artwork-down.webp"); }
+/* Buttons not drawn yet: a glossy square in the same colours. */
+:root[data-theme="retro"] .side .side-tools :is([data-icon="folder"], [data-icon="newlist"]) {
+  border: 1px solid #0d4fa8;
+  background: linear-gradient(#eaf5ff, #a9d3f8 48%, #6fb2f0 52%, #cfe8ff);
+  color: #0a3c8c;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.8);
+}
+
+/* ---- Pages: the light-wave background ---- */
+
+:root[data-theme="retro"] :is(.page, .welcome) {
+  background: #eaf3fd url("./assets/retro/background.webp") center / cover no-repeat;
+}
+
+/* ---- Buttons: blue for the main action, silver for the rest ---- */
+
+:root[data-theme="retro"] :is(.welcome button, .page .controls button) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  padding: 0 20px;
+  border: 0 solid transparent;
+  border-radius: 0;
+  border-image: url("./assets/retro/pill-silver.webp") 30 34 fill / 15px 17px stretch;
+  background: none;
+  box-shadow: none;
+  color: #0d2a5c;
+  font-weight: 600;
+  text-shadow: 0 1px 0 rgb(255 255 255 / 0.7);
+}
+:root[data-theme="retro"] :is(.welcome button, .page .controls button):active:not(:disabled) {
+  border-image-source: url("./assets/retro/pill-silver-down.webp");
+}
+:root[data-theme="retro"] :is(.welcome button:not(.quiet), .page .controls button.primary) {
+  border-image-source: url("./assets/retro/pill-blue.webp");
+  color: #fff;
+  text-shadow: 0 1px 1px rgb(0 20 70 / 0.7);
+}
+:root[data-theme="retro"] :is(.welcome button:not(.quiet), .page .controls button.primary):active:not(:disabled) {
+  border-image-source: url("./assets/retro/pill-blue-down.webp");
+}
+:root[data-theme="retro"] :is(.welcome button, .page .controls button):hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+/* ---- Bottom bar ---- */
+
+:root[data-theme="retro"] .status {
+  background: var(--gloss);
+  border-top-color: #8fb3dd;
+}
